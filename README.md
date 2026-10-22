@@ -63,7 +63,7 @@ Set these in `config.env`. An empty value means the default.
 | `HUD_GITHUB_REPO` | empty | `owner/repo`, used to link lanes to pull requests. |
 | `HUD_LINEAR_WORKSPACE` | empty | Linear workspace slug, used to link lanes to issues. |
 | `HUD_LOCAL_MACHINE` | `local` | Name of this machine in the room. |
-| `HUD_MACHINES` | this machine | Comma-separated herdr machines to poll for agents. |
+| `HUD_MACHINES` | this machine | Comma-separated herdr machine labels to poll for agents and sample for CPU and memory. Remote machines need SSH access. |
 | `HERDR_BIN` | `herdr` on PATH | Path to the herdr binary. |
 | `HUD_DATA_DIR` | plugin state dir | Where the database and uploads live. The plugin sets it; leave it empty. |
 

@@ -210,6 +210,7 @@ function state() {
     sync: lastSync,
     page: pageStamp(),
     config: CONFIG,
+    machines: machineHealth(),
   };
 }
 
@@ -283,6 +284,82 @@ function notifyHq(text: string) {
   });
 }
 
+// ---- machine health: CPU, memory and load per machine, sampled once a minute ----
+// The script runs here, or over ssh to a herdr machine. A failed sample is kept too, so a gap shows.
+const STATS_MS = 60_000;
+const STATS_KEEP_MS = 2 * 86_400_000;
+const STATS_SCRIPT = `${DIR}/machine-stats.sh`;
+db.exec(`
+CREATE TABLE IF NOT EXISTS machine_stats (
+  at INTEGER NOT NULL,
+  machine TEXT NOT NULL,
+  ok INTEGER NOT NULL,
+  cores INTEGER,
+  load1 REAL,
+  cpu_busy REAL,
+  mem_used REAL,
+  error TEXT
+);
+CREATE INDEX IF NOT EXISTS machine_stats_at ON machine_stats (machine, at);
+`);
+
+async function sshTarget(machine: string): Promise<string> {
+  const proc = Bun.spawn([HERDR, "machine", "list", "--json"], { stdout: "pipe", stderr: "ignore" });
+  const list = JSON.parse(await new Response(proc.stdout).text());
+  await proc.exited;
+  const target = list.find((m: any) => m.label === machine)?.target;
+  if (!target) throw new Error(`no herdr machine named ${machine}`);
+  return target;
+}
+
+async function readStats(machine: string): Promise<Record<string, string>> {
+  const local = machine === LOCAL;
+  const args = local ? ["sh", STATS_SCRIPT] : ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", await sshTarget(machine), "sh", "-s"];
+  const proc = Bun.spawn(args, { stdin: local ? "ignore" : Bun.file(STATS_SCRIPT), stdout: "pipe", stderr: "pipe" });
+  const timer = setTimeout(() => proc.kill(), 15_000);
+  const out = await new Response(proc.stdout).text();
+  const code = await proc.exited;
+  clearTimeout(timer);
+  if (code !== 0) throw new Error((await new Response(proc.stderr).text()).trim() || `exit ${code}`);
+  return Object.fromEntries(out.trim().split(/\s+/).map((kv) => kv.split("=") as [string, string]));
+}
+
+async function sampleMachines() {
+  const now = Date.now();
+  for (const machine of MACHINES) {
+    try {
+      const s = await readStats(machine);
+      db.query("INSERT INTO machine_stats (at, machine, ok, cores, load1, cpu_busy, mem_used) VALUES (?, ?, 1, ?, ?, ?, ?)").run(
+        now,
+        machine,
+        Number(s.cores),
+        Number(s.load1),
+        Number(s.cpu_busy),
+        Number(s.mem_used),
+      );
+    } catch (e) {
+      db.query("INSERT INTO machine_stats (at, machine, ok, error) VALUES (?, ?, 0, ?)").run(now, machine, (e as Error).message.slice(0, 200));
+    }
+  }
+  db.query("DELETE FROM machine_stats WHERE at < ?").run(now - STATS_KEEP_MS);
+  bump();
+}
+
+// The latest sample per machine. A machine is "ok" only if its last sample succeeded and is recent.
+function machineHealth() {
+  return MACHINES.map((machine) => {
+    const last = db.query("SELECT * FROM machine_stats WHERE machine = ? ORDER BY at DESC LIMIT 1").get(machine) as Record<string, any> | null;
+    const age = last ? Date.now() - last.at : null;
+    return { machine, sample: last, age, ok: !!last?.ok && age !== null && age < 3 * STATS_MS };
+  });
+}
+
+function machineHistory(hours: number) {
+  return db
+    .query("SELECT at, machine, ok, cores, load1, cpu_busy, mem_used, error FROM machine_stats WHERE at >= ? ORDER BY machine, at")
+    .all(Date.now() - hours * 3600_000);
+}
+
 // ---- http ----
 
 function json(data: unknown, status = 200) {
@@ -330,6 +407,7 @@ Bun.serve({
         }
         if (path === "/api/state") return json(state());
         if (path === "/api/inbox") return json(inbox());
+        if (path === "/api/machines") return json(machineHistory(Math.min(Math.max(Number(url.searchParams.get("hours") ?? 24), 1), 48)));
         if (path === "/api/wait") return json(await waitForInbox(Math.min(Number(url.searchParams.get("s") ?? 240), 240) * 1000));
         if (path === "/api/stream") {
           let cleanup = () => {};
@@ -405,6 +483,8 @@ Bun.serve({
 
 syncHerdr();
 setInterval(syncHerdr, SYNC_MS);
+sampleMachines();
+setInterval(sampleMachines, STATS_MS);
 // Timers on the page tick on their own; this keeps stale detection fresh.
 setInterval(bump, 60_000);
 console.log(`HQ command centre on http://${HOST}:${PORT}`);

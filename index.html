@@ -139,6 +139,7 @@ textarea.dropping { border-color: var(--blue) !important; background: #eef4ff !i
     <div class="box stat" id="sMove"><span class="k">WORKING</span><span class="v">0</span></div>
     <div class="box stat" id="sHq"><span class="k">WAITING ON HQ</span><span class="v">0</span></div>
     <div class="box stat" id="sBank"><span class="k">₽ BANK TODAY</span><span class="v">1000</span></div>
+    <div id="machines" style="display: contents"></div>
     <div class="spacer"></div>
     <button class="btn" id="alerts">SOUND ON</button>
   </div>
@@ -619,7 +620,21 @@ function fitRoom() {
 new ResizeObserver(fitRoom).observe(roomBox);
 
 // ---------- HUD ----------
+// One box per machine: CPU busy and memory used, from the last sample. Red past 90% on either.
+function renderMachines() {
+  $("machines").innerHTML = (S.machines ?? []).map(({ machine, sample, age, ok }) => {
+    const name = esc(machine.toUpperCase());
+    if (!sample) return `<div class="box stat"><span class="k">${name}</span><span class="v">-</span></div>`;
+    const bad = ok && (sample.cpu_busy > 90 || sample.mem_used > 90);
+    const state = bad ? "alert" : ok ? "ok" : "";
+    const value = ok ? `${Math.round(sample.cpu_busy)}% · ${Math.round(sample.mem_used)}%` : "OFFLINE";
+    const tip = sample.ok ? `load ${sample.load1.toFixed(1)} on ${sample.cores} cores, sampled ${dur(age)} ago` : `last sample failed: ${sample.error ?? "unknown"}`;
+    return `<div class="box stat ${state}" title="${esc(tip)}"><span class="k">${name} CPU · MEM</span><span class="v">${value}</span></div>`;
+  }).join("");
+}
+
 function renderStats() {
+  renderMachines();
   const n = S.open.length;
   const sw = $("sWait");
   sw.className = "box stat " + (n ? "alert" : "ok");
