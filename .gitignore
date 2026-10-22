@@ -1,0 +1,6 @@
+hud.db*
+server.log
+node_modules
+uploads/
+config.env
+.data/

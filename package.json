@@ -1,0 +1,14 @@
+{
+  "name": "hq-office",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A handheld-RPG office for herdr agent lanes, with a panel for answering your HQ agent's questions",
+  "type": "module",
+  "scripts": {
+    "start": "bun server.ts",
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}
