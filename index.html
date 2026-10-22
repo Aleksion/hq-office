@@ -141,7 +141,7 @@ textarea.dropping { border-color: var(--blue) !important; background: #eef4ff !i
     <div class="box stat" id="sBank"><span class="k">₽ BANK TODAY</span><span class="v">1000</span></div>
     <div id="machines" style="display: contents"></div>
     <div class="spacer"></div>
-    <button class="btn" id="alerts">SOUND ON</button>
+    <button class="btn" id="alerts">SOUND OFF</button>
   </div>
 
   <div class="main">
@@ -319,9 +319,10 @@ const QUEUE = [];
 for (let k = 0; k < 8; k++) QUEUE.push({ x: 20, y: 4 + k });
 for (let k = 0; k < 8; k++) QUEUE.push({ x: 21.2, y: 4 + k });
 const HQ_SPOT = [[17, 6], [18, 6], [17, 7], [18, 7], [16, 8], [17, 8], [18, 8], [16, 9], [17, 9], [18, 9]].map(([x, y]) => ({ x, y }));
-const WAIT_SPOT = [[22.5, 7], [23, 8], [22.3, 9], [23, 10], [22.5, 11], [23, 12], [22.4, 7.8], [23, 11]].map(([x, y]) => ({ x, y }));
+const WAIT_SPOT = [[22, 7], [23, 7], [22, 8], [23, 8], [22, 9], [23, 9], [22, 10], [23, 10]].map(([x, y]) => ({ x, y }));
 const COUCH = [17, 18, 19, 20, 21, 22].map((x) => ({ x, y: 13 }));
-const DONE_SPOT = [16, 17, 18, 19, 20, 21, 22, 23, 16.5, 17.5, 18.5, 19.5, 20.5, 21.5, 22.5].map((x, i) => ({ x, y: i < 8 ? 14.6 : 15.2 }));
+// The break room: done workers stand by the snack table (x 20 to 22, row 14), and parked ones sit on the couch.
+const DONE_SPOT = [16, 17, 18, 19, 16.5, 17.5, 18.5, 19.5].map((x, i) => ({ x, y: i < 4 ? 14.6 : 15.2 }));
 function slot(list, i) { const s = list[i % list.length]; const lap = Math.floor(i / list.length); return { x: s.x + lap * 0.3, y: s.y + lap * 0.2 }; }
 
 const workers = new Map(); // name -> { x, y, path, dir, step, t, lane, seat, pal, bob }
@@ -341,6 +342,8 @@ function targetFor(lane, i, counts) {
 const FURNITURE = [];
 for (let x = 17; x <= 22; x++) for (const y of [2, 3, 12, 13]) FURNITURE.push([x, y]); // Nico's counter, the couch
 FURNITURE.push([16, 4], [16, 5], [23, 5], [23, 6], [0, 2], [14, 2], [15, 15]); // HQ terminal, coffee machine, plants
+for (const x of [20, 21, 22]) FURNITURE.push([x, 14]); // the snack table
+FURNITURE.push([23, 14], [23, 15]); // the kitchen coffee machine
 let blocked = new Set();
 const tileKey = (x, y) => `${x},${y}`;
 function rebuildBlocked(n) {
@@ -402,6 +405,8 @@ function syncWorkers(initial) {
       w = { x: at.x, y: at.y, path: [], dir: face, step: 0, t: 0, pal: palette(lane.name), bob: hash(lane.name) % 1000 };
       workers.set(lane.name, w);
     }
+    if (!isIdle(lane)) w.brain = null;
+    if (w.brain) { w.lane = lane; continue; } // the break room decides where idle workers go
     const prevTarget = w.target;
     w.lane = lane;
     w.seat = SEATS[seat % SEATS.length];
@@ -409,6 +414,7 @@ function syncWorkers(initial) {
     w.target = at;
     if (initial) { w.x = at.x; w.y = at.y; w.dir = face; w.path = []; }
     else if (!prevTarget || prevTarget.x !== at.x || prevTarget.y !== at.y) w.path = route(w, at);
+    if (isIdle(lane)) w.brain = { nextAt: 0, act: null, acting: false, until: 0 };
   }
 }
 
@@ -471,6 +477,18 @@ function drawRoom(now) {
   px(17 * TS - 2, 13 * TS + 2, 6 * TS + 4, 9, "#9466bd");
   px(17 * TS - 4, 12 * TS + 12, 4, 14, "#5e3a80");
   px(23 * TS, 12 * TS + 12, 4, 14, "#5e3a80");
+  // kitchen coffee machine, steaming, beside the snack table
+  px(23 * TS + 3, 14 * TS, 10, 16, "#55555f");
+  px(23 * TS + 5, 14 * TS + 2, 6, 4, "#2a2a30");
+  px(23 * TS + 12, 14 * TS + 9, 2, 2, Math.floor(now / 500) % 2 ? "#ff4d4d" : "#802020");
+  for (let i = 0; i < 3; i++) px(23 * TS + 6 + i * 2, 14 * TS - 4 - ((now / 260 + i * 3) % 6), 2, 2, "#e8e8f0");
+  // snack table: chips, a can, a donut and an apple on a wooden top
+  px(20 * TS, 14 * TS + 4, 3 * TS, 8, "#c98f4a");
+  px(20 * TS, 14 * TS + 12, 3 * TS, 2, "#8a5a2a");
+  px(20 * TS + 3, 14 * TS - 2, 6, 6, "#e0c040");
+  px(20 * TS + 14, 14 * TS - 2, 5, 6, "#3c6fd6");
+  px(20 * TS + 27, 14 * TS - 2, 6, 6, "#ff8fab");
+  px(20 * TS + 36, 14 * TS - 1, 5, 5, "#d63c3c");
 }
 
 function drawBubble(x, y, glyph, color, bounce) {
@@ -498,11 +516,61 @@ function drawLabel(text, cx, y, strong) {
 
 const GLYPH = { needs_you: ["!", "#d63c3c"], hq_turn: ["?", "#e0901e"], stale: ["?", "#c0501e"], waiting: ["…", "#3c6fd6"], parked: ["z", "#6a6a82"], done: ["✓", "#2f9e57"], gone: ["x", "#6a6a82"] };
 
-// [facing, walk frame, lift in pixels] per beat. Front, side, back, side: a little spin in the middle.
+// One routine of 30 beats, looping. Each move: facing, walk frame, sideways offset in pixels, how he moves
+// ("bob", "hop", "still" or "slide"), and whether sparkles fly. The routine is side steps, hops, a spin, a back hop,
+// a shuffle, and a moonwalk that travels left, turns, travels right, turns, and comes back to the middle. He always
+// slides backwards: side-on, facing the way he is not going. A slide's offset is a [from, to] pair of pixels.
+const BEAT_MS = 360;
 const DANCE = [
-  ["down", 0, -3], ["left", 1, -1], ["down", 1, -3], ["right", 1, -1],
-  ["up", 0, -3], ["up", 1, -1], ["down", 1, -3], ["left", 0, 0],
+  ["down", 0, 0, "bob", false], ["down", 1, 0, "bob", false],
+  ["left", 1, -4, "bob", false], ["left", 0, -4, "still", false],
+  ["right", 1, 4, "bob", false], ["right", 0, 4, "still", false],
+  ["down", 0, 0, "hop", true], ["down", 1, 0, "hop", true],
+  ["right", 1, 0, "bob", false], ["down", 1, 0, "bob", false], ["left", 1, 0, "bob", false], ["up", 1, 0, "bob", false],
+  ["up", 0, 0, "hop", true], ["down", 0, -2, "bob", false], ["down", 0, 2, "bob", false], ["up", 0, 0, "hop", true],
+  // The moonwalk: left, turn, right, turn, back to the middle, face the room, hold
+  ["right", 0, [0, -4], "slide", false], ["right", 1, [-4, -8], "slide", false],
+  ["left", 0, -8, "still", false],
+  ["left", 0, [-8, -4], "slide", false], ["left", 1, [-4, 0], "slide", false],
+  ["left", 0, [0, 4], "slide", false], ["left", 1, [4, 8], "slide", false],
+  ["right", 0, 8, "still", false],
+  ["right", 1, [8, 6], "slide", false], ["right", 0, [6, 4], "slide", false],
+  ["right", 1, [4, 2], "slide", false], ["right", 0, [2, 0], "slide", false],
+  ["down", 0, 0, "still", false], ["down", 0, 0, "still", false],
 ];
+// Where Nico is on the routine right now: the move, how far he is off the ground (0 to 1), and his lift in pixels.
+function danceMove(now) {
+  const beat = Math.floor(now / BEAT_MS) % DANCE.length;
+  const frac = (now % BEAT_MS) / BEAT_MS;
+  const [dir, step, offset, kind, sparkle] = DANCE[beat];
+  const travel = Array.isArray(offset) ? offset[0] + (offset[1] - offset[0]) * frac : offset;
+  const arc = Math.abs(Math.sin(frac * Math.PI));
+  const air = kind === "hop" ? arc : 0;
+  const lift = kind === "bob" ? -3 * arc : kind === "hop" ? -8 * arc : 0;
+  return {
+    dir, step,
+    dx: Math.round(travel),
+    dy: 0,
+    air, lift: Math.round(lift), sparkle: sparkle && frac < 0.6,
+  };
+}
+// A soft shadow under his feet, smaller the higher he is and following him sideways.
+function drawShadow(air, dx) {
+  ctx.globalAlpha = 0.25 - air * 0.1;
+  ctx.fillStyle = "#22202a";
+  ctx.beginPath();
+  ctx.ellipse((20 * TS + dx) * SC, (2 * TS + 11) * SC, (5 - air * 1.5) * SC, 1.6 * SC, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+// Sparkles that fly off his head on the hops.
+function drawSparkles(now) {
+  const colors = ["#ffd166", "#9fe3ff", "#ff8fab"];
+  for (let i = 0; i < 4; i++) {
+    const a = (now / 120 + i * 1.6) % (Math.PI * 2);
+    px(20 * TS + 6 + Math.cos(a) * 14, 2 * TS - 4 + Math.sin(a) * 6, 1, 1, colors[i % colors.length]);
+  }
+}
 // Music notes float up off Nico's head while he dances.
 function drawNotes(now) {
   for (let i = 0; i < 2; i++) {
@@ -517,6 +585,85 @@ function drawNotes(now) {
   ctx.globalAlpha = 1;
 }
 
+// ---------- break room life ----------
+// Idle workers (done or parked) live their own life here. They wander, sip coffee at the kitchen, grab a snack,
+// or pair up and face each other, nodding. Nobody says anything; the movement and the gestures carry it.
+const COFFEE_SPOT = { x: 22, y: 15 }; // beside the kitchen coffee machine, facing it
+const SNACK_SPOT = { x: 20, y: 15 };  // below the snack table, facing it
+const WANDER = [[16, 13], [16, 14], [17, 14], [18, 14], [19, 14], [16, 15], [17, 15], [18, 15], [19, 15], [14, 13], [14, 14], [14, 15], [15, 13], [15, 14], [15, 15]];
+const CHAT_PAIRS = [[[16, 14], [17, 14]], [[18, 14], [19, 14]], [[16, 15], [17, 15]], [[18, 15], [19, 15]]]; // left, right
+const SNACK_COLORS = ["#e0c040", "#3c6fd6", "#ff8fab", "#d63c3c"];
+const isIdle = (lane) => lane.status === "done" || lane.status === "parked";
+const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
+const spotOf = ([x, y]) => ({ x, y });
+// A tile is taken when another worker is headed for it or standing on it.
+function taken([x, y], self) {
+  for (const o of workers.values()) {
+    if (o === self || !o.target) continue;
+    if (Math.round(o.target.x) === x && Math.round(o.target.y) === y) return true;
+  }
+  return false;
+}
+function openSpot(list, self) {
+  const free = list.filter((p) => !taken(p, self));
+  return free.length ? pickOne(free) : null;
+}
+function sendTo(w, spot, act) {
+  w.brain.act = act;
+  w.brain.acting = false;
+  w.target = spot;
+  w.path = route(w, spot);
+}
+function idleBrain(w, now, all) {
+  const b = w.brain;
+  if (w.path.length) return; // still walking
+  if (b.act && !b.acting) { b.acting = true; b.until = now + b.act.dur; w.face = b.act.face; }
+  if (b.acting) {
+    if (now >= b.until) { b.act = null; b.acting = false; b.nextAt = now + 800 + Math.random() * 2500; }
+    return;
+  }
+  if (now < b.nextAt) return;
+  const partners = all.filter((o) => o !== w && o.brain && !o.brain.act && o.path.length === 0 && isIdle(o.lane) && Math.hypot(o.x - w.x, o.y - w.y) < 9);
+  const roll = Math.random();
+  const pairs = CHAT_PAIRS.filter(([l, r]) => !taken(l, w) && !taken(r, w));
+  if (partners.length && pairs.length && roll < 0.35) {
+    const [left, right] = pickOne(pairs);
+    const dur = 4000 + Math.random() * 3000;
+    sendTo(w, spotOf(left), { kind: "chat", dur, face: "right" });
+    sendTo(pickOne(partners), spotOf(right), { kind: "chat", dur, face: "left" });
+  } else if (roll < 0.6 && !taken([COFFEE_SPOT.x, COFFEE_SPOT.y], w)) sendTo(w, COFFEE_SPOT, { kind: "coffee", dur: 3500 + Math.random() * 1500, face: "right" });
+  else if (roll < 0.8 && !taken([SNACK_SPOT.x, SNACK_SPOT.y], w)) sendTo(w, SNACK_SPOT, { kind: "snack", dur: 2500 + Math.random() * 1500, face: "up" });
+  else {
+    const spot = openSpot(WANDER, w);
+    if (spot) sendTo(w, spotOf(spot), { kind: "stand", dur: 1500 + Math.random() * 2500, face: pickOne(["down", "left", "right"]) });
+    else b.nextAt = now + 1500; // nowhere free right now: try again shortly
+  }
+}
+// Body movement while idle: a waddle when walking, a nod when chatting, a sip or a munch when eating.
+function idleLift(w, moving, now) {
+  const b = w.brain;
+  if (!b) return 0;
+  if (moving) return Math.abs(Math.sin(now / 110 + w.bob)) > 0.5 ? -1 : 0;
+  if (!b.acting) return 0;
+  if (b.act.kind === "chat") return Math.floor(now / 350 + w.bob) % 2 ? -1 : 0;
+  if (b.act.kind === "coffee") return Math.floor(now / 700) % 2 ? -1 : 0;
+  if (b.act.kind === "snack") return Math.floor(now / 500) % 2 ? -1 : 0;
+  return 0;
+}
+// A waiting worker checks his watch now and then: a faint glint on the wrist for a moment, then nothing.
+// Each worker has his own timing, from his name.
+function drawWatchCheck(w, sx, sy, now) {
+  if ((now + w.bob * 37) % 9000 > 1400) return;
+  if (Math.floor(now / 140) % 2) px(sx + 13, sy + 12, 2, 2, "#ffffff");
+}
+// What is in his hand while he eats or drinks.
+function drawProp(w, sx, sy) {
+  const b = w.brain;
+  if (!b || !b.acting) return;
+  if (b.act.kind === "coffee") { px(sx + 12, sy + 8, 4, 1, "#3a2a20"); px(sx + 12, sy + 9, 4, 4, "#f8f8f0"); }
+  if (b.act.kind === "snack") px(sx + 12, sy + 9, 4, 4, SNACK_COLORS[w.bob % SNACK_COLORS.length]);
+}
+
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -525,10 +672,12 @@ function loop(now) {
   drawRoom(now);
   if (S) {
     // Nico behind the counter, HQ at its terminal
-    // With nothing waiting on him, Nico dances: eight moves on the beat, then the loop starts again.
+    // With nothing waiting on him, Nico dances the routine, and music notes float up while he does.
     const dancing = !S.open.length;
-    const [mDir, mStep, mLift] = dancing ? DANCE[Math.floor(now / 300) % DANCE.length] : ["down", 0, 0];
-    drawSprite(NICO, 20 * TS - 8, 2 * TS - 6 + mLift, mDir, mStep);
+    const move = dancing ? danceMove(now) : null;
+    if (move) drawShadow(move.air, move.dx);
+    drawSprite(NICO, 20 * TS - 8 + (move?.dx ?? 0), 2 * TS - 6 + (move?.lift ?? 0), move?.dir ?? "down", move?.step ?? 0);
+    if (move?.sparkle) drawSparkles(now);
     if (dancing) drawNotes(now);
     px(17 * TS, 3 * TS - 2, 6 * TS, 10, "#c84b4b");
     px(17 * TS, 3 * TS - 2, 6 * TS, 3, "#f08080");
@@ -538,6 +687,7 @@ function loop(now) {
     drawLabel("HQ", 16 * TS + 8, 5 * TS + 10, true);
 
     const list = [...workers.values()];
+    for (const w of list) if (w.brain) idleBrain(w, now, list);
     for (const w of list) {
       if (w.path.length) {
         const p = w.path[0];
@@ -560,7 +710,8 @@ function loop(now) {
       const idleBob = !moving && st === "moving" ? (Math.floor((now + w.bob * 7) / 300) % 2) : 0;
       const ghost = st === "gone";
       const float = ghost ? Math.sin(now / 400 + w.bob) * 1.5 : 0;
-      const sx = w.x * TS, sy = w.y * TS - 6 - idleBob + float;
+      const sway = w.brain && moving ? Math.round(Math.sin(now / 110 + w.bob)) : 0;
+      const sx = w.x * TS + sway, sy = w.y * TS - 6 - idleBob + float - idleLift(w, moving, now);
       if (selected === w.lane.name) {
         const r = 7 + Math.sin(now / 200);
         ctx.strokeStyle = "#d63c3c";
@@ -574,6 +725,8 @@ function loop(now) {
         const bounce = st === "needs_you" ? Math.abs(Math.sin(now / 220)) * 2.5 : 0;
         drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce);
       }
+      drawProp(w, sx, sy);
+      if (st === "waiting" && !moving) drawWatchCheck(w, sx, sy, now);
       const name = w.lane.name.length > 14 ? w.lane.name.slice(0, 13) + "…" : w.lane.name;
       drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you");
     }
@@ -814,31 +967,54 @@ $("compose").addEventListener("submit", async (e) => {
   try { await post("/api/notes", { text }); $("noteText").value = ""; toast("SENT TO HQ."); } catch (err) { toast(err.message); }
 });
 $("noteText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("compose").requestSubmit(); });
-$("alerts").addEventListener("click", async () => {
+// ---------- sound ----------
+// Everything is generated in the browser; no audio files. SOUND plays one chime when a new question arrives.
+// The setting is remembered in this browser only. The browser needs a click before it allows sound.
+const pref = (key, fallback) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch { return fallback; } };
+const setPref = (key, on) => { try { localStorage.setItem(key, on ? "1" : "0"); } catch {} };
+let sound = pref("hq-sound", false);
+
+function ensureAudio() {
   audio = audio || new AudioContext();
-  if ("Notification" in window && Notification.permission === "default") await Notification.requestPermission();
-  $("alerts").textContent = "SOUND IS ON";
-  beep();
-});
-function beep() {
-  if (!audio) return;
-  const o = audio.createOscillator(), g = audio.createGain();
-  o.type = "square";
-  o.frequency.setValueAtTime(988, audio.currentTime);
-  o.frequency.setValueAtTime(1319, audio.currentTime + 0.08);
-  g.gain.setValueAtTime(0.05, audio.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.25);
-  o.connect(g).connect(audio.destination);
-  o.start(); o.stop(audio.currentTime + 0.25);
+  if (audio.state === "suspended") audio.resume();
+  return audio;
 }
+function tone(when, freq, dur, type, vol, dest) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, when);
+  g.gain.setValueAtTime(vol, when);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  o.connect(g).connect(dest);
+  o.start(when);
+  o.stop(when + dur + 0.02);
+}
+
+// The chime: three rising notes, the last one held. Plays once per new question, and only then.
+function chime() {
+  if (!sound || !audio) return;
+  const t = audio.currentTime;
+  [659, 988, 1319].forEach((f, i) => tone(t + i * 0.09, f, i === 2 ? 0.45 : 0.16, "triangle", 0.12, audio.destination));
+}
+
+function renderSoundButtons() {
+  $("alerts").textContent = sound ? "SOUND ON" : "SOUND OFF";
+}
+$("alerts").addEventListener("click", () => {
+  sound = !sound;
+  setPref("hq-sound", sound);
+  if (sound) { ensureAudio(); chime(); }
+  renderSoundButtons();
+});
+// A saved setting may be on from last time; the first click anywhere unlocks audio for it.
+document.addEventListener("pointerdown", () => { if (sound) ensureAudio(); }, { once: true });
+renderSoundButtons();
+
 function announce() {
   const ids = new Set(S.open.map((a) => a.id));
   if (seenAsks) {
     const fresh = S.open.filter((a) => !seenAsks.has(a.id));
-    if (fresh.length) {
-      beep();
-      if ("Notification" in window && Notification.permission === "granted") for (const a of fresh) new Notification(`HQ needs you${a.lane ? ` · ${a.lane}` : ""}`, { body: a.title });
-    }
+    if (fresh.length) chime();
   }
   seenAsks = ids;
 }
