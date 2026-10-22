@@ -35,51 +35,118 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .box { background: var(--box); border: 4px solid var(--edge); border-radius: 10px; box-shadow: inset 0 0 0 3px var(--box), inset 0 0 0 5px var(--edge-2); padding: 14px 16px; min-width: 0; }
 .px { font: 10px/1.6 var(--pixel); letter-spacing: .02em; }
 
-/* top bar */
-.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+/* Layout: two zones under one top bar.
+   left  = your desk: the questions, and Tell HQ right under them. The urgent count sits on top of this column.
+   right = the office: the room, then the FROM HQ / sent-log tabs and the worker card underneath. */
+:root { --qcol: clamp(420px, 36vw, 560px); }
+
+/* top bar: the same two columns as the page, so the urgent count heads the questions it counts */
+.top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.top .right { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; min-width: 0; }
 .stat { display: grid; gap: 6px; padding: 10px 14px; }
 .stat .k { font: 8px/1 var(--pixel); color: var(--muted); }
 .stat .v { font: 16px/1 var(--pixel); }
-.stat.alert .v { color: var(--red); animation: blink 1s steps(2) infinite; }
-.stat.ok .v { color: var(--green); }
 .title { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
-.title b { font: 14px/1 var(--pixel); }
+.title b { font: 12px/1 var(--pixel); }
 .spacer { flex: 1; }
 .btn { background: var(--box); border: 3px solid var(--edge); border-radius: 8px; padding: 8px 12px; font: 9px/1 var(--pixel); }
 .btn:hover { background: #fff; }
 @keyframes blink { 50% { opacity: .35; } }
 
-.main { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 14px; align-items: stretch; min-width: 0; }
-@media (max-width: 1150px) { .main { grid-template-columns: minmax(0, 1fr); } }
-.stage { display: grid; gap: 14px; min-width: 0; }
+/* the one number that matters: how many questions wait on you, and for how long */
+.urgent { display: flex; align-items: center; gap: 14px; padding: 10px 16px; }
+.urgent .count { font: 24px/1 var(--pixel); }
+.urgent .k { font: 9px/1.5 var(--pixel); color: var(--muted); }
+.urgent .old { margin-left: auto; display: grid; gap: 6px; justify-items: end; }
+.urgent .old .k { font-size: 8px; line-height: 1; }
+.urgent .old .v { font: 13px/1 var(--pixel); color: var(--blue); }
+.urgent .old.warm .v { color: var(--amber); }
+.urgent .old.hot .v { color: var(--red); }
+.urgent.alert { border-color: var(--red); }
+.urgent.alert .count { color: var(--red); animation: blink 1s steps(2) infinite; }
+.urgent.ok .count { color: var(--green); }
+
+/* everything else about the office, quiet, in one box */
+.strip { display: flex; gap: 18px; padding: 10px 14px; }
+.strip > div { display: grid; gap: 6px; }
+.strip .k { font: 8px/1 var(--pixel); color: var(--muted); }
+.strip .v { font: 13px/1 var(--pixel); }
+.fromhq { display: grid; gap: 6px; padding: 10px 14px; text-align: left; font: inherit; color: inherit; }
+.fromhq:hover { background: #fff; }
+.fromhq .k { font: 8px/1 var(--pixel); color: var(--muted); }
+.fromhq .v { font: 13px/1 var(--pixel); color: var(--muted); }
+.fromhq.unread { border-color: var(--amber); }
+.fromhq.unread .v { color: var(--amber); }
+.health { display: grid; gap: 6px; padding: 10px 14px; cursor: default; }
+.health .k { font: 8px/1 var(--pixel); color: var(--muted); }
+.health .v { display: flex; align-items: center; gap: 6px; font: 11px/1 var(--pixel); }
+.health i { width: 9px; height: 9px; border-radius: 2px; background: var(--green); box-shadow: 0 0 0 2px var(--ink); }
+.health i.bad { background: var(--red); }
+.health i.off { background: var(--amber); }
+.health.bad .v { color: var(--red); }
+.health.off .v { color: var(--amber); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: stretch; min-width: 0; }
+.desk, .stage { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.qwrap { position: relative; min-width: 0; }
 
 /* the room */
 .room { padding: 8px; background: #1b1d2c; border: 4px solid var(--edge); border-radius: 10px; display: flex; flex-direction: column; min-width: 0; }
 canvas { display: block; width: 100%; max-width: 100%; height: auto; margin: auto; image-rendering: pixelated; border-radius: 4px; cursor: default; }
 
-/* desktop: the page never scrolls. The room takes the height it is given and the panels pack around it. */
+/* desktop: the page never scrolls. Questions take the full height of the left column; the room takes what the
+   right column has left after the FROM HQ row. */
 @media (min-width: 1151px) {
   body { overflow: hidden; }
   .wrap { height: 100vh; height: 100dvh; grid-template-rows: auto minmax(0, 1fr); padding-bottom: 14px; }
+  .top, .main { grid-template-columns: var(--qcol) minmax(0, 1fr); }
+  .top .right { flex-wrap: nowrap; }
   .main { min-height: 0; }
-  .stage { grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  .desk { grid-template-rows: minmax(0, 1fr) auto; min-height: 0; align-content: stretch; }
+  .qwrap { min-height: 0; }
+  .hud { height: 100%; overflow-y: auto; align-content: start; overscroll-behavior: contain; padding-right: 2px; }
+  .stage { grid-template-rows: minmax(0, 1fr) auto; min-height: 0; align-content: stretch; }
   .room { min-height: 0; }
-  .under { height: clamp(170px, 28dvh, 250px); }
+  .under { height: clamp(170px, 24dvh, 230px); }
   .under > * { min-height: 0; overflow: auto; }
-  .under .log { max-height: none; }
-  .hud { min-height: 0; overflow-y: auto; align-content: start; }
+  .feed { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden !important; }
+  .feed .body { overflow: auto; min-height: 0; }
 }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 4px 2px; color: #c8c8e0; font: 8px/1.6 var(--pixel); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { display: inline-grid; place-items: center; width: 16px; height: 16px; background: #fff; border: 2px solid #23233a; border-radius: 4px; font: 9px/1 var(--pixel); font-style: normal; }
 
-.under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 270px); gap: 14px; }
 @media (max-width: 800px) { .under { grid-template-columns: minmax(0, 1fr); } }
+
+/* "more below" pill over the bottom of the question list, so a question past the fold is never silent */
+.below { margin-left: auto; align-self: center; background: var(--red); color: #fff; border: 2px solid #8a2020; border-radius: 6px; padding: 5px 8px; font: 7px/1 var(--pixel); white-space: nowrap; }
+.below[hidden] { display: none; }
+
+/* Tell HQ, docked under the questions */
+.tell { display: grid; gap: 8px; padding: 12px 14px; }
+.tell .head { display: flex; align-items: baseline; gap: 10px; }
+.tell h2 { margin: 0; font: 10px/1.4 var(--pixel); }
+.tell .hint { color: var(--muted); font-size: 13px; }
+.tell .compose textarea { min-height: 44px; height: 48px; }
+.tell .lastnote { font-size: 13px; color: #3a3a52; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tell .lastnote b { font: 7px/1 var(--pixel); color: var(--muted); margin-right: 6px; }
+.tell .lastnote button { background: none; border: 0; padding: 0 0 0 6px; font: 7px/1 var(--pixel); color: var(--blue); }
+
+/* FROM HQ and your sent log share the box under the room, as two tabs */
+.feed { display: grid; gap: 8px; }
+.feed .tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tab { font: 8px/1 var(--pixel); padding: 6px 8px; border: 2px solid var(--edge); border-radius: 6px; background: var(--box); display: inline-flex; gap: 6px; align-items: center; }
+.tab:hover { background: #fff; }
+.tab.on { background: var(--ink); color: #fff; }
+.tab .tag { padding: 3px 5px; font-size: 7px; }
+.feed .body { display: grid; gap: 8px; align-content: start; }
+.feed.flash { animation: flash .9s ease 2; }
 
 /* questions */
 .hud { display: grid; gap: 12px; }
 .hud h2 { margin: 0 0 4px; font: 11px/1.4 var(--pixel); }
-.ask { display: grid; gap: 10px; scroll-margin: 12px; }
+.ask { display: grid; gap: 8px; scroll-margin: 12px; padding: 12px 14px; }
 .ask.flash { animation: flash .9s ease 2; }
 @keyframes flash { 50% { box-shadow: inset 0 0 0 3px var(--box), inset 0 0 0 5px var(--red), 0 0 0 4px rgba(214,60,60,.4); } }
 .ask .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -93,14 +160,28 @@ canvas { display: block; width: 100%; max-width: 100%; height: auto; margin: aut
 .ask.hot .timer { color: var(--red); animation: blink 1s steps(2) infinite; }
 .due { font: 8px/1 var(--pixel); color: var(--amber); }
 .due.late { color: var(--red); }
-.ask h3 { margin: 0; font: 800 17px/1.3 var(--text); }
+.ask h3 { margin: 0; font: 800 16px/1.3 var(--text); }
 .ask .text { white-space: pre-wrap; overflow-wrap: anywhere; color: #3a3a52; font-size: 14px; }
+.more { display: inline-block; margin-left: 6px; background: none; border: 0; padding: 2px 4px; font: 8px/1 var(--pixel); color: var(--blue); }
+.more:hover { text-decoration: underline; }
+.updates { display: grid; gap: 10px; }
+.updates .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.updates h2 { margin: 0; font: 11px/1.4 var(--pixel); }
+.btn-s { font: 8px/1 var(--pixel); padding: 6px 8px; border: 2px solid var(--edge); border-radius: 6px; background: var(--box); }
+.btn-s:hover:not(:disabled) { background: #fff; }
+.btn-s:disabled { opacity: .4; cursor: default; }
+.upd { padding: 10px 12px; border-radius: 8px; border: 2px solid transparent; display: grid; gap: 4px; }
+.upd.unread { background: #fff8e6; border-color: #f0d080; }
+.upd .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.upd h3 { margin: 2px 0 0; font: 800 15px/1.3 var(--text); }
+.upd .text { font-size: 14px; color: #3a3a52; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tag.new { background: var(--amber); color: #fff; }
 .codebox { position: relative; margin: 6px 0; background: #e6e6ea; border: 2px solid #c4c4d0; border-radius: 6px; }
 .codebox pre { margin: 0; padding: 30px 12px 10px; font: 13px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
 .copy { position: absolute; top: 6px; right: 6px; font: 8px/1 var(--pixel); padding: 6px 8px; border: 2px solid var(--edge); border-radius: 6px; background: var(--box); }
 .copy:hover { background: #fff; }
 .menu { display: grid; gap: 2px; }
-.opt { display: flex; align-items: center; gap: 10px; text-align: left; background: none; border: 0; padding: 7px 8px; border-radius: 6px; font: 700 15px/1.3 var(--text); }
+.opt { display: flex; align-items: center; gap: 10px; text-align: left; background: none; border: 0; padding: 5px 8px; border-radius: 6px; font: 700 15px/1.3 var(--text); }
 .opt::before { content: "▶"; font-size: 11px; color: transparent; }
 .opt:hover { background: #eeeef8; }
 .opt.sel { background: #e6e6f6; }
@@ -133,19 +214,42 @@ textarea.dropping { border-color: var(--blue) !important; background: #eef4ff !i
 <body>
 <div class="wrap">
   <div class="top">
-    <div class="box title"><b>HQ OFFICE</b></div>
-    <div class="box stat" id="sWait"><span class="k">WAITING ON YOU</span><span class="v">0</span></div>
-    <div class="box stat" id="sOld"><span class="k">OLDEST WAIT</span><span class="v">-</span></div>
-    <div class="box stat" id="sMove"><span class="k">WORKING</span><span class="v">0</span></div>
-    <div class="box stat" id="sHq"><span class="k">WAITING ON HQ</span><span class="v">0</span></div>
-    <div class="box stat" id="sBank"><span class="k">₽ BANK TODAY</span><span class="v">1000</span></div>
-    <div id="machines" style="display: contents"></div>
-    <div class="spacer"></div>
-    <button class="btn" id="alerts">SOUND OFF</button>
+    <div class="box urgent" id="sWait">
+      <span class="count">0</span>
+      <span class="k">WAITING<br>ON YOU</span>
+      <span class="old" id="sOld"><span class="k">OLDEST WAIT</span><span class="v">-</span></span>
+    </div>
+    <div class="right">
+      <div class="box title"><b>HQ OFFICE</b></div>
+      <div class="box strip">
+        <div><span class="k">WORKING</span><span class="v" id="sMove">0</span></div>
+        <div><span class="k">ON HQ</span><span class="v" id="sHq">0</span></div>
+        <div><span class="k">₽ BANK</span><span class="v" id="sBank">0</span></div>
+      </div>
+      <button class="box fromhq" id="sFrom" type="button" data-tab="updates"><span class="k">FROM HQ</span><span class="v">0 NEW</span></button>
+      <div class="spacer"></div>
+      <div class="box health" id="machines"><span class="k">MACHINES</span><span class="v">-</span></div>
+      <button class="btn" id="alerts">SOUND OFF</button>
+    </div>
   </div>
 
-  <div class="main">
-    <div class="stage">
+  <div class="main" id="main">
+    <section class="desk">
+      <div class="qwrap">
+        <div class="hud" id="hud"></div>
+      </div>
+      <div class="box tell">
+        <form class="compose" id="compose">
+          <div class="head"><h2>TELL HQ</h2><span class="hint">⌘↩ sends</span><button class="below" id="below" type="button" hidden></button></div>
+          <div class="reply">
+            <textarea id="noteText" rows="2" placeholder="An order, a change of plan, a question."></textarea>
+            <button class="send go" type="submit">SEND</button>
+          </div>
+        </form>
+        <div class="lastnote" id="lastNote"></div>
+      </div>
+    </section>
+    <section class="stage">
       <div class="room">
         <canvas id="room"></canvas>
         <div class="legend">
@@ -158,25 +262,17 @@ textarea.dropping { border-color: var(--blue) !important; background: #eef4ff !i
         </div>
       </div>
       <div class="under">
+        <section class="box feed" id="feed"></section>
         <div class="box card" id="card"></div>
-        <div class="box">
-          <h2 class="px" style="margin:0 0 8px">TELL HQ</h2>
-          <form class="compose" id="compose">
-            <textarea id="noteText" placeholder="An order, a change of plan, a question. HQ picks it up."></textarea>
-            <div class="reply"><button class="send go" type="submit">SEND</button></div>
-          </form>
-          <div class="log" id="log"></div>
-        </div>
       </div>
-    </div>
-    <div class="hud" id="hud"></div>
+    </section>
   </div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 const drafts = new Map();
-let S = null, seenAsks = null, audio = null, selected = null, hovered = null;
+let S = null, seenAsks = null, seenUpdates = null, audio = null, selected = null, hovered = null;
 // Set from the server's config on every load: owner name for the room sign, and the links to GitHub and Linear.
 let CONFIG = { owner: "", githubRepo: "", linearWorkspace: "" };
 
@@ -200,6 +296,16 @@ function linkify(s) {
     .replace(/(^|[\s(])#(\d{4,5})\b/g, (m, p, n) => (CONFIG.githubRepo ? `${p}<a href="https://github.com/${CONFIG.githubRepo}/pull/${n}" target="_blank" rel="noopener">#${n}</a>` : m));
 }
 // Question bodies: text between ``` fences becomes a grey box with a Copy button. The rest is plain text with links.
+// Long messages show their first part and a MORE button. Which ones are open is remembered by key, so re-renders keep it.
+const LONG = 280;
+const expanded = new Set();
+function clipText(text, key) {
+  const t = String(text ?? "");
+  if (t.length <= LONG) return linkify(t);
+  const open = expanded.has(key);
+  const shown = open ? t : t.slice(0, LONG).replace(/\s+\S*$/, "") + "…";
+  return `${linkify(shown)}<button class="more" type="button" data-more="${esc(key)}">${open ? "LESS" : "MORE"}</button>`;
+}
 function renderBody(s) {
   const parts = [];
   let last = 0;
@@ -263,28 +369,98 @@ const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 function px(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x * SC), Math.round(y * SC), Math.round(w * SC), Math.round(h * SC)); }
 
-// 16x16 sprites. k outline, h hair, s skin, e eye, c shirt, C shirt shade, p trousers, b shoes.
-const HEAD_FRONT = ["................", ".....kkkkkk.....", "....khhhhhhk....", "...khhhhhhhhk...", "...khhhhhhhhk...", "...khsssssshk...", "...ksessssesk...", "...kssssssssk...", "....kssssssk...."];
-const HEAD_BACK = ["................", ".....kkkkkk.....", "....khhhhhhk....", "...khhhhhhhhk...", "...khhhhhhhhk...", "...khhhhhhhhk...", "...khhhhhhhhk...", "...khhhhhhhhk...", "....khhhhhhk...."];
-const BODY_FRONT = ["....kkcccckk....", "...kcccccccck...", "..ksccccccccsk..", "...kCCCCCCCCk...", "...kppppppppk..."];
-const LEGS_FRONT = [["...kppk..kppk...", "...kbbk..kbbk..."], ["...kppk..kpk....", "...kbbk..kk....."]];
-const HEAD_SIDE = ["................", ".....kkkkkk.....", "....khhhhhhk....", "...khhhhhhhhk...", "...khhhhhhhhk...", "...khhhhssssk...", "...khhhsssesk...", "...khhssssssk...", "....kssssssk...."];
-const BODY_SIDE = ["....kkcccckk....", "....kcccccck....", "....kccsccck....", "....kCCCCCCk....", "....kppppppk...."];
-const LEGS_SIDE = [["....kpk..kpk....", "....kbk..kbk...."], [".....kppk.......", ".....kbbk......."]];
+// 16x16 sprites in the style of the old handheld overworld: a big round head, thick black outlines, a fringe,
+// eyes two pixels tall, arms out with the hands showing. head 10 rows, body 4, legs 2.
+// k outline, h hair, H hair shine, d hair shadow, s skin, S skin shade, e eye, c shirt, L shirt light, C shirt shade,
+// w white, a accent (collar, hat, band, bows), A accent shade, p trousers, P trousers shade, b shoes.
+const HEAD_FRONT = ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."];
+const HEAD_BACK = ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."];
+const BODY_FRONT = ["..kkcccaaccckk..", ".kLkLccccccCkCk.", ".kskLccccccCksk.", "..kkpppppppPkk.."];
+const LEGS_FRONT = [["...kppPkkpPPk...", "...kbbbkkbbbk..."], ["...kppPkkpPk....", "...kbbbk.kk....."]];
+const HEAD_SIDE = ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."];
+const BODY_SIDE = ["...kkccaacckk...", "..kLcckLLkcCk...", "..kLccksskcCk...", "...kkppppPPk...."];
+const LEGS_SIDE = [["...kpPk.kpPk....", "...kbbk.kbbk...."], ["....kppPk.......", "....kbbbk......."]];
 
-function frame(dir, step) {
+// One head per kind of character; a worker gets one from his name. A head of 11 or 12 rows lets hair fall over the shoulders.
+const HEADS = [
+  { down: HEAD_FRONT, up: HEAD_BACK, side: HEAD_SIDE }, // short
+  { // cap
+    down: ["....kkkkkkkk....", "..kkaaaaaaaakk..", ".kaawwaaaaaaaak.", "kaaaaaaaaaaaaaak", "kkAAAAAAAAAAAAkk", "khhsssssssssshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["....kkkkkkkk....", "..kkaaaaaaaakk..", ".kaaaaaaaaaaaak.", "kaaaaaaaaaaaaaak", "kaaaaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kkaaaaaaaakk..", ".kaaaaaaawwaak..", "kaaaaaaaaaaaaak.", "kaaaaaaaaAAAAAAk", "khhhhhhhhsssssk.", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // long
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhssssssshhhk", "khhsssssssssshhk", "khhsskssssksshhk", "khhsskssssksshhk", "khhSssssssssShhk", "khhkcccaaccckhhk"],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", ".khhhhhhhhhhhhk.", ".kLkddddddddkCk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhhsssssk.", "khhhhhhhhssskssk", "khhhhhhhhssskssk", "khhhhhhhhSssssk.", ".khhhhhkcaackk.."],
+  },
+  { // bun
+    down: [".....kkkkkk.....", "..kkkhHHhhhkkk..", ".khhhkkkkkkhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsssssssssshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: [".....kkkkkk.....", "..kkkhHHhhhkkk..", ".khhhkkkkkkhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: [".....kkkkkk.....", "..kkkhHHhhhkkk..", ".khhhkkkkkkhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // spiky
+    down: ["...k...k...k....", "..khk.khk.khk...", ".khHhkhhhkhhhk..", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["...k...k...k....", "..khk.khk.khk...", ".khHhkhhhkhhhk..", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["...k...k...k....", "..khk.khk.khk...", ".khHhkhhhkhhhk..", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // bald
+    down: ["....kkkkkkkk....", "..kksssssssskk..", ".kswwsssssssssk.", "kswssssssssssssk", "kssssssssssssssk", "khsssssssssssshk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".khhhsssssshhhk."],
+    up: ["....kkkkkkkk....", "..kksssssssskk..", ".kswwsssssssssk.", "kswssssssssssssk", "kssssssssssssssk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kksssssssskk..", ".kssssssswwsssk.", "kssssssssssssssk", "kssssssssssssssk", "khhhhhsssssssssk", "khhhhSssssssssk.", "khhhhSsssssskssk", "khhhhSsssssskssk", ".kkhhhShhhhhhk.."],
+  },
+  { // beanie
+    down: ["......kwwk......", "..kkkaaaaaakkk..", ".kaaaaaaaaaaaak.", "kaaLaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhsssssssssshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["......kwwk......", "..kkkaaaaaakkk..", ".kaaaaaaaaaaaak.", "kaaLaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["......kwwk......", "..kkkaaaaaakkk..", ".kaaaaaaaaaaaak.", "kaaLaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhhhhhhhssssssk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // glasses
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsshhsshhsshhk", "khsssssssssssshk", "khskwwkkkkwwkshk", "khskseksskeskshk", ".kSssssssssssSk."],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSkkwwksk", "khhhhhhhSsskeksk", ".kkhhhhSsssssk.."],
+  },
+  { // pigtails
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kahhhhhhhhhhhhak", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", "khkSssssssssSkhk"],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kahhhhhhhhhhhhak", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", "khhkddddddddkhhk"],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhaahhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", "khhkhhhSsssssk.."],
+  },
+  { // curly
+    down: ["..kk.kkkkkk.kk..", ".khhkhhhhhhkhhk.", "khHHhhhhhhhhhhhk", "khhhdhhhhhhdhhhk", "khdhhhhhhhhhhdhk", "khhhsssssssshhhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["..kk.kkkkkk.kk..", ".khhkhhhhhhkhhk.", "khHHhhhhhhhhhhhk", "khhhdhhhhhhdhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["..kk.kkkkkk.kk..", ".khhkhhhhhhkhhk.", "khHHhhhhhhhhhhhk", "khhhdhhhhhhdhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // headband
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kaaaaaaaaaaaaaak", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kaaaaaaaaaaaaaak", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kaaaaaaaaaaaaaak", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // bob
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khddddddddddddhk", "khhsskssssksshhk", "khhsskssssksshhk", "khhSssssssssShhk"],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", ".khhhhhhhhhhhhk.", ".kLkddddddddkCk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhdddddk.", "khhhhhhhhssskssk", "khhhhhhhhssskssk", "khhhhhhhhSssssk.", ".khhhhhkcaackk.."],
+  },
+  { // Nico's own: a spiky mane, three spikes on top and a pointed fringe. Last, so no worker is given it.
+    down: ["..k....kk....k..", "..khk.kHHk.khk..", ".khhHkhHHhkHhhk.", "kdhhHHhhHHhhhhdk", "kdhhhhhhhhhhhhdk", "khhhhhhhhhhhhhhk", "khhsshssshssshhk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["..k....kk....k..", "..khk.kHHk.khk..", ".khhHkhHHhkHhhk.", "kdhhHHhhHHhhhhdk", "kdhhhhhhhhhhhhdk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: [".k....kk........", "khk..kHHk..k....", "khhkkhHHhkkhk...", "kdhhHHhhHHhhhhk.", "kdhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsshsssk", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+];
+
+function frame(dir, step, style = 0) {
   // step: 0 stand, 1 and 2 alternate walk frames
   const legsSet = dir === "left" || dir === "right" ? LEGS_SIDE : LEGS_FRONT;
   const legs = step === 0 ? legsSet[0] : legsSet[1];
-  const head = dir === "up" ? HEAD_BACK : dir === "down" ? HEAD_FRONT : HEAD_SIDE;
+  const set = HEADS[style] || HEADS[0];
+  const head = dir === "up" ? set.up : dir === "down" ? set.down : set.side;
   const body = dir === "left" || dir === "right" ? BODY_SIDE : BODY_FRONT;
-  return { rows: [...head, ...body, ...legs], mirror: dir === "left" || (step === 2 && (dir === "up" || dir === "down")) };
+  return { rows: [...head, ...body.slice(head.length - 10), ...legs], mirror: dir === "left" || (step === 2 && (dir === "up" || dir === "down")) };
 }
 
 const HAIR = ["#3b2a20", "#d9a23b", "#a83232", "#2d3f8f", "#6b6b6b", "#e8d27a", "#7b3fa0", "#1f6b5a"];
 const SHIRT = ["#e05a4f", "#4f8fe0", "#4fbf6b", "#e0a04f", "#9a5fe0", "#3fb6b0", "#e05fa8", "#5f6fe0", "#c0c040"];
 const SKIN = ["#f6d0a8", "#e8b890", "#c08a60", "#8a5a3a"];
 const PANTS = ["#3a4a6a", "#4a3a2a", "#2a2a3a", "#5a5a6a"];
+const ACCENT = ["#f0d040", "#ffffff", "#3a3a48", "#e05a4f", "#4f8fe0", "#4fbf6b"];
 function shade(hex, f) {
   const n = parseInt(hex.slice(1), 16);
   const r = Math.round(((n >> 16) & 255) * f), g = Math.round(((n >> 8) & 255) * f), b = Math.round((n & 255) * f);
@@ -293,13 +469,14 @@ function shade(hex, f) {
 function palette(name) {
   const h = hash(name);
   const shirt = SHIRT[h % SHIRT.length];
-  return { k: "#22202a", e: "#22202a", h: HAIR[(h >> 4) % HAIR.length], s: SKIN[(h >> 8) % SKIN.length], c: shirt, C: shade(shirt, 0.72), p: PANTS[(h >> 12) % PANTS.length], b: "#2f2f3a" };
+  const hair = HAIR[(h >>> 4) % HAIR.length], skin = SKIN[(h >>> 8) % SKIN.length], pants = PANTS[(h >>> 12) % PANTS.length], accent = ACCENT[(h >>> 16) % ACCENT.length];
+  return { k: "#22202a", e: "#22202a", h: hair, H: shade(hair, 1.7), d: shade(hair, 0.6), s: skin, S: shade(skin, 0.82), c: shirt, L: shade(shirt, 1.3), C: shade(shirt, 0.7), w: "#f8f8f8", a: accent, A: shade(accent, 0.7), t: (h >>> 20) % (HEADS.length - 1), p: pants, P: shade(pants, 0.7), b: "#2f2f3a" };
 }
-const NICO = { k: "#22202a", e: "#22202a", h: "#2a1d14", s: "#f0c49c", c: "#d63c3c", C: "#9a2626", p: "#2a2a3a", b: "#2f2f3a" };
-const HQBOT = { k: "#22202a", e: "#3ee08f", h: "#7a8696", s: "#c8d2dc", c: "#5aa0d0", C: "#3a7aa8", p: "#5a6a7a", b: "#3a3a48" };
+const NICO = { k: "#22202a", e: "#22202a", h: "#4a2e1c", H: "#9a6a44", d: "#24160e", s: "#f0c49c", S: "#d8a07a", c: "#d63c3c", L: "#f06a6a", C: "#9a2626", w: "#f8f8f8", a: "#f0d040", A: "#a89028", t: HEADS.length - 1, p: "#2a2a3a", P: "#1a1a26", b: "#2f2f3a" };
+const HQBOT = { k: "#22202a", e: "#3ee08f", h: "#7a8696", H: "#c8d4e0", d: "#4a5664", s: "#c8d2dc", S: "#a8b2bc", c: "#5aa0d0", L: "#8ac4ec", C: "#3a7aa8", w: "#e0f0ff", a: "#3ee08f", A: "#2a9c64", t: 0, p: "#5a6a7a", P: "#3a4a5a", b: "#3a3a48" };
 
 function drawSprite(pal, x, y, dir, step, alpha = 1) {
-  const { rows, mirror } = frame(dir, step);
+  const { rows, mirror } = frame(dir, step, pal.t);
   ctx.globalAlpha = alpha;
   for (let r = 0; r < 16; r++) {
     const row = rows[r];
@@ -538,6 +715,112 @@ const DANCE = [
   ["right", 1, [4, 2], "slide", false], ["right", 0, [2, 0], "slide", false],
   ["down", 0, 0, "still", false], ["down", 0, 0, "still", false],
 ];
+// Midnight to seven, by this computer's clock.
+function isNight(date = new Date()) {
+  const h = date.getHours();
+  return h >= 0 && h < 7;
+}
+// Asleep in bed behind the desk.
+function drawSleep(now) {
+  // A cosy bed two tiles wide against the wall, its foot behind the counter. Nico sleeps in it with his own quiff
+  // on the pillow, eyes shut, a nose bubble growing and popping, a teddy tucked in beside him under a starry
+  // blanket that rises and falls. A lamp glows on the nightstand and z's drift up past the sign.
+  const bx = 20 * TS - 16, wood = "#9a6a3a", dark = "#6e4826", panel = "#7a4a2a", gold = "#f0d040";
+  const breathe = Math.floor(now / 1500) % 2, top = 35 - breathe;
+  // the lamp's warm glow, under everything else
+  ctx.globalAlpha = 0.16; px(bx + 28, 23, 20, 14, "#ffe9a0");
+  ctx.globalAlpha = 0.22; px(bx + 31, 24, 14, 10, "#ffe9a0");
+  ctx.globalAlpha = 1;
+  // bed frame and headboard with a gold star
+  px(bx, 24, 3, 22, dark);
+  px(bx + 29, 24, 3, 22, dark);
+  px(bx, 23, 3, 1, wood);
+  px(bx + 29, 23, 3, 1, wood);
+  px(bx + 3, 26, 26, 8, wood);
+  px(bx + 5, 28, 22, 4, panel);
+  px(bx + 3, 33, 26, 1, dark);
+  px(bx + 15, 28, 2, 4, gold); px(bx + 14, 29, 4, 2, gold);
+  // sheet and pillow
+  px(bx + 3, 34, 26, 12, "#f3efe6");
+  px(bx + 4, 30, 24, 7, "#ffffff");
+  px(bx + 4, 36, 24, 1, "#d8d2c6");
+  px(bx + 4, 30, 1, 6, "#e6e0d4"); px(bx + 27, 30, 1, 6, "#e6e0d4");
+  // his head, the spiky mane of his own sprite, with the eyes shut and a blush
+  const pal = { ...NICO, r: "#f09a8a" };
+  const rows = HEADS[NICO.t].down;
+  for (let r = 0; r < 10; r++) for (let c = 0; c < 16; c++) {
+    let ch = rows[r][c];
+    if (r === 7 && ch === "k" && c > 1 && c < 14) ch = "s";
+    if (r === 8) ch = c === 4 || c === 5 || c === 10 || c === 11 ? "k" : c === 3 || c === 12 ? "r" : ch === "k" && c > 1 && c < 14 ? "s" : ch;
+    if (ch !== ".") px(bx + 8 + c, 23 + r, 1, 1, pal[ch]);
+  }
+  // a nose bubble that swells over three seconds, then pops
+  const b = (now % 3000) / 3000, nx = bx + 24, ny = 30;
+  if (b < 0.86) {
+    const rad = 1 + (b / 0.86) * 2;
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) {
+      const d = Math.hypot(dx, dy);
+      if (d > rad) continue;
+      if (d > rad - 1) px(nx + dx, ny + dy, 1, 1, "#7ec8f0");
+      else { ctx.globalAlpha = 0.45; px(nx + dx, ny + dy, 1, 1, "#d8f4ff"); ctx.globalAlpha = 1; }
+    }
+    if (rad > 2) px(nx - 1, ny - Math.floor(rad) + 1, 1, 1, "#ffffff");
+  } else {
+    for (const [dx, dy] of [[-3, -3], [3, -3], [-3, 2], [3, 2], [0, -4]]) px(nx + dx, ny + dy, 1, 1, "#9fe3ff");
+  }
+  // shoulders in his red shirt with the gold collar
+  px(bx + 7, 33, 18, 2, NICO.k);
+  px(bx + 8, 33, 16, 1, NICO.c);
+  px(bx + 8, 34, 16, 1, NICO.C);
+  px(bx + 15, 33, 2, 1, gold);
+  // the blanket: night blue, gold stars, a white turned-over edge
+  px(bx + 3, top, 26, 46 - top, "#3a4a9a");
+  px(bx + 3, top + 2, 26, 1, "#5a6ac0");
+  px(bx + 3, top + 2, 2, 44 - top, "#2a3670");
+  px(bx + 27, top + 2, 2, 44 - top, "#2a3670");
+  px(bx + 3, top, 26, 1, "#ffffff");
+  px(bx + 3, top + 1, 26, 1, "#e6e0d4");
+  for (const [sx, sy] of [[11, 5], [18, 7], [24, 4], [14, 9], [22, 9]]) {
+    px(bx + sx, top + sy, 1, 1, gold);
+    if ((sx + Math.floor(now / 600)) % 3 === 0) { px(bx + sx - 1, top + sy, 3, 1, gold); px(bx + sx, top + sy - 1, 1, 3, gold); }
+  }
+  // his hands on the blanket
+  for (const hx of [bx + 9, bx + 20]) { px(hx, top - 1, 3, 2, NICO.s); px(hx, top + 1, 3, 1, NICO.S); }
+  // a teddy tucked in at his side
+  const tx = bx + 3, ty = top + 1, fur = "#b07a44";
+  px(tx, ty, 2, 2, fur); px(tx + 5, ty, 2, 2, fur);
+  px(tx, ty + 1, 7, 5, fur);
+  px(tx + 1, ty + 2, 1, 1, NICO.k); px(tx + 5, ty + 2, 1, 1, NICO.k);
+  px(tx + 2, ty + 3, 3, 2, "#e8c898"); px(tx + 3, ty + 3, 1, 1, NICO.k);
+  // nightstand and lamp
+  px(bx + 33, 34, 10, 2, wood);
+  px(bx + 33, 36, 10, 10, panel);
+  px(bx + 34, 39, 8, 1, dark);
+  px(bx + 37, 41, 2, 1, gold);
+  px(bx + 37, 30, 2, 4, "#8a8a96");
+  px(bx + 35, 33, 6, 1, "#6a6a76");
+  px(bx + 35, 25, 6, 1, "#e8c870");
+  px(bx + 34, 26, 8, 4, "#ffe090");
+  px(bx + 34, 29, 8, 1, "#e8c870");
+  // z's drifting up past the sign, small and big
+  for (let i = 0; i < 3; i++) {
+    const p = ((now + i * 900) % 2700) / 2700, x = bx + 24 + i * 2 + Math.sin(p * 6 + i) * 2, y = 26 - p * 16;
+    ctx.globalAlpha = 1 - p;
+    if (i === 1) {
+      px(x, y, 5, 1, "#ffffff");
+      for (let j = 1; j < 4; j++) px(x + 4 - j, y + j, 1, 1, "#ffffff");
+      px(x, y + 4, 5, 1, "#ffffff");
+    } else drawZ(x, y, "#9fe3ff");
+  }
+  ctx.globalAlpha = 1;
+}
+function drawZ(x, y, c) {
+  px(x, y, 3, 1, c);
+  px(x + 2, y + 1, 1, 1, c);
+  px(x + 1, y + 2, 1, 1, c);
+  px(x, y + 3, 3, 1, c);
+}
+
 // Where Nico is on the routine right now: the move, how far he is off the ground (0 to 1), and his lift in pixels.
 function danceMove(now) {
   const beat = Math.floor(now / BEAT_MS) % DANCE.length;
@@ -673,12 +956,18 @@ function loop(now) {
   if (S) {
     // Nico behind the counter, HQ at its terminal
     // With nothing waiting on him, Nico dances the routine, and music notes float up while he does.
-    const dancing = !S.open.length;
-    const move = dancing ? danceMove(now) : null;
-    if (move) drawShadow(move.air, move.dx);
-    drawSprite(NICO, 20 * TS - 8 + (move?.dx ?? 0), 2 * TS - 6 + (move?.lift ?? 0), move?.dir ?? "down", move?.step ?? 0);
-    if (move?.sparkle) drawSparkles(now);
-    if (dancing) drawNotes(now);
+    // With nothing waiting on him he dances; from midnight to seven he sleeps on a bed that pulls out.
+    const idle = !S.open.length;
+    const sleeping = idle && isNight();
+    if (sleeping) {
+      drawSleep(now);
+    } else {
+      const move = idle ? danceMove(now) : null;
+      if (move) drawShadow(move.air, move.dx);
+      drawSprite(NICO, 20 * TS - 8 + (move?.dx ?? 0), 2 * TS - 6 + (move?.lift ?? 0), move?.dir ?? "down", move?.step ?? 0);
+      if (move?.sparkle) drawSparkles(now);
+      if (idle) drawNotes(now);
+    }
     px(17 * TS, 3 * TS - 2, 6 * TS, 10, "#c84b4b");
     px(17 * TS, 3 * TS - 2, 6 * TS, 3, "#f08080");
     px(17 * TS, 3 * TS + 8, 6 * TS, 3, "#8a2a2a");
@@ -773,39 +1062,62 @@ function fitRoom() {
 new ResizeObserver(fitRoom).observe(roomBox);
 
 // ---------- HUD ----------
-// One box per machine: CPU busy and memory used, from the last sample. Red past 90% on either.
+// All machines in one small box: one square per machine, and a word. It only speaks up when one is past 90% CPU or
+// memory, or offline. The per-machine numbers are in the tooltip.
 function renderMachines() {
-  $("machines").innerHTML = (S.machines ?? []).map(({ machine, sample, age, ok }) => {
-    const name = esc(machine.toUpperCase());
-    if (!sample) return `<div class="box stat"><span class="k">${name}</span><span class="v">-</span></div>`;
-    const bad = ok && (sample.cpu_busy > 90 || sample.mem_used > 90);
-    const state = bad ? "alert" : ok ? "ok" : "";
-    const value = ok ? `${Math.round(sample.cpu_busy)}% · ${Math.round(sample.mem_used)}%` : "OFFLINE";
-    const tip = sample.ok ? `load ${sample.load1.toFixed(1)} on ${sample.cores} cores, sampled ${dur(age)} ago` : `last sample failed: ${sample.error ?? "unknown"}`;
-    return `<div class="box stat ${state}" title="${esc(tip)}"><span class="k">${name} CPU · MEM</span><span class="v">${value}</span></div>`;
-  }).join("");
+  const ms = S.machines ?? [];
+  const rows = ms.map(({ machine, sample, age, ok }) => {
+    const name = machine.toUpperCase();
+    if (!sample || !ok) return { name, state: "off", tip: `${name}: offline${sample?.error ? ` (${sample.error})` : ""}` };
+    const bad = sample.cpu_busy > 90 || sample.mem_used > 90;
+    return { name, state: bad ? "bad" : "", cpu: Math.round(sample.cpu_busy), mem: Math.round(sample.mem_used), tip: `${name}: CPU ${Math.round(sample.cpu_busy)}% · MEM ${Math.round(sample.mem_used)}% · load ${sample.load1.toFixed(1)} on ${sample.cores} cores, ${dur(age)} ago` };
+  });
+  const bad = rows.find((r) => r.state === "bad"), off = rows.find((r) => r.state === "off");
+  const word = bad ? `${bad.name} ${Math.max(bad.cpu, bad.mem)}%` : off ? `${off.name} OFF` : rows.length ? "OK" : "-";
+  const box = $("machines");
+  box.className = "box health " + (bad ? "bad" : off ? "off" : "");
+  box.title = rows.map((r) => r.tip).join("\n");
+  box.innerHTML = `<span class="k">MACHINES</span><span class="v">${rows.map((r) => `<i class="${r.state}"></i>`).join("")}${esc(word)}</span>`;
 }
 
 function renderStats() {
   renderMachines();
   const n = S.open.length;
   const sw = $("sWait");
-  sw.className = "box stat " + (n ? "alert" : "ok");
-  sw.querySelector(".v").textContent = n;
+  sw.className = "box urgent " + (n ? "alert" : "ok");
+  sw.querySelector(".count").textContent = n;
   const oldest = n ? Math.min(...S.open.map((a) => a.created_at)) : null;
-  $("sOld").querySelector(".v").textContent = oldest ? dur(Date.now() - oldest) : "-";
+  const age = oldest ? Date.now() - oldest : 0;
+  $("sOld").className = "old" + (age > 30 * 60000 ? " hot" : age > 5 * 60000 ? " warm" : "");
+  $("sOld").querySelector(".v").textContent = oldest ? dur(age) : "-";
   const live = S.lanes.filter((l) => !["done", "parked"].includes(l.status));
-  $("sMove").querySelector(".v").textContent = `${S.lanes.filter((l) => l.status === "moving").length}/${live.length}`;
-  $("sHq").querySelector(".v").textContent = S.lanes.filter((l) => ["hq_turn", "stale", "gone"].includes(l.status)).length;
-  $("sBank").querySelector(".v").textContent = S.score.bank;
+  $("sMove").textContent = `${S.lanes.filter((l) => l.status === "moving").length}/${live.length}`;
+  $("sHq").textContent = S.lanes.filter((l) => ["hq_turn", "stale", "gone"].includes(l.status)).length;
+  $("sBank").textContent = S.score.bank;
+  const unread = S.updatesUnread ?? 0;
+  $("sFrom").className = "box fromhq" + (unread ? " unread" : "");
+  $("sFrom").querySelector(".v").textContent = `${unread} NEW`;
   document.title = n ? `(${n}) HQ Office` : "HQ Office";
 }
+
+// A question below the fold gets a red pill at the bottom of the list. Click it to go to the next one.
+function renderBelow() {
+  const list = $("hud"), pill = $("below");
+  const edge = list.getBoundingClientRect().bottom;
+  const hidden = [...list.querySelectorAll(".ask")].filter((el) => el.getBoundingClientRect().bottom > edge + 1);
+  pill.hidden = !hidden.length || list.scrollHeight <= list.clientHeight;
+  pill.textContent = `+${hidden.length} ${hidden.length === 1 ? "QUESTION" : "QUESTIONS"} OUT OF VIEW`;
+  pill.onclick = () => hidden[0]?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+$("hud").addEventListener("scroll", renderBelow, { passive: true });
+new ResizeObserver(renderBelow).observe($("hud"));
 
 function renderHud() {
   const hud = $("hud");
   const focused = document.activeElement?.closest?.("[data-ask]")?.dataset.ask;
   const caret = document.activeElement?.selectionStart;
-  const head = `<div class="box"><h2>${S.open.length ? `${S.open.length} WAITING ON YOU` : "NOTHING WAITS ON YOU"}</h2><div style="color:var(--muted);font-size:14px">${S.open.length ? "Answer here. The worker in the queue walks back to its desk once HQ acts." : "Every worker is either at its desk or waiting on HQ or CI."}</div></div>`;
+  // The count lives in the top bar now; the list only needs words when it is empty.
+  const head = S.open.length ? "" : `<div class="box"><h2>NOTHING WAITS ON YOU</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Questions land here.</div></div>`;
   hud.innerHTML = head + S.open.map((a) => {
     const d = drafts.get(a.id) || {};
     const kind = a.kind;
@@ -820,7 +1132,7 @@ function renderHud() {
         <span class="timer"></span>
       </div>
       <h3>${linkify(a.title)}</h3>
-      ${a.body ? `<div class="text">${renderBody(a.body)}</div>` : ""}
+      ${a.body ? `<div class="text">${a.body.includes("```") ? renderBody(a.body) : clipText(a.body, `q${a.id}`)}</div>` : ""}
       ${opts ? `<div class="menu">${opts}</div>` : ""}
       <div class="reply">
         <textarea rows="1" placeholder="${kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or answer in your own words" : "Your answer"}">${esc(d.text || "")}</textarea>
@@ -833,6 +1145,41 @@ function renderHud() {
     if (ta) { ta.focus(); if (caret != null) ta.setSelectionRange(caret, caret); }
   }
   tick();
+  renderBelow();
+}
+
+// FROM HQ: information, not questions. Newest first; unread ones are tinted. Nothing here waits, times or scores.
+// It shares the box under the room with your sent log; the top bar's FROM HQ box opens this tab.
+let feedTab = "updates";
+function updateRows() {
+  const rows = (S.updates ?? []).map((u) => `<article class="upd ${u.read_at ? "" : "unread"}" data-upd="${u.id}">
+      <div class="meta"><span class="tag">${clock(u.at)}</span>${u.lane ? `<span class="tag lane">${esc(u.lane)}</span>` : ""}${u.read_at ? "" : `<span class="tag new">NEW</span>`}</div>
+      <h3>${linkify(u.title)}</h3>
+      ${u.body ? `<div class="text">${u.body.includes("```") ? renderBody(u.body) : clipText(u.body, `u${u.id}`)}</div>` : ""}
+    </article>`).join("");
+  return rows || `<div class="empty">Nothing from HQ yet.</div>`;
+}
+function renderFeed() {
+  const unread = S.updatesUnread ?? 0;
+  const tab = (id, label, extra = "") => `<button class="tab ${feedTab === id ? "on" : ""}" type="button" data-tab="${id}">${label}${extra}</button>`;
+  $("feed").innerHTML = `<div class="tabs">
+      ${tab("updates", "FROM HQ", unread ? ` <span class="tag new">${unread} NEW</span>` : "")}
+      ${tab("log", "SENT &amp; ANSWERED")}
+      <span class="spacer"></span>
+      ${feedTab === "updates" ? `<button class="btn-s" type="button" data-readall ${unread ? "" : "disabled"}>MARK ALL READ</button>` : ""}
+    </div>
+    <div class="body">${feedTab === "updates" ? updateRows() : `<div class="log" style="margin:0;max-height:none">${logRows()}</div>`}</div>`;
+}
+
+// A soft single note for a new update. Different from the three-note question chime, and only when sound is on.
+function softChime() {
+  if (!sound || !audio) return;
+  tone(audio.currentTime, 784, 0.5, "sine", 0.05, audio.destination);
+}
+function announceUpdates() {
+  const unread = new Set((S.updates ?? []).filter((u) => !u.read_at).map((u) => u.id));
+  if (seenUpdates && [...unread].some((id) => !seenUpdates.has(id))) softChime();
+  seenUpdates = unread;
 }
 
 function renderCard() {
@@ -858,10 +1205,20 @@ function renderCard() {
     ${asks.length ? `<div class="row">${asks.map((a) => `<button class="tag lane" data-select="${esc(lane.name)}">ANSWER: ${esc(a.title.slice(0, 40))}${a.title.length > 40 ? "…" : ""}</button>`).join("")}</div>` : ""}`;
 }
 
+// Under Tell HQ: only your last note and whether HQ has it. The full log is the SENT & ANSWERED tab.
 function renderLog() {
-  const notes = S.notes.slice(0, 5).map((n) => `<div><b>${clock(n.at)} YOU</b>${linkify(n.text)} <span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span></div>`);
-  const answered = S.answered.slice(0, 8).map((a) => `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${linkify(a.title)} → <strong>${linkify(a.answer)}</strong> <span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span></div>`);
-  $("log").innerHTML = [...notes, ...answered].join("") || `<div style="color:var(--muted)">Nothing yet today.</div>`;
+  renderFeed();
+  const n = S.notes[0];
+  $("lastNote").innerHTML = n
+    ? `<b>LAST ${clock(n.at)}</b>${esc(n.text)} <span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span>`
+    : `<span style="color:var(--muted)">Nothing sent yet today.</span>`;
+}
+function logRows() {
+  // One list, newest first: your notes and HQ's answers interleaved by time.
+  const notes = S.notes.slice(0, 5).map((n) => ({ at: n.at, html: `<div><b>${clock(n.at)} YOU</b>${clipText(n.text, `n${n.id}`)} <span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span></div>` }));
+  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${linkify(a.title)} → <strong>${clipText(a.answer, `a${a.id}`)}</strong> <span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span></div>` }));
+  const rows = [...notes, ...answered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  return rows.map((r) => r.html).join("") || `<div style="color:var(--muted)">Nothing yet today.</div>`;
 }
 
 function tick() {
@@ -928,10 +1285,27 @@ document.addEventListener("paste", (e) => {
 document.addEventListener("click", (e) => {
   const sel = e.target.closest("[data-select]");
   if (sel) { select(sel.dataset.select, true); return; }
+  const tabBtn = e.target.closest("[data-tab]");
+  if (tabBtn) {
+    feedTab = tabBtn.dataset.tab;
+    renderFeed();
+    if (tabBtn.id === "sFrom") { const f = $("feed"); f.classList.remove("flash"); void f.offsetWidth; f.classList.add("flash"); }
+    return;
+  }
+  const more = e.target.closest("[data-more]");
+  if (more) {
+    const key = more.dataset.more;
+    if (expanded.has(key)) expanded.delete(key); else expanded.add(key);
+    renderLog();
+    renderHud();
+  }
 });
-$("hud").addEventListener("click", async (e) => {
+$("main").addEventListener("click", async (e) => {
   const copyBtn = e.target.closest(".copy");
   if (copyBtn) { copyCode(copyBtn); return; }
+  if (e.target.closest("[data-readall]")) { await post("/api/updates/read-all", {}).catch(() => {}); return; }
+  const upd = e.target.closest("[data-upd]");
+  if (upd && upd.classList.contains("unread") && !e.target.closest(".more")) { post(`/api/updates/${upd.dataset.upd}/read`, {}).catch(() => {}); return; }
   const card = e.target.closest("[data-ask]");
   if (!card) return;
   const id = Number(card.dataset.ask);
@@ -947,7 +1321,7 @@ $("hud").addEventListener("click", async (e) => {
     catch (err) { toast(err.message); e.target.disabled = false; }
   }
 });
-$("hud").addEventListener("input", (e) => {
+$("main").addEventListener("input", (e) => {
   const card = e.target.closest("[data-ask]");
   if (!card || e.target.tagName !== "TEXTAREA") return;
   const id = Number(card.dataset.ask);
@@ -957,7 +1331,7 @@ $("hud").addEventListener("input", (e) => {
   const ask = S.open.find((a) => a.id === id);
   card.querySelector(".send").disabled = !(ask.kind !== "decision" || d.opt || d.text.trim());
 });
-$("hud").addEventListener("keydown", (e) => {
+$("main").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.target.closest("[data-ask]")?.querySelector(".send")?.click();
 });
 $("compose").addEventListener("submit", async (e) => {
@@ -1035,6 +1409,7 @@ function restoreDrafts() {
 }
 restoreDrafts();
 
+
 let first = true, pageStamp = null;
 async function load() {
   S = await (await fetch("/api/state")).json();
@@ -1042,6 +1417,7 @@ async function load() {
   if (pageStamp == null) pageStamp = S.page;
   else if (S.page !== pageStamp) { keepDrafts(); location.reload(); return; }
   announce();
+  announceUpdates();
   syncWorkers(first);
   first = false;
   renderStats(); renderHud(); renderCard(); renderLog();
