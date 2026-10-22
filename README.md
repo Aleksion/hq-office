@@ -11,10 +11,9 @@ HQ Office is a small local web app for people who run AI coding agents in [herdr
 ## Install
 
 ```sh
-herdr plugin install OWNER/hq-office
+herdr plugin install NicolaiHerforth/hq-office
 ```
 
-`OWNER` is a placeholder: use the GitHub owner the plugin is published under.
 
 ## First run
 
