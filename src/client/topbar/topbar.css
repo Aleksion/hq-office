@@ -1,0 +1,40 @@
+/* The top bar: the waiting count, the office strip, FROM HQ, machines, the SETTINGS and SOUND buttons. */
+.stat { display: grid; gap: 6px; padding: 10px 14px; }
+.stat .k { font: 8px/1 var(--pixel); color: var(--muted); }
+.stat .v { font: 16px/1 var(--pixel); }
+.title { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
+.title b { font: 12px/1 var(--pixel); }
+/* HERO and SOUND stacked, so the top bar keeps its height */
+.btns { display: grid; gap: 4px; }
+.btns .btn { padding: 4px 8px; font-size: 8px; white-space: nowrap; }
+/* the one number that matters: how many questions wait on you, and for how long */
+.urgent { display: flex; align-items: center; gap: 14px; padding: 10px 16px; }
+.urgent .count { font: 24px/1 var(--pixel); }
+.urgent .k { font: 9px/1.5 var(--pixel); color: var(--muted); }
+.urgent .old { margin-left: auto; display: grid; gap: 6px; justify-items: end; }
+.urgent .old .k { font-size: 8px; line-height: 1; }
+.urgent .old .v { font: 13px/1 var(--pixel); color: var(--blue); }
+.urgent .old.warm .v { color: var(--amber); }
+.urgent .old.hot .v { color: var(--red); }
+.urgent.alert { border-color: var(--red); }
+.urgent.alert .count { color: var(--red); }
+.urgent.ok .count { color: var(--green); }
+/* everything else about the office, quiet, in one box */
+.strip { display: flex; gap: 18px; padding: 10px 14px; }
+.strip > div { display: grid; gap: 6px; }
+.strip .k { font: 8px/1 var(--pixel); color: var(--muted); }
+.strip .v { font: 13px/1 var(--pixel); }
+.fromhq { display: grid; gap: 6px; padding: 10px 14px; text-align: left; font: inherit; color: inherit; }
+.fromhq:hover { background: #fff; }
+.fromhq .k { font: 8px/1 var(--pixel); color: var(--muted); }
+.fromhq .v { font: 13px/1 var(--pixel); color: var(--muted); }
+.fromhq.unread { border-color: var(--amber); }
+.fromhq.unread .v { color: var(--amber); }
+.health { display: grid; gap: 6px; padding: 10px 14px; cursor: default; }
+.health .k { font: 8px/1 var(--pixel); color: var(--muted); }
+.health .v { display: flex; align-items: center; gap: 6px; font: 11px/1 var(--pixel); }
+.health i { width: 9px; height: 9px; border-radius: 2px; background: var(--green); box-shadow: 0 0 0 2px var(--ink); }
+.health i.bad { background: var(--red); }
+.health i.off { background: var(--amber); }
+.health.bad .v { color: var(--red); }
+.health.off .v { color: var(--amber); }

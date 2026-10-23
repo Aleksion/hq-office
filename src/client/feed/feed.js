@@ -1,0 +1,68 @@
+// The box under the room: FROM HQ updates and the SENT & ANSWERED log, and the note under Tell HQ.
+import { $ } from "../core/dom.js";
+import { S } from "../core/state.js";
+import { audio, sound, tone } from "../sound/sound.js";
+import { clock, esc, setHTML } from "../core/format.js";
+import { clipText, linkify, renderBody } from "../core/text.js";
+import { scheduleTick } from "../questions/questions.js";
+import { liveSecrets, renderSecrets } from "../secrets/secrets.js";
+
+let seenUpdates = null;
+
+// FROM HQ: information, not questions. Newest first; unread ones are tinted. Nothing here waits, times or scores.
+// It shares the box under the room with your sent log; the top bar's FROM HQ box opens this tab.
+export let feedTab = "updates";
+function updateRows() {
+  const rows = (S.updates ?? []).map((u) => `<article class="upd ${u.read_at ? "" : "unread"}" data-upd="${u.id}">
+      <div class="meta"><span class="tag">${clock(u.at)}</span>${u.lane ? `<span class="tag lane">${esc(u.lane)}</span>` : ""}${u.read_at ? "" : `<span class="tag new">NEW</span>`}</div>
+      <h3>${linkify(u.title)}</h3>
+      ${u.body ? `<div class="text">${u.body.includes("```") ? renderBody(u.body) : clipText(u.body, `u${u.id}`)}</div>` : ""}
+    </article>`).join("");
+  return rows || `<div class="empty">Nothing from HQ yet.</div>`;
+}
+// The SECRETS pane is built once and only its list is redrawn, so a value being pasted survives every refresh.
+export function renderFeed() {
+  const unread = S.updatesUnread ?? 0;
+  const live = liveSecrets().length;
+  const tab = (id, label, extra = "") => `<button class="tab ${feedTab === id ? "on" : ""}" type="button" data-tab="${id}">${label}${extra}</button>`;
+  setHTML($("feedTabs"), `
+      ${tab("updates", "FROM HQ", unread ? ` <span class="tag new">${unread} NEW</span>` : "")}
+      ${tab("log", "SENT &amp; ANSWERED")}
+      ${tab("secrets", "SECRETS", live ? ` <span class="tag secret">${live}</span>` : "")}
+      <span class="spacer"></span>
+      ${feedTab === "updates" ? `<button class="btn-s" type="button" data-readall ${unread ? "" : "disabled"}>MARK ALL READ</button>` : ""}`);
+  const secretsOn = feedTab === "secrets";
+  $("feedBody").hidden = secretsOn;
+  $("secretsPane").hidden = !secretsOn;
+  if (!secretsOn) setHTML($("feedBody"), feedTab === "updates" ? updateRows() : `<div class="log" style="margin:0;max-height:none">${logRows()}</div>`);
+  renderSecrets();
+  scheduleTick(); // the SECRETS pane's countdown needs the page clock while it shows
+}
+
+// A soft single note for a new update. Different from the three-note question chime, and only when sound is on.
+function softChime() {
+  if (!sound || !audio) return;
+  tone(audio.currentTime, 784, 0.5, "sine", 0.05, audio.destination);
+}
+export function announceUpdates() {
+  const unread = new Set((S.updates ?? []).filter((u) => !u.read_at).map((u) => u.id));
+  if (seenUpdates && [...unread].some((id) => !seenUpdates.has(id))) softChime();
+  seenUpdates = unread;
+}
+
+// Under Tell HQ: only your last note and whether HQ has it. The full log is the SENT & ANSWERED tab.
+export function renderLog() {
+  renderFeed();
+  const n = S.notes[0];
+  setHTML($("lastNote"), n
+    ? `<b>LAST ${clock(n.at)}</b>${esc(n.text)} <span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span>`
+    : `<span style="color:var(--muted)">Nothing sent yet today.</span>`);
+}
+function logRows() {
+  // One list, newest first: your notes and HQ's answers interleaved by time.
+  const notes = S.notes.slice(0, 5).map((n) => ({ at: n.at, html: `<div><b>${clock(n.at)} YOU</b>${clipText(n.text, `n${n.id}`)} <span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span></div>` }));
+  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${linkify(a.title)} → <strong>${clipText(a.answer, `a${a.id}`)}</strong> <span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span></div>` }));
+  const rows = [...notes, ...answered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  return rows.map((r) => r.html).join("") || `<div style="color:var(--muted)">Nothing yet today.</div>`;
+}
+export function setFeedTab(v) { return (feedTab = v); }

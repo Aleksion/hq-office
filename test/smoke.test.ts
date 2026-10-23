@@ -77,3 +77,52 @@ test("uploads land in the data dir and are served back", async () => {
   expect(back.status).toBe(200);
   expect(new Uint8Array(await back.arrayBuffer())).toEqual(bytes);
 });
+
+// Reads server-sent messages from the page stream, one `data:` payload at a time.
+async function* streamMessages(res: Response) {
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buf += dec.decode(value, { stream: true });
+    let end;
+    while ((end = buf.indexOf("\n\n")) >= 0) {
+      const block = buf.slice(0, end);
+      buf = buf.slice(end + 2);
+      const data = block.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n");
+      if (data) yield data;
+    }
+  }
+}
+
+test("the page stream starts with the whole state, then sends only the parts that changed", async () => {
+  const ctrl = new AbortController();
+  const res = await fetch(`${BASE}/api/stream`, { signal: ctrl.signal });
+  const messages = streamMessages(res);
+  const whole = JSON.parse((await messages.next()).value!);
+  for (const key of ["lanes", "open", "answered", "notes", "updates", "updatesUnread", "config", "page", "machines", "score"]) expect(whole).toHaveProperty(key);
+  const post = await fetch(`${BASE}/api/updates`, {
+    method: "POST",
+    headers: { "x-hud": "1", "content-type": "application/json" },
+    body: JSON.stringify({ title: "stream test" }),
+  });
+  expect(post.status).toBe(200);
+  const part = JSON.parse((await messages.next()).value!);
+  expect(part.updates[0].title).toBe("stream test");
+  expect(part.updatesUnread).toBe(whole.updatesUnread + 1);
+  for (const key of ["lanes", "open", "answered", "notes", "config", "page"]) expect(part).not.toHaveProperty(key);
+  ctrl.abort();
+});
+
+test("an answer still succeeds when herdr cannot be started, and the failure is logged", async () => {
+  const post = (path: string, body: unknown) =>
+    fetch(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) });
+  const { id } = await (await post("/api/asks", { title: "answer without herdr", kind: "info" })).json();
+  const res = await post(`/api/asks/${id}/answer`, { answer: "seen" });
+  expect(res.status).toBe(200);
+  const state = await (await fetch(`${BASE}/api/state`)).json();
+  expect(state.open.some((a: any) => a.id === id)).toBe(false);
+  expect(state.events.some((e: any) => e.text.startsWith("could not reach HQ"))).toBe(true);
+});

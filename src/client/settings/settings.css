@@ -1,0 +1,9 @@
+/* The SETTINGS panel. */
+.settings { position: fixed; top: 70px; right: 14px; width: 360px; max-width: calc(100vw - 28px); z-index: 50; display: grid; gap: 10px; padding: 12px 14px; }
+.settings[hidden] { display: none; }
+.shead { display: flex; align-items: center; gap: 8px; }
+.srow { display: grid; gap: 6px; }
+.opts2 { display: flex; flex-wrap: wrap; gap: 5px; }
+.opts2 .btn-s { font-size: 7px; padding: 5px 6px; }
+.btn-s.on { background: var(--ink); color: #fff; }
+.sfoot { display: flex; justify-content: flex-end; }

@@ -1,6 +1,6 @@
 id = "hq-office"
 name = "HQ Office"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.8.0"
 description = "A handheld-RPG office where every herdr agent lane is a worker, plus a panel where you answer your HQ agent's questions"
 platforms = ["macos", "linux"]
@@ -10,32 +10,32 @@ id = "start"
 title = "HQ Office: start and open"
 description = "Start the HQ Office server if it is not running, then open it in the browser"
 contexts = ["global", "workspace"]
-command = ["bun", "bin/hud-plugin.ts", "start"]
+command = ["sh", "-c", "PATH=\"$HOME/.bun/bin:$PATH\" exec bun bin/hud-plugin.ts start"]
 
 [[actions]]
 id = "stop"
 title = "HQ Office: stop"
 description = "Stop the HQ Office server this plugin started"
 contexts = ["global", "workspace"]
-command = ["bun", "bin/hud-plugin.ts", "stop"]
+command = ["sh", "-c", "PATH=\"$HOME/.bun/bin:$PATH\" exec bun bin/hud-plugin.ts stop"]
 
 [[actions]]
 id = "reload"
 title = "HQ Office: restart"
 description = "Stop the server and start it again, to pick up config.env changes"
 contexts = ["global", "workspace"]
-command = ["bun", "bin/hud-plugin.ts", "reload"]
+command = ["sh", "-c", "PATH=\"$HOME/.bun/bin:$PATH\" exec bun bin/hud-plugin.ts reload"]
 
 [[actions]]
 id = "open"
 title = "HQ Office: open in browser"
 description = "Open the HQ Office page without touching the server"
 contexts = ["global", "workspace"]
-command = ["bun", "bin/hud-plugin.ts", "open"]
+command = ["sh", "-c", "PATH=\"$HOME/.bun/bin:$PATH\" exec bun bin/hud-plugin.ts open"]
 
 [[panes]]
 id = "status"
 title = "HQ Office: status"
 description = "Whether the server is up, open questions, lanes by status, the HQ agent and the data directory"
 placement = "popup"
-command = ["bun", "bin/hud-plugin.ts", "status"]
+command = ["sh", "-c", "PATH=\"$HOME/.bun/bin:$PATH\" exec bun bin/hud-plugin.ts status"]

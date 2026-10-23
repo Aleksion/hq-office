@@ -1,0 +1,67 @@
+// Answering: options, drafts as you type, SEND, COPY, and marking updates read.
+import { $, toast } from "../core/dom.js";
+import { drafts, secretDrafts } from "./drafts.js";
+import { S } from "../core/state.js";
+import { copyCode } from "../core/text.js";
+import { post } from "../core/net.js";
+import { renderHud } from "./questions.js";
+
+$("main").addEventListener("click", async (e) => {
+  const copyBtn = e.target.closest(".copy");
+  if (copyBtn) { copyCode(copyBtn); return; }
+  if (e.target.closest("[data-readall]")) { await post("/api/updates/read-all", {}).catch(() => {}); return; }
+  const rmBtn = e.target.closest("[data-secret-rm]");
+  if (rmBtn) {
+    rmBtn.disabled = true;
+    try { await post("/api/secrets/rm", { name: rmBtn.dataset.secretRm }); toast(`DELETED ${rmBtn.dataset.secretRm}.`); } catch (err) { toast(err.message); rmBtn.disabled = false; }
+    return;
+  }
+  const upd = e.target.closest("[data-upd]");
+  if (upd && upd.classList.contains("unread") && !e.target.closest(".more")) { post(`/api/updates/${upd.dataset.upd}/read`, {}).catch(() => {}); return; }
+  const card = e.target.closest("[data-ask]");
+  if (!card) return;
+  const id = Number(card.dataset.ask);
+  const d = drafts.get(id) || {};
+  const opt = e.target.closest(".opt");
+  if (opt) { d.opt = d.opt === opt.dataset.opt ? undefined : opt.dataset.opt; drafts.set(id, d); renderHud(); return; }
+  if (e.target.closest(".send")) {
+    const ask = S.open.find((a) => a.id === id);
+    const text = (d.text || "").trim();
+    const answer = d.opt ? (text ? `${d.opt}. ${text}` : d.opt) : text || (ask.kind === "action" ? "done" : "seen");
+    const values = secretDrafts.get(id);
+    if (ask.secrets?.length && values && Object.values(values).some(Boolean)) {
+      // Cleared at once, whatever the server says.
+      secretDrafts.delete(id);
+      for (const inp of card.querySelectorAll("[data-secret]")) inp.value = "";
+      e.target.disabled = true;
+      try { await post(`/api/asks/${id}/secrets`, { values, minutes: Number(d.minutes ?? 60), note: d.opt ? answer : text }); drafts.delete(id); toast("SECRETS SAVED. HQ HAS THE NAMES."); }
+      catch (err) { toast(err.message); renderHud(); }
+      return;
+    }
+    e.target.disabled = true;
+    try { await post(`/api/asks/${id}/answer`, { answer }); drafts.delete(id); toast("SENT. HQ HAS IT."); }
+    catch (err) { toast(err.message); e.target.disabled = false; }
+  }
+});
+$("main").addEventListener("input", (e) => {
+  const card = e.target.closest("[data-ask]");
+  if (!card) return;
+  const id = Number(card.dataset.ask);
+  const d = drafts.get(id) || {};
+  const ask = S.open.find((a) => a.id === id);
+  if (e.target.dataset.secret !== undefined || e.target.dataset.secretMin !== undefined) {
+    if (e.target.dataset.secretMin !== undefined) { d.minutes = e.target.value; drafts.set(id, d); }
+    else secretDrafts.set(id, { ...secretDrafts.get(id), [e.target.dataset.secret]: e.target.value });
+    const filled = (ask.secrets ?? []).filter((n) => secretDrafts.get(id)?.[n]).length;
+    card.querySelector(".send").disabled = !(filled ? filled === ask.secrets.length : ask.kind !== "decision" || d.opt || (d.text || "").trim());
+    return;
+  }
+  if (e.target.tagName !== "TEXTAREA") return;
+  d.text = e.target.value;
+  drafts.set(id, d);
+  const filled = (ask.secrets ?? []).filter((n) => secretDrafts.get(id)?.[n]).length;
+  card.querySelector(".send").disabled = !(filled ? filled === ask.secrets.length : ask.kind !== "decision" || d.opt || d.text.trim());
+});
+$("main").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.target.closest("[data-ask]")?.querySelector(".send")?.click();
+});

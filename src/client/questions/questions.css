@@ -1,0 +1,35 @@
+/* The question panel: the QUESTIONS / MESSAGES tabs, each ask, its timer, options and the out-of-view pill. */
+/* "more below" pill over the bottom of the question list, so a question past the fold is never silent */
+.below { margin-left: auto; align-self: center; background: var(--red); color: #fff; border: 2px solid #8a2020; border-radius: 6px; padding: 5px 8px; font: 7px/1 var(--pixel); white-space: nowrap; }
+.below[hidden] { display: none; }
+/* questions */
+.hud { display: grid; gap: 12px; }
+.hud h2 { margin: 0 0 4px; font: 11px/1.4 var(--pixel); }
+.ask { display: grid; gap: 8px; scroll-margin: 12px; padding: 12px 14px; }
+.ask.flash { animation: flash .9s ease 2; }
+.ask .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tag.lane { background: var(--ink); color: #fff; }
+.tag.decision { background: #ece0ff; color: #5a2fb0; }
+.tag.action { background: #dcebff; color: #1f4fa8; }
+.tag.info { background: #eee; }
+.timer { margin-left: auto; font: 10px/1 var(--pixel); color: var(--blue); }
+.ask.warm .timer { color: var(--amber); }
+.ask.hot .timer { color: var(--red); }
+.due { font: 8px/1 var(--pixel); color: var(--amber); }
+.due.late { color: var(--red); }
+.ask h3 { margin: 0; font: 800 16px/1.3 var(--text); }
+.ask .text { white-space: pre-wrap; overflow-wrap: anywhere; color: #3a3a52; font-size: 14px; }
+.menu { display: grid; gap: 2px; }
+.opt { display: flex; align-items: center; gap: 10px; text-align: left; background: none; border: 0; padding: 5px 8px; border-radius: 6px; font: 700 15px/1.3 var(--text); }
+.opt::before { content: "▶"; font-size: 11px; color: transparent; }
+.opt:hover { background: #eeeef8; }
+.opt.sel { background: #e6e6f6; }
+.opt.sel::before { color: var(--ink); }
+.opt .pick { font: 7px/1 var(--pixel); color: var(--green); }
+/* QUESTIONS / MESSAGES: two tabs over the question column, one list at a time */
+.qwrap { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
+.qtabs { display: flex; align-items: center; gap: 6px; }
+.qtabs .tab { font-size: 9px; padding: 7px 10px; border-width: 3px; }
+.qtabs .tag[hidden] { display: none; }
+.tag.count { background: var(--red); color: #fff; }
+.hud[hidden], .msgs[hidden] { display: none; }

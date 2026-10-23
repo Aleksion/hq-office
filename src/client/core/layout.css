@@ -1,0 +1,32 @@
+/* The page grid: the top bar's columns, the desk and the stage, and on desktop a page that never scrolls. */
+/* Layout: two zones under one top bar.
+   left  = your desk: the questions, and Tell HQ right under them. The urgent count sits on top of this column.
+   right = the office: the room, then the FROM HQ / sent-log tabs and the worker card underneath. */
+:root { --qcol: clamp(420px, 36vw, 560px); }
+/* top bar: the same two columns as the page, so the urgent count heads the questions it counts */
+.top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.top .right { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; min-width: 0; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: stretch; min-width: 0; }
+.desk, .stage { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.qwrap { position: relative; min-width: 0; }
+/* desktop: the page never scrolls. Questions take the full height of the left column; the room takes what the
+   right column has left after the FROM HQ row. */
+@media (min-width: 1151px) {
+  body { overflow: hidden; }
+  .wrap { height: 100vh; height: 100dvh; grid-template-rows: auto minmax(0, 1fr); padding-bottom: 14px; }
+  .top, .main { grid-template-columns: var(--qcol) minmax(0, 1fr); }
+  .top .right { flex-wrap: nowrap; }
+  .main { min-height: 0; }
+  .desk { grid-template-rows: minmax(0, 1fr) auto; min-height: 0; align-content: stretch; }
+  .qwrap { min-height: 0; }
+  .hud { height: 100%; overflow-y: auto; align-content: start; overscroll-behavior: contain; padding-right: 2px; }
+  .msgs { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+  .stage { grid-template-rows: minmax(0, 1fr) auto; min-height: 0; align-content: stretch; }
+  .room { min-height: 0; }
+  .under { height: clamp(170px, 24dvh, 230px); }
+  .under > * { min-height: 0; overflow: auto; }
+  .feed { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden !important; }
+  .feed .body { overflow: auto; min-height: 0; }
+}
+.under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 270px); gap: 14px; }
+@media (max-width: 800px) { .under { grid-template-columns: minmax(0, 1fr); } }

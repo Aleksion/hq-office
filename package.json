@@ -1,8 +1,10 @@
 {
   "name": "hq-office",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "A handheld-RPG office for herdr agent lanes, with a panel for answering your HQ agent's questions",
+  "repository": "github:NicolaiHerforth/hq-office",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "start": "bun server.ts",

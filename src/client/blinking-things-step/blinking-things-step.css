@@ -1,0 +1,5 @@
+/* Moved here from the page's single <style> block. */
+/* Blinking things step through these four times a second, set by the page clock: the same steps as a 1 s
+   steps(2) animation to 35 %, without the browser animating every display frame. */
+.blink-1 { opacity: .675; }
+.blink-2 { opacity: .35; }

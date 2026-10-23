@@ -1,0 +1,26 @@
+/* Colour and font tokens, the reset, the page wrapper and the handheld dialog box (.box). Light only. */
+/* One deliberate look: a handheld-era office. Light only. */
+:root {
+  color-scheme: light;
+  --bg: #2b2f45;
+  --box: #f8f8f0;
+  --ink: #23233a;
+  --muted: #6a6a82;
+  --edge: #3c3c5a;
+  --edge-2: #a8a8c8;
+  --red: #d63c3c;
+  --amber: #e0901e;
+  --green: #2f9e57;
+  --blue: #3c6fd6;
+  --pixel: "Press Start 2P", ui-monospace, monospace;
+  --text: "Nunito", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--text); }
+a { color: var(--blue); }
+button { font: inherit; color: inherit; cursor: pointer; }
+.wrap { max-width: 1680px; margin: 0 auto; padding-block: 14px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
+/* the handheld dialog box */
+.box { background: var(--box); border: 4px solid var(--edge); border-radius: 10px; box-shadow: inset 0 0 0 3px var(--box), inset 0 0 0 5px var(--edge-2); padding: 14px 16px; min-width: 0; }
+.px { font: 10px/1.6 var(--pixel); letter-spacing: .02em; }

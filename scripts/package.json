@@ -1,0 +1,9 @@
+{
+  "name": "hq-office-scripts",
+  "private": true,
+  "description": "Tools for one-off repo changes. Not used by the app at runtime.",
+  "type": "module",
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HQ Office</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 fill=%22%23d63c3c%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;600;700;800&display=swap">
+<!-- styles: every .css under src/client, linked by the server (core/ first, then by path) -->
+<!-- styles -->
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="box urgent" id="sWait">
+      <span class="count">0</span>
+      <span class="k">WAITING<br>ON YOU</span>
+      <span class="old" id="sOld"><span class="k">OLDEST WAIT</span><span class="v">-</span></span>
+    </div>
+    <div class="right">
+      <div class="box title"><b>HQ OFFICE</b></div>
+      <div class="box strip">
+        <div><span class="k">WORKING</span><span class="v" id="sMove">0</span></div>
+        <div><span class="k">ON HQ</span><span class="v" id="sHq">0</span></div>
+        <div><span class="k">₽ BANK</span><span class="v" id="sBank">0</span></div>
+      </div>
+      <button class="box fromhq" id="sFrom" type="button" data-tab="updates"><span class="k">FROM HQ</span><span class="v">0 NEW</span></button>
+      <div class="spacer"></div>
+      <div class="box health" id="machines"><span class="k">MACHINES</span><span class="v">-</span></div>
+      <div class="btns">
+        <button class="btn" id="settingsBtn">SETTINGS</button>
+        <button class="btn" id="alerts">SOUND OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main" id="main">
+    <section class="desk">
+      <div class="qwrap">
+        <div class="qtabs" id="qtabs" role="tablist">
+          <button class="tab" type="button" role="tab" data-qtab="questions">QUESTIONS <span class="tag count" id="qtCount" hidden></span></button>
+          <button class="tab" type="button" role="tab" data-qtab="messages">MESSAGES <span class="tag new" id="qtUnread" hidden></span></button>
+          <button class="tab" type="button" role="tab" data-qtab="work">WORK <span class="tag count" id="qtStalled" hidden></span></button>
+        </div>
+        <button class="stall" id="stall" type="button" hidden></button>
+        <div class="hud" id="hud"></div>
+        <div class="box msgs" id="msgs" hidden></div>
+        <div class="box work" id="work" hidden></div>
+      </div>
+      <div class="box tell">
+        <form class="compose" id="compose">
+          <div class="head"><h2>TELL HQ</h2><span class="hint">⌘↩ sends</span><button class="below" id="below" type="button" hidden></button></div>
+          <div class="reply">
+            <textarea id="noteText" rows="2" placeholder="An order, a change of plan, a question."></textarea>
+            <button class="send go" type="submit">SEND</button>
+          </div>
+        </form>
+        <div class="lastnote" id="lastNote"></div>
+      </div>
+    </section>
+    <section class="stage">
+      <div class="room">
+        <canvas id="room"></canvas>
+        <div class="legend">
+          <span><i style="color:#d63c3c">!</i>WAITING ON YOU</span>
+          <span><i style="color:#e0901e">?</i>WAITING ON HQ</span>
+          <span><i style="color:#3c6fd6">…</i>WAITING ON CI/OTHER</span>
+          <span><i style="color:#6a6a82">z</i>PARKED</span>
+          <span><i style="color:#2f9e57">✓</i>DONE</span>
+          <span>AT DESK = WORKING</span>
+        </div>
+      </div>
+      <div class="under">
+        <section class="box feed" id="feed">
+          <div class="tabs" id="feedTabs"></div>
+          <div class="body" id="feedBody"></div>
+          <div class="body" id="secretsPane" hidden>
+            <form class="sform" id="secretForm" autocomplete="off" novalidate>
+              <input class="sin name" id="secName" placeholder="NAME_LIKE_THIS" autocomplete="off" spellcheck="false" autocapitalize="characters" maxlength="64" aria-label="Secret name">
+              <input class="sin min" id="secMin" type="number" min="1" max="10080" step="1" value="60" autocomplete="off" aria-label="Minutes until it expires"><span class="sk">MIN</span>
+              <input class="sin val" id="secValue" type="password" autocomplete="off" placeholder="paste the value" aria-label="Secret value" data-1p-ignore data-lpignore="true" data-bwignore>
+              <button class="send go" type="submit">SAVE</button>
+            </form>
+            <div class="slist" id="secretList"></div>
+          </div>
+        </section>
+        <div class="box card" id="card"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="box settings" id="settings" hidden></div>
+<script type="module" src="/src/client/main.js"></script>
+<!-- features: every src/client/<name>/index.js, loaded by the server after main.js -->
+<!-- features -->
+</body>
+</html>

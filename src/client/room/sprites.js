@@ -1,0 +1,105 @@
+// The 16x16 worker sprite: heads, bodies, legs, walk frames, and drawSprite.
+import { artId, blit, px } from "./canvas.js";
+
+// 16x16 sprites in the style of the old handheld overworld: a big round head, thick black outlines, a fringe,
+// eyes two pixels tall, arms out with the hands showing. head 10 rows, body 4, legs 2.
+// k outline, h hair, H hair shine, d hair shadow, s skin, S skin shade, e eye, c shirt, L shirt light, C shirt shade,
+// w white, a accent (collar, hat, band, bows), A accent shade, p trousers, P trousers shade, b shoes.
+const HEAD_FRONT = ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."];
+const HEAD_BACK = ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."];
+const BODY_FRONT = ["..kkcccaaccckk..", ".kLkLccccccCkCk.", ".kskLccccccCksk.", "..kkpppppppPkk.."];
+const LEGS_FRONT = [["...kppPkkpPPk...", "...kbbbkkbbbk..."], ["...kppPkkpPk....", "...kbbbk.kk....."]];
+const HEAD_SIDE = ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."];
+const BODY_SIDE = ["...kkccaacckk...", "..kLcckLLkcCk...", "..kLccksskcCk...", "...kkppppPPk...."];
+const LEGS_SIDE = [["...kpPk.kpPk....", "...kbbk.kbbk...."], ["....kppPk.......", "....kbbbk......."]];
+
+// One head per kind of character; a worker gets one from his name. A head of 11 or 12 rows lets hair fall over the shoulders.
+export const HEADS = [
+  { down: HEAD_FRONT, up: HEAD_BACK, side: HEAD_SIDE }, // short
+  { // cap
+    down: ["....kkkkkkkk....", "..kkaaaaaaaakk..", ".kaawwaaaaaaaak.", "kaaaaaaaaaaaaaak", "kkAAAAAAAAAAAAkk", "khhsssssssssshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["....kkkkkkkk....", "..kkaaaaaaaakk..", ".kaaaaaaaaaaaak.", "kaaaaaaaaaaaaaak", "kaaaaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kkaaaaaaaakk..", ".kaaaaaaawwaak..", "kaaaaaaaaaaaaak.", "kaaaaaaaaAAAAAAk", "khhhhhhhhsssssk.", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // long
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhssssssshhhk", "khhsssssssssshhk", "khhsskssssksshhk", "khhsskssssksshhk", "khhSssssssssShhk", "khhkcccaaccckhhk"],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", ".khhhhhhhhhhhhk.", ".kLkddddddddkCk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhhsssssk.", "khhhhhhhhssskssk", "khhhhhhhhssskssk", "khhhhhhhhSssssk.", ".khhhhhkcaackk.."],
+  },
+  { // bun
+    down: [".....kkkkkk.....", "..kkkhHHhhhkkk..", ".khhhkkkkkkhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsssssssssshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: [".....kkkkkk.....", "..kkkhHHhhhkkk..", ".khhhkkkkkkhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: [".....kkkkkk.....", "..kkkhHHhhhkkk..", ".khhhkkkkkkhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // spiky
+    down: ["...k...k...k....", "..khk.khk.khk...", ".khHhkhhhkhhhk..", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["...k...k...k....", "..khk.khk.khk...", ".khHhkhhhkhhhk..", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["...k...k...k....", "..khk.khk.khk...", ".khHhkhhhkhhhk..", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // bald
+    down: ["....kkkkkkkk....", "..kksssssssskk..", ".kswwsssssssssk.", "kswssssssssssssk", "kssssssssssssssk", "khsssssssssssshk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".khhhsssssshhhk."],
+    up: ["....kkkkkkkk....", "..kksssssssskk..", ".kswwsssssssssk.", "kswssssssssssssk", "kssssssssssssssk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kksssssssskk..", ".kssssssswwsssk.", "kssssssssssssssk", "kssssssssssssssk", "khhhhhsssssssssk", "khhhhSssssssssk.", "khhhhSsssssskssk", "khhhhSsssssskssk", ".kkhhhShhhhhhk.."],
+  },
+  { // beanie
+    down: ["......kwwk......", "..kkkaaaaaakkk..", ".kaaaaaaaaaaaak.", "kaaLaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhsssssssssshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["......kwwk......", "..kkkaaaaaakkk..", ".kaaaaaaaaaaaak.", "kaaLaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["......kwwk......", "..kkkaaaaaakkk..", ".kaaaaaaaaaaaak.", "kaaLaaaaaaaaaaak", "kAAAAAAAAAAAAAAk", "khhhhhhhhssssssk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // glasses
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhsshhsshhsshhk", "khsssssssssssshk", "khskwwkkkkwwkshk", "khskseksskeskshk", ".kSssssssssssSk."],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSkkwwksk", "khhhhhhhSsskeksk", ".kkhhhhSsssssk.."],
+  },
+  { // pigtails
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kahhhhhhhhhhhhak", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", "khkSssssssssSkhk"],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kahhhhhhhhhhhhak", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", "khhkddddddddkhhk"],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhaahhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", "khhkhhhSsssssk.."],
+  },
+  { // curly
+    down: ["..kk.kkkkkk.kk..", ".khhkhhhhhhkhhk.", "khHHhhhhhhhhhhhk", "khhhdhhhhhhdhhhk", "khdhhhhhhhhhhdhk", "khhhsssssssshhhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["..kk.kkkkkk.kk..", ".khhkhhhhhhkhhk.", "khHHhhhhhhhhhhhk", "khhhdhhhhhhdhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["..kk.kkkkkk.kk..", ".khhkhhhhhhkhhk.", "khHHhhhhhhhhhhhk", "khhhdhhhhhhdhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // headband
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kaaaaaaaaaaaaaak", "khhsshhsshhsshhk", "khsssssssssssshk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kaaaaaaaaaaaaaak", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "kaaaaaaaaaaaaaak", "khhhhhhhhhshsshk", "khhhhhhhSsssssk.", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+  { // bob
+    down: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khddddddddddddhk", "khhsskssssksshhk", "khhsskssssksshhk", "khhSssssssssShhk"],
+    up: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", ".khhhhhhhhhhhhk.", ".kLkddddddddkCk."],
+    side: ["....kkkkkkkk....", "..kkhhhhhhhhkk..", ".khHHhhhhhhhhhk.", "khHHhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khhhhhhhhdddddk.", "khhhhhhhhssskssk", "khhhhhhhhssskssk", "khhhhhhhhSssssk.", ".khhhhhkcaackk.."],
+  },
+  { // The default hero's own: a spiky mane, three spikes on top and a pointed fringe. Last, so no worker is given it.
+    down: ["..k....kk....k..", "..khk.kHHk.khk..", ".khhHkhHHhkHhhk.", "kdhhHHhhHHhhhhdk", "kdhhhhhhhhhhhhdk", "khhhhhhhhhhhhhhk", "khhsshssshssshhk", "khsssksssskssshk", "khsssksssskssshk", ".kSssssssssssSk."],
+    up: ["..k....kk....k..", "..khk.kHHk.khk..", ".khhHkhHHhkHhhk.", "kdhhHHhhHHhhhhdk", "kdhhhhhhhhhhhhdk", "khhhhhhhhhhhhhhk", "khhhhhhhhhhhhhhk", "khdhhhhhhhhhhdhk", "kSkdhhhhhhhhdkSk", ".kkkddddddddkkk."],
+    side: [".k....kk........", "khk..kHHk..k....", "khhkkhHHhkkhk...", "kdhhHHhhHHhhhhk.", "kdhhhhhhhhhhhhhk", "khhhhhhhhhshsshk", "khhhhhhhSsshsssk", "khhhhhhhSssskssk", "khhhhhhhSssskssk", ".kkhhhhSsssssk.."],
+  },
+];
+
+// Left is the right-facing frame flipped; the second walk frame facing up or down is the first one flipped.
+export const mirrored = (dir, step) => dir === "left" || (step === 2 && (dir === "up" || dir === "down"));
+function frame(dir, step, style = 0) {
+  // step: 0 stand, 1 and 2 alternate walk frames
+  const legsSet = dir === "left" || dir === "right" ? LEGS_SIDE : LEGS_FRONT;
+  const legs = step === 0 ? legsSet[0] : legsSet[1];
+  const set = HEADS[style] || HEADS[0];
+  const head = dir === "up" ? set.up : dir === "down" ? set.down : set.side;
+  const body = dir === "left" || dir === "right" ? BODY_SIDE : BODY_FRONT;
+  return { rows: [...head, ...body.slice(head.length - 10), ...legs], mirror: mirrored(dir, step) };
+}
+
+export function drawSprite(pal, x, y, dir, step, alpha = 1) {
+  blit(`s${artId(pal)}|${dir}|${step}`, x, y, alpha, () => {
+    const { rows, mirror } = frame(dir, step, pal.t);
+    for (let r = 0; r < 16; r++) {
+      const row = rows[r];
+      for (let c = 0; c < 16; c++) {
+        const ch = row[mirror ? 15 - c : c];
+        if (ch === "." || !ch) continue;
+        px(c, r, 1, 1, pal[ch]);
+      }
+    }
+  });
+}
