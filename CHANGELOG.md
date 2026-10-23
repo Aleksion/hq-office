@@ -5,6 +5,16 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-23
+
+### Fixed
+
+- **A phone can use HQ Office again.** Since 0.2.0 every page that is not this machine's own was refused, which also
+  stopped a phone opening the page through `tailscale serve`: it loaded empty and every answer was "forbidden". List
+  your phone's page address in `HUD_TRUSTED_ORIGINS` (exact, comma-separated) and it can read and answer like the
+  machine's own page. Every other site is still refused, and secrets stay this machine's own page only. Thanks to
+  Aleksander (PR #2).
+
 ## [0.6.1] - 2026-10-23
 
 ### Fixed

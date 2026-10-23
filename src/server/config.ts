@@ -12,6 +12,9 @@ export const MAX_UPLOAD = 10 * 1024 * 1024;
 mkdirSync(UPLOADS, { recursive: true });
 export const PORT = Number(process.env.HUD_PORT ?? 4747);
 export const HOST = process.env.HUD_HOST ?? "127.0.0.1";
+// Page addresses besides this machine's own that may use the page, such as a Tailscale serve URL for a phone
+// (https://name.tailnet.ts.net:4747). Comma-separated, exact. Secrets stay reachable from this machine's own page only.
+export const TRUSTED_ORIGINS = (process.env.HUD_TRUSTED_ORIGINS ?? "").split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean);
 export const HERDR = process.env.HERDR_BIN ?? "herdr";
 export const LOCAL = process.env.HUD_LOCAL_MACHINE ?? "local";
 export const MACHINES = (process.env.HUD_MACHINES ?? LOCAL).split(",").map((m) => m.trim()).filter(Boolean);

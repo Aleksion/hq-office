@@ -148,6 +148,7 @@ Set these in `config.env`. An empty value means the default.
 | `HUD_OWNER` | empty | Your name: on the desk sign, on the default hero, and in the notes and answers HQ is sent. Empty means "the owner" (and "YOU" on the hero). |
 | `HUD_PORT` | `4747` | Port the server listens on. |
 | `HUD_HOST` | `127.0.0.1` | Address the server binds to. |
+| `HUD_TRUSTED_ORIGINS` | empty | Extra page addresses that may use the page, comma-separated and exact, such as a phone reaching it through `tailscale serve` (`https://name.tailnet.ts.net:4747`). Every other site is refused, and secrets stay this machine's own page only. |
 | `HUD_GITHUB_REPO` | empty | `owner/repo`, used to link lanes to pull requests. |
 | `HUD_LINEAR_WORKSPACE` | empty | Linear workspace slug, used to link lanes to issues. |
 | `HUD_LOCAL_MACHINE` | `local` | Name of this machine in the room. |

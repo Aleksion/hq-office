@@ -1,6 +1,6 @@
 // Bun.serve: every request passes the checks that need the raw request (its origin and the caller's address),
 // then goes to the router.
-import { HOST, LEGACY_OWNER_WHO, OWNER, PORT } from "./config.ts";
+import { HOST, LEGACY_OWNER_WHO, OWNER, PORT, TRUSTED_ORIGINS } from "./config.ts";
 import { handle } from "./router.ts";
 import { json } from "./json.ts";
 import { bump, secrets } from "./push.ts";
@@ -14,8 +14,8 @@ Bun.serve({
   idleTimeout: 255,
   async fetch(req, server) {
     const path = new URL(req.url).pathname;
-    // A page on another origin gets nothing, not even a read.
-    if (!originAllowed(req, HOST)) return json({ error: "forbidden" }, 403);
+    // A page on another origin gets nothing, not even a read, unless the owner listed it in HUD_TRUSTED_ORIGINS.
+    if (!originAllowed(req, HOST) && !TRUSTED_ORIGINS.includes(req.headers.get("origin") ?? "")) return json({ error: "forbidden" }, 403);
     const ip = server.requestIP(req)?.address;
     if (isSecretPath(path)) {
       return secretRoute(req, path, ip, secrets, {
