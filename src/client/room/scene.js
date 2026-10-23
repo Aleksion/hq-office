@@ -7,6 +7,7 @@ import { EVENT_ART, drawSeason, eventLayer, paintEventLayer } from "./events.js"
 import { SEATS } from "./spots.js";
 import { workers } from "./workers.js";
 import { deskCount } from "./collision.js";
+import { stepped } from "./beat.js";
 
 // The room's still parts: floor, walls, windows, sign, plants and furniture. Painted once per season, sign, desk
 // count and font load, then copied. The moving bits (screens, lights, steam) are drawn on top each frame.
@@ -125,6 +126,7 @@ export function stillPicture(used) {
 export function drawRoom(now, still) {
   const used = deskCount(workers.size);
   ctx.drawImage(still, 0, 0);
+  const t = stepped(now, 2);
   // desk screens: lit and scrolling while the worker sits at it
   const atDesk = new Set([...workers.values()].filter((w) => w.lane.status === "moving" && Math.abs(w.x - w.target.x) < 0.05 && Math.abs(w.y - w.target.y) < 0.05).map((w) => `${w.seat.x},${w.seat.y}`));
   for (const s of SEATS.slice(0, used)) {
@@ -132,18 +134,18 @@ export function drawRoom(now, still) {
     const on = atDesk.has(`${s.x},${s.y}`);
     px(dx + 4, dy, 8, 6, on ? "#6ad1ff" : "#3b4a5a");
     if (on) {
-      const f = Math.floor(now / 180 + s.x * 3 + s.y) % 4;
+      const f = Math.floor(t / 180 + s.x * 3 + s.y) % 4;
       px(dx + 5, dy + 1, 2 + f, 1, "#ffffff");
       px(dx + 5, dy + 3, 5 - f, 1, "#ffffff");
     }
   }
   // HQ terminal's scan line
-  const g = Math.floor(now / 250) % 3;
+  const g = Math.floor(t / 250) % 3;
   px(16 * TS + 3, 4 * TS + 5 + g * 2, 8, 1, "#3ee08f");
   // the coffee machines' lights, and the kitchen one's steam
-  px(23 * TS + 11, 6 * TS + 6, 2, 2, Math.floor(now / 500) % 2 ? "#ff4d4d" : "#802020");
-  px(23 * TS + 12, 14 * TS + 9, 2, 2, Math.floor(now / 500) % 2 ? "#ff4d4d" : "#802020");
-  for (let i = 0; i < 3; i++) px(23 * TS + 6 + i * 2, 14 * TS - 4 - ((now / 260 + i * 3) % 6), 2, 2, "#e8e8f0");
+  px(23 * TS + 11, 6 * TS + 6, 2, 2, Math.floor(t / 500) % 2 ? "#ff4d4d" : "#802020");
+  px(23 * TS + 12, 14 * TS + 9, 2, 2, Math.floor(t / 500) % 2 ? "#ff4d4d" : "#802020");
+  for (let i = 0; i < 3; i++) px(23 * TS + 6 + i * 2, 14 * TS - 4 - ((t / 260 + i * 3) % 6), 2, 2, "#e8e8f0");
   drawSeason(now);
 }
 

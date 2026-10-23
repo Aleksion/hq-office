@@ -33,7 +33,7 @@ const FREEZE = `(() => {
   const m = location.hash.match(/t=(\\d+)/);
   if (!m) return;
   const EPOCH = Number(m[1]);
-  let T = 1000;
+  let T = 900;
   const RealDate = Date;
   // The wall clock stands still; only the frames move (the room animates from the frame time it is given).
   const now = () => EPOCH;
@@ -50,6 +50,26 @@ const FREEZE = `(() => {
   const queue = [];
   window.requestAnimationFrame = (cb) => { queue.push(cb); return queue.length; };
   window.cancelAnimationFrame = () => {};
+  // A timer with a delay waits on the frozen clock and runs in advance(), when its time comes: the room's loop waits
+  // on one between frames. A zero delay runs at once, as in a browser.
+  const realSetTimeout = window.setTimeout.bind(window), realClearTimeout = window.clearTimeout.bind(window);
+  const timers = new Map();
+  let timerId = 1e9;
+  window.setTimeout = (fn, ms, ...a) => {
+    if (!(ms > 0)) return realSetTimeout(fn, ms, ...a);
+    timers.set(++timerId, { at: T + ms, fn: () => fn(...a) });
+    return timerId;
+  };
+  window.clearTimeout = (id) => { timers.delete(id); realClearTimeout(id); };
+  const runTimers = () => {
+    for (;;) {
+      let next = null;
+      for (const [id, t] of timers) if (t.at <= T && (!next || t.at < next[1].at)) next = [id, t];
+      if (!next) return;
+      timers.delete(next[0]);
+      next[1].fn();
+    }
+  };
   // No live stream: the page renders the state it loads, and nothing a write sends back can race a capture.
   // (It also keeps Chrome's six sockets per host free; lingering stream sockets stall a quick run of page loads.)
   // The real stream's first message is the whole state; this one sends that once and then stays quiet.
@@ -82,13 +102,20 @@ const FREEZE = `(() => {
   };
   window.__hq = {
     ready: () => !!document.getElementById("card")?.innerHTML && !!document.getElementById("feed")?.innerHTML,
-    advance(n) { for (let i = 0; i < n; i++) { T += 100; for (const cb of queue.splice(0)) cb(T); } return T; },
+    advance(n) { for (let i = 0; i < n; i++) { T += 100; runTimers(); for (const cb of queue.splice(0)) cb(T); } return T; },
   };
 })();`;
 
-const CANVAS_HASH = `(async () => {
+// The dancing hero's box (with his notes, sparkles and shadow), in canvas pixels. The dance steps on the room's
+// beat, two beats a move, so its frames differ from a tree with another tempo; idle captures leave this box out.
+const DANCE_BOX = [888, 0, 180, 138];
+// The page's clock starts at 900; captures are taken on whole beats of the room's coming ambient beat (multiples of
+// 500 ms), where an animation that steps on the beat draws exactly what it drew before.
+const canvasHash = (mask?: number[]) => `(async () => {
   const c = document.getElementById("room");
   const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+  const m = ${JSON.stringify(mask ?? null)};
+  if (m) for (let y = m[1]; y < m[1] + m[3]; y++) d.fill(0, (y * c.width + m[0]) * 4, (y * c.width + m[0] + m[2]) * 4);
   const h = await crypto.subtle.digest("SHA-256", d);
   return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
 })()`;
@@ -212,6 +239,8 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     await s("Page.addScriptToEvaluateOnNewDocument", { source: FREEZE });
     const size = (width: number, height: number) => s("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
     const open = async (query: string, t: number) => {
+      // Through a blank page: a URL that differs only in its hash would not load again, and keep the old clock.
+      await s("Page.navigate", { url: "about:blank" });
       await s("Page.navigate", { url: `${server.base}/${query}#t=${t}` });
       // Up to 15 s: two headless Chromes and two servers can share the machine during a full test run.
       for (let i = 0; i < 300; i++) {
@@ -225,10 +254,13 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
       throw new Error(`page did not render ${query}`);
     };
     const shot = async (name: string): Promise<Capture> => {
-      await evaluate("__hq.advance(1)");
-      const first = await evaluate(CANVAS_HASH);
+      const hash = canvasHash(name.startsWith("day, idle") ? DANCE_BOX : undefined);
+      // The first frame on the next whole beat (500 ms), the later one 3 s after it
+      const t = await evaluate("__hq.advance(0)");
+      await evaluate(`__hq.advance(${(500 - (t % 500)) / 100})`);
+      const first = await evaluate(hash);
       await evaluate(`__hq.advance(${FRAMES})`);
-      return { name, first, later: await evaluate(CANVAS_HASH) };
+      return { name, first, later: await evaluate(hash) };
     };
     const noScroll = () => evaluate("document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth");
 
@@ -250,10 +282,14 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     await evaluate(`document.querySelector('[data-qtab="questions"]').click()`);
     await evaluate(`document.querySelector('[data-select="bravo"]').click()`);
     styles["1440x900 worker selected"] = await evaluate(STYLE_HASH);
-    captures.push(await shot("day, worker selected"));
     await size(800, 900);
     styles["800x900"] = await evaluate(STYLE_HASH);
     await size(1440, 900);
+    // The room with a worker selected, on a fresh page: the same first seconds after load as every other capture,
+    // not the seconds after those, when the idle workers' later errands start
+    await open("", DAY);
+    await evaluate(`document.querySelector('[data-select="bravo"]').click()`);
+    captures.push(await shot("day, worker selected"));
     for (const season of SEASONS) {
       await open(`?season=${season}`, DAY);
       captures.push(await shot(`day, asks open, ${season}`));

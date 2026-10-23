@@ -2,12 +2,13 @@
 import { SC, TS, ctx, px } from "./canvas.js";
 import { HEADS } from "./sprites.js";
 import { hero } from "../settings/prefs.js";
+import { BEAT_MS } from "./beat.js";
 
 // One routine of 30 beats, looping. Each move: facing, walk frame, sideways offset in pixels, how he moves
 // ("bob", "hop", "still" or "slide"), and whether sparkles fly. The routine is side steps, hops, a spin, a back hop,
 // a shuffle, and a moonwalk that travels left, turns, travels right, turns, and comes back to the middle. He always
 // slides backwards: side-on, facing the way he is not going. A slide's offset is a [from, to] pair of pixels.
-const BEAT_MS = 360;
+const MOVE_MS = 2 * BEAT_MS; // two of the room's beats a move: on the ground, then in the air
 const DANCE = [
   ["down", 0, 0, "bob", false], ["down", 1, 0, "bob", false],
   ["left", 1, -4, "bob", false], ["left", 0, -4, "still", false],
@@ -133,8 +134,8 @@ function drawZ(x, y, c) {
 
 // Where the hero is on the routine right now: the move, how far off the ground (0 to 1), and the lift in pixels.
 export function danceMove(now) {
-  const beat = Math.floor(now / BEAT_MS) % DANCE.length;
-  const frac = (now % BEAT_MS) / BEAT_MS;
+  const beat = Math.floor(now / MOVE_MS) % DANCE.length;
+  const frac = (now % MOVE_MS) / MOVE_MS;
   const [dir, step, offset, kind, sparkle] = DANCE[beat];
   const travel = Array.isArray(offset) ? offset[0] + (offset[1] - offset[0]) * frac : offset;
   const arc = Math.abs(Math.sin(frac * Math.PI));
@@ -146,6 +147,14 @@ export function danceMove(now) {
     dy: 0,
     air, lift: Math.round(lift), sparkle: sparkle && frac < 0.6,
   };
+}
+// Whether the hero is mid-moonwalk: a slide travels, so it is drawn at the walking rate.
+export const sliding = (now) => DANCE[Math.floor(now / MOVE_MS) % DANCE.length][3] === "slide";
+// When the slide next carries the hero a whole pixel, or the move ends.
+export function slideChange(now) {
+  const i = Math.floor(now / MOVE_MS), [a, b] = DANCE[i % DANCE.length][2], start = i * MOVE_MS;
+  const edge = Math.round(a + ((b - a) * (now - start)) / MOVE_MS) + Math.sign(b - a) / 2;
+  return start + Math.min(1, (edge - a) / (b - a)) * MOVE_MS + 1;
 }
 // A soft shadow under his feet, smaller the higher he is and following him sideways.
 export function drawShadow(air, dx) {

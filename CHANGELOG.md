@@ -5,6 +5,20 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-23
+
+### Changed
+
+- **The room costs about an eighth of what it did.** A browser pays for every frame it shows, whatever is drawn, and
+  the room used to show 12 to 30 frames a second all day even when nothing in it moved. Now it shows a frame only
+  when something visible changes: 10 a second while someone walks, otherwise one per quarter-second beat for the
+  room's small motions (screens, steam, the hero's dance), and none when nothing changes. Measured in Safari with the
+  page in front: from about 26% extra CPU to about 3%. On a second screen, about 2 to 4 frames a second instead of 12.
+  It still animates whenever the window is visible, focused or not.
+- **Idle workers are calmer.** They rest 8 to 20 seconds between errands instead of 1 to 3, so someone is walking
+  about 15% of the time instead of 36%.
+- The hero's dance steps on the beat: each move is a short ground-and-air bounce.
+
 ## [0.4.0] - 2026-10-23
 
 ### Added
