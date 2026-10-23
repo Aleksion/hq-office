@@ -18,17 +18,20 @@ async function herdrList(machine: string): Promise<any[]> {
   return JSON.parse(out).result.agents;
 }
 
-// An idle agent can still be working: its pane ends with "· 2 shells still running" or "monitor still running".
-const BG = /(\d+\s+shells?\s+still running|monitors?\s+still running)/i;
+// An idle agent can still be working. Its pane's tail says so: "· 2 shells still running", "monitor still running",
+// a status bar with "← 1 agent" or "1 shell, 1 monitor", or a running subagent listed as "◯ general-purpose  <task>  34m 0s".
+const BG = /(←\s*\d+\s+agents?|\d+\s+shells?(?:,\s*\d+\s+monitors?)?(?:\s+still running)?|\d+\s+monitors?|monitors?\s+still running)/i;
+const SUBAGENT = /^\s*◯\s+([\w.-]+)\s/m;
 async function backgroundWork(machine: string, pane: string): Promise<string | null> {
-  const args = machine === LOCAL ? [HERDR, "pane", "read", pane, "--lines", "4"] : [HERDR, "--machine", machine, "pane", "read", pane, "--lines", "4"];
+  const args = machine === LOCAL ? [HERDR, "pane", "read", pane, "--lines", "10"] : [HERDR, "--machine", machine, "pane", "read", pane, "--lines", "10"];
   try {
     const proc = Bun.spawn(args, { stdout: "pipe", stderr: "ignore" });
     const timer = setTimeout(() => proc.kill(), 8_000);
     const out = await new Response(proc.stdout).text();
     clearTimeout(timer);
     await proc.exited;
-    return out.match(BG)?.[1].replace(/\s+/g, " ") ?? null;
+    const sub = out.match(SUBAGENT)?.[1];
+    return out.match(BG)?.[1].replace(/\s+/g, " ") ?? (sub ? `subagent ${sub} running` : null);
   } catch {
     return null;
   }

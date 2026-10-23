@@ -125,6 +125,8 @@ export function createBoard(opts: {
     paused_at INTEGER
   );
   `);
+  // Tracking an item again reopens it: PRs that ended before then no longer count towards done.
+  if (!(db.query("PRAGMA table_info(work_items)").all() as { name: string }[]).some((c) => c.name === "reopened_at")) db.exec("ALTER TABLE work_items ADD COLUMN reopened_at INTEGER");
 
   const cache = new Map<string, PrFact>();
   const inflight = new Map<string, Promise<void>>();
@@ -167,8 +169,8 @@ export function createBoard(opts: {
     const existing = getItem(issue);
     if (!existing) db.query("INSERT INTO work_items (issue, lane, created_at) VALUES (?, ?, ?)").run(issue, lane, now());
     else {
-      // Tracking again reopens it.
-      db.query("UPDATE work_items SET lane = COALESCE(?, lane), done_at = NULL WHERE issue = ?").run(lane, issue);
+      // Tracking again reopens it, even when its PRs have all ended (a new PR is coming).
+      db.query("UPDATE work_items SET lane = COALESCE(?, lane), done_at = NULL, reopened_at = ? WHERE issue = ?").run(lane, now(), issue);
     }
     addPrs(issue, splitList(body.prs ?? body.pr));
     event("board", `tracking ${issue}`, lane ?? existing?.lane);
@@ -242,7 +244,13 @@ export function createBoard(opts: {
   }
 
   const isOpen = (it: any) => !it.done_at && !prsEnded(it);
-  const prsEnded = (it: any) => it.prs.length > 0 && it.prs.every((k: string) => ["MERGED", "CLOSED"].includes(cache.get(k)?.state ?? ""));
+  const hasEnded = (k: string) => ["MERGED", "CLOSED"].includes(cache.get(k)?.state ?? "");
+  // The PRs that decide done: all of them, except those that ended before the item was tracked again.
+  const currentPrs = (it: any) => it.prs.filter((k: string) => !(it.reopened_at && hasEnded(k) && (cache.get(k)?.endedAt ?? 0) <= it.reopened_at));
+  const prsEnded = (it: any) => {
+    const cur = currentPrs(it);
+    return cur.length > 0 && cur.every(hasEnded);
+  };
 
   // Fetch every PR of every open item whose cached facts are older than maxAge. A merged PR never changes again.
   async function refresh(maxAge = GH_CACHE_MS) {
@@ -342,6 +350,7 @@ export function createBoard(opts: {
         if (c?.ciAt) happened.push({ at: c.ciAt, what: `CI on ${n} ${c.ci === "running" ? "started" : c.ci}` });
       }
       if (lane?.herdr_since) happened.push({ at: lane.herdr_since, what: `lane went ${lane.herdr ?? "?"}`, stuck: lane.herdr === "gone" });
+      if (it.reopened_at) happened.push({ at: it.reopened_at, what: "tracked again" });
       for (const a of myAsks) {
         happened.push({ at: a.created_at, what: `asked: ${a.title}` });
         if (a.answered_at) happened.push({ at: a.answered_at, what: `answered: ${a.title}` });

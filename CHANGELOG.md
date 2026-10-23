@@ -5,6 +5,16 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-23
+
+### Fixed
+
+- **Lanes running a subagent read as waiting on HQ.** An agent that is idle while a subagent works (its status bar
+  shows "← 1 agent", or its pane lists a running subagent such as "◯ general-purpose ... 34m 0s"), or while
+  shells and monitors run ("1 shell, 1 monitor"), now counts as moving.
+- **Re-tracking finished work.** `hud track ISSUE` on an item whose pull requests have all ended reopens it as
+  moving: PRs that ended before you tracked it again no longer count towards done, so a new PR decides.
+
 ## [0.3.0] - 2026-10-23
 
 ### Added

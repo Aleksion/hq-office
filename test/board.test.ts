@@ -260,3 +260,29 @@ describe("server and hud CLI, with a fake gh binary", () => {
     expect(calls.filter((c) => c === "102").length).toBe(1);
   });
 });
+
+describe("tracking an item again", () => {
+  test("reopens it as moving when its only PR closed, and a new PR then decides done", async () => {
+    const closed = Date.parse("2026-01-05T08:00:00Z");
+    const s = setup({ 51: pr({ state: "CLOSED", closedAt: iso(closed), updatedAt: iso(closed) }) });
+    s.board.track({ issue: "OPE-51", lane: "omega", prs: ["51"] });
+    await s.board.refresh(0);
+    expect(s.item("OPE-51").state).toBe("done");
+
+    s.clock.t += 5 * MIN;
+    s.board.track({ issue: "OPE-51" }); // no PR: a new one is coming
+    await s.board.refresh(0);
+    expect(s.item("OPE-51").state).toBe("moving");
+    expect(s.item("OPE-51").last?.what).toBe("tracked again");
+
+    s.prs[52] = pr({ state: "OPEN", updatedAt: iso(s.clock.t) });
+    s.board.track({ issue: "OPE-51", prs: ["52"] });
+    await s.board.refresh(0);
+    expect(s.item("OPE-51").state).not.toBe("done");
+
+    s.clock.t += MIN;
+    s.prs[52] = pr({ state: "MERGED", mergedAt: iso(s.clock.t), updatedAt: iso(s.clock.t) });
+    await s.board.refresh(0);
+    expect(s.item("OPE-51").state).toBe("done");
+  });
+});
