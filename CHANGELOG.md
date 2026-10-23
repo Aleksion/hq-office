@@ -5,6 +5,13 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-23
+
+### Fixed
+
+- **A lane in a phase HQ named itself (such as "paused") never got its background work checked**, so a lane running
+  a subagent or shells still read as HQ's turn. Every lane that would otherwise read as HQ's turn or stale is checked now.
+
 ## [0.3.1] - 2026-10-23
 
 ### Fixed

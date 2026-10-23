@@ -54,13 +54,15 @@ export async function syncHerdr() {
   const now = Date.now();
   const lanes = db.query("SELECT * FROM lanes").all() as Lane[];
   const known = new Set(lanes.map((l) => l.name));
-  // Only lanes that would otherwise read as HQ's turn: running, agent not working, no open question waiting on the owner.
+  // Only lanes that would otherwise read as HQ's turn or stale: any phase but done, parked or waiting (a phase HQ set
+  // that the status does not know, such as "paused", also falls through to HQ's turn), agent not working, and no
+  // open question waiting on the owner.
   const asking = new Set((db.query("SELECT DISTINCT lane FROM asks WHERE status = 'open' AND lane IS NOT NULL").all() as { lane: string }[]).map((r) => r.lane));
   const bg = new Map<string, string | null>();
   await Promise.all(
     lanes.map(async (lane) => {
       const hit = seen.get(lane.name);
-      if (!hit || hit.agent.agent_status === "working" || (lane.phase ?? "running") !== "running" || asking.has(lane.name)) return;
+      if (!hit || hit.agent.agent_status === "working" || ["done", "parked", "waiting"].includes(lane.phase) || asking.has(lane.name)) return;
       bg.set(lane.name, await backgroundWork(hit.machine, hit.agent.pane_id));
     }),
   );

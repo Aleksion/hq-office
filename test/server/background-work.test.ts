@@ -14,6 +14,7 @@ const agents = JSON.stringify({ result: { agents: [
   { name: "quiet-lane", agent_status: "idle", pane_id: "p3", agent: "claude" },
   { name: "agent-lane", agent_status: "done", pane_id: "p4", agent: "claude" },
   { name: "subagent-lane", agent_status: "idle", pane_id: "p5", agent: "claude" },
+  { name: "paused-lane", agent_status: "done", pane_id: "p6", agent: "claude" },
 ] } });
 writeFileSync(herdr, `#!/bin/sh
 case "$*" in
@@ -22,6 +23,7 @@ case "$*" in
   *"pane read p2"*) printf '❯\\n  ⏵⏵ accept edits on · monitor still running\\n' ;;
   *"pane read p3"*) printf '❯\\n  ⏵⏵ bypass permissions on (shift+tab to cycle)\\n' ;;
   *"pane read p4"*) printf '❯\\n  ⏵⏵ bypass permissions on · ← 1 agent · PR #1 · 1 shell, 1 monitor\\n\\n  ⏺ main\\n' ;;
+  *"pane read p6"*) printf '✻ Worked for 39m · 1 shell, 1 monitor still running\\n❯\\n  ⏵⏵ bypass permissions on · 1 shell, 1 monitor\\n' ;;
   *"pane read p5"*) printf '❯\\n  ⏵⏵ bypass permissions on\\n\\n  ⏺ main\\n  ◯ general-purpose  Running measurements   34m 0s\\n' ;;
 esac
 exit 0
@@ -49,6 +51,7 @@ test("idle with shells or a monitor still running reads as moving; idle without 
     try { if ((await fetch(`${base}/api/state`)).ok) break; } catch {}
   }
   for (const name of ["shells-lane", "monitor-lane", "quiet-lane", "agent-lane", "subagent-lane"]) await post("/api/lanes", { name, machine: "local" });
+  await post("/api/lanes", { name: "paused-lane", machine: "local", phase: "paused" }); // a phase HQ set that the status does not know
   await post("/api/sync", {});
   const lanes = Object.fromEntries((await (await fetch(`${base}/api/state`)).json()).lanes.map((l: any) => [l.name, l]));
   expect(lanes["shells-lane"].status).toBe("moving");
@@ -59,5 +62,6 @@ test("idle with shells or a monitor still running reads as moving; idle without 
   expect(lanes["agent-lane"].bg).toBe("← 1 agent");
   expect(lanes["subagent-lane"].status).toBe("moving");
   expect(lanes["subagent-lane"].bg).toBe("subagent general-purpose running");
+  expect(lanes["paused-lane"].status).toBe("moving");
   expect(lanes["quiet-lane"].bg).toBeNull();
 });
