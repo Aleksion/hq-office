@@ -1,6 +1,8 @@
 // The page on a phone, in Chrome at 390x664 with touch, against a temporary server: no zoom (the viewport forbids
-// it, every text field is 16px or more), one page scroll, MESSAGES opens at its newest message, a live update keeps
-// the place of what you read, and at the newest message a new one stays in view. Needs Chrome; skipped without it.
+// it, every text field is 16px or more); the page scrolls between sections, while MESSAGES and FROM HQ have a
+// bounded height and scroll inside themselves. MESSAGES opens at its newest message and stays there; a live update or
+// a reply keeps the place of what you read in either list; FROM HQ shows a new update at its top. Needs Chrome;
+// skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
@@ -17,8 +19,16 @@ const until = async (expr: string, ms = 8000) => {
 };
 const settle = () => Bun.sleep(300);
 const LAST = `[...document.querySelectorAll("#msgs [data-msg]")].pop()`;
-const lastInView = () => page.evaluate(`(() => { const r = ${LAST}.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()`);
-const topOf = (key: string) => page.evaluate(`document.querySelector('#msgs [data-msg="${key}"]').getBoundingClientRect().top`);
+// The newest message shows: inside the thread's view and on the screen.
+const lastInView = () => page.evaluate(`(() => { const r = ${LAST}.getBoundingClientRect(), v = document.getElementById("msgs").getBoundingClientRect();
+  return r.top >= Math.max(0, v.top) - 1 && r.bottom <= Math.min(innerHeight, v.bottom) + 1; })()`);
+const topOf = (sel: string) => page.evaluate(`document.querySelector('${sel}').getBoundingClientRect().top`);
+const scrollTopOf = (id: string) => page.evaluate(`document.getElementById("${id}").scrollTop`);
+// Scroll a list that scrolls itself until an item is near the top of its view.
+const scrollTo = (id: string, sel: string, offset: number) => page.evaluate(`(() => { const b = document.getElementById("${id}"), e = b.querySelector('${sel}');
+  b.scrollTop += e.getBoundingClientRect().top - b.getBoundingClientRect().top - ${offset}; })()`);
+const bounded = (id: string) => page.evaluate(`(() => { const b = document.getElementById("${id}"), s = getComputedStyle(b);
+  return { overflowY: s.overflowY, overscroll: s.overscrollBehaviorY, clientH: b.clientHeight, scrollH: b.scrollHeight }; })()`);
 
 beforeAll(async () => {
   if (!chromeFound) return;
@@ -51,35 +61,76 @@ test.skipIf(!chromeFound)("no zoom: the viewport forbids it, and no text field i
   expect(Math.min(...sizes)).toBeGreaterThanOrEqual(16);
 });
 
-test.skipIf(!chromeFound)("MESSAGES opens at the newest message, in one page scroll", async () => {
+test.skipIf(!chromeFound)("MESSAGES has a bounded height, scrolls itself and opens at the newest, with its tabs and Tell HQ on screen", async () => {
   await page.evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
   await until(`document.querySelectorAll("#msgs [data-msg]").length > 20`);
   await settle();
-  // the page scrolls, not the thread
-  expect(await page.evaluate(`document.getElementById("msgs").scrollHeight <= document.getElementById("msgs").clientHeight + 1`)).toBe(true);
-  expect(await page.evaluate(`scrollY`)).toBeGreaterThan(0);
+  const b = await bounded("msgs");
+  expect(b.overflowY).toBe("auto");
+  expect(b.overscroll).toBe("contain");
+  expect(b.scrollH).toBeGreaterThan(b.clientH);
+  expect(b.clientH).toBeLessThanOrEqual(664 - 200);
+  expect(await scrollTopOf("msgs")).toBeGreaterThan(0);
   expect(await lastInView()).toBe(true);
+  expect(await page.evaluate(`document.getElementById("msgs").dataset.more`)).toBe("up");
+  // the tabs and Tell HQ show with the thread, and the page still scrolls on to the room
+  expect(await topOf("#qtabs")).toBeGreaterThanOrEqual(0);
+  expect(await page.evaluate(`document.querySelector(".tell").getBoundingClientRect().bottom`)).toBeLessThanOrEqual(664);
+  expect(await page.evaluate(`document.scrollingElement.scrollHeight > innerHeight`)).toBe(true);
 });
 
-test.skipIf(!chromeFound)("reading older messages, a live update does not move them", async () => {
-  await page.evaluate(`document.querySelector('#msgs [data-msg="u12"]').scrollIntoView({ block: "start" }); scrollBy(0, -200)`);
+test.skipIf(!chromeFound)("reading older messages, a live update and a reply above do not move them", async () => {
+  await scrollTo("msgs", '[data-msg="u12"]', 60);
   await settle();
-  const before = await topOf("u12");
+  const before = await topOf('#msgs [data-msg="u12"]'), top = await scrollTopOf("msgs");
   await server.post("/api/updates", { lane: "alpha", title: "Arrives while reading" });
-  // a reply to an older message lands above the screen
+  // a reply to an older message lands above what you read
   await server.post("/api/notes", { text: `re: #u2 ("Update 2") A reply above` });
   await until(`document.getElementById("msgs").textContent.includes("A reply above")`);
   await settle();
-  expect(Math.abs((await topOf("u12")) - before)).toBeLessThan(1);
+  expect(Math.abs((await topOf('#msgs [data-msg="u12"]')) - before)).toBeLessThan(1);
+  expect(await scrollTopOf("msgs")).toBeGreaterThan(top); // the thread moved its own scroll to keep the place
 });
 
 test.skipIf(!chromeFound)("at the newest message, a new one stays in view", async () => {
-  await page.evaluate(`${LAST}.scrollIntoView({ block: "end" })`);
+  await page.evaluate(`document.getElementById("msgs").scrollTop = 1e6`);
   await settle();
+  const pageY = await page.evaluate(`scrollY`);
   await server.post("/api/updates", { lane: "alpha", title: "Arrives at the bottom", body: "A longer one.\nWith a second line.\nAnd a third." });
   await until(`document.getElementById("msgs").textContent.includes("Arrives at the bottom")`);
   await settle();
   expect(await page.evaluate(`${LAST}.textContent.includes("Arrives at the bottom")`)).toBe(true);
   expect(await lastInView()).toBe(true);
+  // the thread scrolled itself to its end; the page stayed where it was
+  expect(await page.evaluate(`(() => { const b = document.getElementById("msgs"); return b.scrollHeight - b.scrollTop - b.clientHeight; })()`)).toBeLessThan(2);
+  expect(await page.evaluate(`scrollY`)).toBe(pageY);
+});
+
+test.skipIf(!chromeFound)("FROM HQ has a bounded height and scrolls itself, and fits on one screen with the room", async () => {
+  await page.evaluate(`document.querySelector(".room").scrollIntoView({ block: "start" })`);
+  await settle();
+  const b = await bounded("feedBody");
+  expect(b.overflowY).toBe("auto");
+  expect(b.overscroll).toBe("contain");
+  expect(b.scrollH).toBeGreaterThan(b.clientH);
+  expect(await page.evaluate(`document.getElementById("feed").getBoundingClientRect().bottom`)).toBeLessThanOrEqual(664);
+  expect(await page.evaluate(`document.getElementById("feedBody").dataset.more`)).toBe("down");
+});
+
+test.skipIf(!chromeFound)("FROM HQ: reading older updates, a new one does not move them; at the top, it shows first", async () => {
+  await scrollTo("feedBody", '[data-upd="10"]', 30);
+  await settle();
+  const before = await topOf('#feedBody [data-upd="10"]');
+  await server.post("/api/updates", { lane: "alpha", title: "Lands on top while reading" });
+  await until(`document.getElementById("feedBody").textContent.includes("Lands on top while reading")`);
+  await settle();
+  expect(Math.abs((await topOf('#feedBody [data-upd="10"]')) - before)).toBeLessThan(1);
+  await page.evaluate(`document.getElementById("feedBody").scrollTop = 0`);
+  await settle();
+  await server.post("/api/updates", { lane: "alpha", title: "Lands on top at the top" });
+  await until(`document.getElementById("feedBody").textContent.includes("Lands on top at the top")`);
+  await settle();
+  expect(await scrollTopOf("feedBody")).toBe(0);
+  expect(await page.evaluate(`document.querySelector("#feedBody [data-upd] h3").textContent`)).toBe("Lands on top at the top");
   expect(errors).toEqual([]);
 });

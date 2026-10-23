@@ -1,5 +1,5 @@
 // The MESSAGES tab: one thread of HQ's updates and your notes, with replies.
-import { $, keepPlace, pageScrolls, toast } from "../core/dom.js";
+import { $, keepPlace, keepScroll, pageScrolls, phone, showEdges, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
@@ -21,18 +21,20 @@ const short = (s, n) => { const t = String(s ?? "").replace(/```[\s\S]*?```/g, "
 export function setQTab(t) {
   if (t === qTab) return;
   // Where the page scrolls: a list you were in starts at its tabs, MESSAGES at its newest message; with the list
-  // above the screen, what is on screen stays where it is.
+  // above the screen, what is on screen stays where it is. On a phone the thread scrolls itself: it opens at its
+  // newest message, and the page scrolls (no further than the tabs) until the thread and Tell HQ under it show.
   const wrap = $("qtabs").parentElement, was = pageScrolls() ? wrap.getBoundingClientRect() : null;
   if (qTab === "messages") msgFresh.clear();
   qTab = t;
   try { localStorage.setItem("hq-qtab", t); } catch {}
-  msgStick = !was || was.bottom > 0;
+  msgStick = !was || was.bottom > 0 || phone();
   renderQTabs();
   if (t === "messages") renderMsgs(); else renderBelow();
   renderWork();
   if (!was) return;
   const now = wrap.getBoundingClientRect();
   if (was.bottom <= 0) scrollBy(0, now.bottom - was.bottom);
+  else if (t === "messages" && phone()) scrollBy(0, Math.min(now.top, Math.max(0, wrap.parentElement.getBoundingClientRect().bottom - innerHeight + 8)));
   else if (t !== "messages" && now.top < 0) scrollBy(0, now.top);
 }
 export function renderQTabs() {
@@ -106,7 +108,14 @@ export function renderMsgs() {
   }
   const caret = document.activeElement?.closest?.("[data-rbox]") ? document.activeElement.selectionStart : null;
   const html = msgModel().roots.map((m) => msgNode(m, 0)).join("") || `<div class="empty">No messages yet. HQ's updates and your notes land here.</div>`;
-  if (pageScrolls()) {
+  if (phone()) {
+    // The thread scrolls itself (core/layout.css): at the newest message (just opened, or within 40px of it), stay
+    // on it; reading older ones, what you read stays where it is, whatever lands above or below.
+    const pinned = msgStick || box.scrollHeight - box.scrollTop - box.clientHeight < 40, place = pinned ? null : keepScroll(box, "data-msg");
+    setHTML(box, html);
+    if (pinned) box.scrollTop = box.scrollHeight; else place();
+    showEdges(box);
+  } else if (pageScrolls()) {
     // The page scrolls, not the thread: on the newest message (just opened, or already there), stay on it;
     // reading older ones, what you read stays where it is.
     const pinned = msgStick || atNewest(box), place = pinned ? null : keepPlace(box, "data-msg");
@@ -158,6 +167,7 @@ $("msgs").addEventListener("click", (e) => {
   const send = e.target.closest("[data-rsend]");
   if (send) sendReply(send);
 });
+$("msgs").addEventListener("scroll", () => showEdges($("msgs")), { passive: true });
 $("msgs").addEventListener("input", (e) => {
   if (!e.target.closest("[data-rbox]")) return;
   replyText = e.target.value;

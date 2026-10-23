@@ -1,5 +1,5 @@
 // The box under the room: FROM HQ updates and the SENT & ANSWERED log, and the note under Tell HQ.
-import { $ } from "../core/dom.js";
+import { $, keepScroll, phone, showEdges } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { messageChime } from "../sound/sound.js";
 import { clock, esc, setHTML } from "../core/format.js";
@@ -7,7 +7,7 @@ import { clipText, linkify, renderBody } from "../core/text.js";
 import { scheduleTick } from "../questions/questions.js";
 import { liveSecrets, renderSecrets } from "../secrets/secrets.js";
 
-let seenUpdates = null;
+let seenUpdates = null, shownTab = null;
 
 // FROM HQ: information, not questions. Newest first; unread ones are tinted. Nothing here waits, times or scores.
 // It shares the box under the room with your sent log; the top bar's FROM HQ box opens this tab.
@@ -34,7 +34,18 @@ export function renderFeed() {
   const secretsOn = feedTab === "secrets";
   $("feedBody").hidden = secretsOn;
   $("secretsPane").hidden = !secretsOn;
-  if (!secretsOn) setHTML($("feedBody"), feedTab === "updates" ? updateRows() : `<div class="log" style="margin:0;max-height:none">${logRows()}</div>`);
+  if (!secretsOn) {
+    const body = $("feedBody"), html = feedTab === "updates" ? updateRows() : `<div class="log" style="margin:0;max-height:none">${logRows()}</div>`;
+    if (phone()) {
+      // The list scrolls itself (core/layout.css), newest first: a tab opens at its top; at the top, a new update
+      // shows there; reading older ones further down, what you read stays where it is.
+      const opened = shownTab !== feedTab, place = !opened && body.scrollTop > 2 ? keepScroll(body, "data-upd") : null;
+      setHTML(body, html);
+      if (opened) body.scrollTop = 0; else place?.();
+      showEdges(body);
+    } else setHTML(body, html);
+  }
+  shownTab = feedTab;
   renderSecrets();
   scheduleTick(); // the SECRETS pane's countdown needs the page clock while it shows
 }
@@ -60,4 +71,5 @@ function logRows() {
   const rows = [...notes, ...answered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
   return rows.map((r) => r.html).join("") || `<div style="color:var(--muted)">Nothing yet today.</div>`;
 }
+$("feedBody").addEventListener("scroll", () => showEdges($("feedBody")), { passive: true });
 export function setFeedTab(v) { return (feedTab = v); }

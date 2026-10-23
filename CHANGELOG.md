@@ -5,6 +5,19 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-24
+
+### Changed
+
+- **MESSAGES and FROM HQ take a bounded height on a phone, each with its own scroll.** With a busy day they used to
+  stretch the page to about 13,000 pixels, so Tell HQ, the room and the worker card were thousands of pixels away.
+  Now the page is about 1,800 pixels tall on an iPhone: MESSAGES fits on one screen with its tabs and Tell HQ, and
+  FROM HQ (with SENT & ANSWERED and SECRETS) fits on one screen with the room. Swiping inside a list scrolls that
+  list, with momentum, and reaching its end does not drag the page; a fade at an edge shows there is more that way.
+  MESSAGES still opens at the newest message and stays there while you are at the bottom; reading older messages or
+  older updates, a live update or a reply no longer moves what you read (FROM HQ used to jump by one update). At the
+  top of FROM HQ a new update shows first. The desktop is unchanged.
+
 ## [0.7.0] - 2026-10-24
 
 ### Added
