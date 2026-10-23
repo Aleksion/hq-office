@@ -1,7 +1,7 @@
 // The box under the room: FROM HQ updates and the SENT & ANSWERED log, and the note under Tell HQ.
 import { $ } from "../core/dom.js";
 import { S } from "../core/state.js";
-import { audio, sound, tone } from "../sound/sound.js";
+import { messageChime } from "../sound/sound.js";
 import { clock, esc, setHTML } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
 import { scheduleTick } from "../questions/questions.js";
@@ -39,14 +39,9 @@ export function renderFeed() {
   scheduleTick(); // the SECRETS pane's countdown needs the page clock while it shows
 }
 
-// A soft single note for a new update. Different from the three-note question chime, and only when sound is on.
-function softChime() {
-  if (!sound || !audio) return;
-  tone(audio.currentTime, 784, 0.5, "sine", 0.05, audio.destination);
-}
 export function announceUpdates() {
   const unread = new Set((S.updates ?? []).filter((u) => !u.read_at).map((u) => u.id));
-  if (seenUpdates && [...unread].some((id) => !seenUpdates.has(id))) softChime();
+  if (seenUpdates && [...unread].some((id) => !seenUpdates.has(id))) messageChime();
   seenUpdates = unread;
 }
 

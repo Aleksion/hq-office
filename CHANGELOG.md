@@ -5,6 +5,13 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-23
+
+### Changed
+
+- **Chimes you recognise across the room.** A new question now plays a marimba call ("dum, da-DUM", rising), and a
+  new message from HQ plays a soft bubble pop and a bell. Different instruments, so you tell them apart at once.
+
 ## [0.5.0] - 2026-10-23
 
 ### Changed
