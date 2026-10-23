@@ -2,7 +2,7 @@
 import { px } from "./canvas.js";
 import { workers } from "./workers.js";
 import { route } from "./collision.js";
-import { BEAT_MS, changeAt, onBeat, stepped } from "./beat.js";
+import { changeAt, mode, onBeat, steadyClock } from "./beat.js";
 
 // Idle workers (done or parked) live their own life here. They wander, sip coffee at the kitchen, grab a snack,
 // or pair up and face each other, nodding. Nobody says anything; the movement and the gestures carry it.
@@ -65,15 +65,17 @@ export function idleLift(w, moving, now) {
   if (!b) return 0;
   if (moving) return Math.abs(Math.sin(now / 110 + w.bob)) > 0.5 ? -1 : 0;
   if (!b.acting) return 0;
-  if (b.act.kind === "chat") return Math.floor(stepped(now, 2) / 350 + w.bob) % 2 ? -1 : 0;
-  if (b.act.kind === "coffee") return Math.floor(stepped(now, 2) / 700) % 2 ? -1 : 0;
-  if (b.act.kind === "snack") return Math.floor(stepped(now, 2) / 500) % 2 ? -1 : 0;
+  if (b.act.kind === "chat") return Math.floor(steadyClock(now) / 350 + w.bob) % 2 ? -1 : 0;
+  if (b.act.kind === "coffee") return Math.floor(steadyClock(now) / 700) % 2 ? -1 : 0;
+  if (b.act.kind === "snack") return Math.floor(steadyClock(now) / 1000) % 2 ? -1 : 0;
   return 0;
 }
 // A waiting worker checks his watch now and then: a faint glint on the wrist for a moment, then nothing.
 // Each worker has his own timing, from his name.
 export function drawWatchCheck(w, sx, sy, now) {
-  const every = 2 * BEAT_MS, t = Math.floor(now / every) * every, phase = (t + w.bob * 37) % 9000;
+  const every = mode().steady;
+  if (every === null) return; // frozen: no glint
+  const t = Math.floor(now / every) * every, phase = (t + w.bob * 37) % 9000;
   if (phase > 1400) { changeAt(Math.ceil((t + 9000 - phase) / every) * every); return; }
   changeAt(t + every);
   if (Math.floor(t / 140) % 2) px(sx + 13, sy + 12, 2, 2, "#ffffff");

@@ -7,7 +7,7 @@ import { EVENT_ART, drawSeason, eventLayer, paintEventLayer } from "./events.js"
 import { SEATS } from "./spots.js";
 import { workers } from "./workers.js";
 import { deskCount } from "./collision.js";
-import { stepped } from "./beat.js";
+import { steadyClock, steamClock } from "./beat.js";
 
 // The room's still parts: floor, walls, windows, sign, plants and furniture. Painted once per season, sign, desk
 // count and font load, then copied. The moving bits (screens, lights, steam) are drawn on top each frame.
@@ -126,7 +126,7 @@ export function stillPicture(used) {
 export function drawRoom(now, still) {
   const used = deskCount(workers.size);
   ctx.drawImage(still, 0, 0);
-  const t = stepped(now, 2);
+  const t = steadyClock(now);
   // desk screens: lit and scrolling while the worker sits at it
   const atDesk = new Set([...workers.values()].filter((w) => w.lane.status === "moving" && Math.abs(w.x - w.target.x) < 0.05 && Math.abs(w.y - w.target.y) < 0.05).map((w) => `${w.seat.x},${w.seat.y}`));
   for (const s of SEATS.slice(0, used)) {
@@ -142,10 +142,14 @@ export function drawRoom(now, still) {
   // HQ terminal's scan line
   const g = Math.floor(t / 250) % 3;
   px(16 * TS + 3, 4 * TS + 5 + g * 2, 8, 1, "#3ee08f");
-  // the coffee machines' lights, and the kitchen one's steam
-  px(23 * TS + 11, 6 * TS + 6, 2, 2, Math.floor(t / 500) % 2 ? "#ff4d4d" : "#802020");
-  px(23 * TS + 12, 14 * TS + 9, 2, 2, Math.floor(t / 500) % 2 ? "#ff4d4d" : "#802020");
-  for (let i = 0; i < 3; i++) px(23 * TS + 6 + i * 2, 14 * TS - 4 - ((t / 260 + i * 3) % 6), 2, 2, "#e8e8f0");
+  // the coffee machines' lights blink every second, and the kitchen one steams while someone takes a coffee
+  const lit = Math.floor(t / 1000) % 2 ? "#ff4d4d" : "#802020";
+  px(23 * TS + 11, 6 * TS + 6, 2, 2, lit);
+  px(23 * TS + 12, 14 * TS + 9, 2, 2, lit);
+  if ([...workers.values()].some((w) => w.brain?.acting && w.brain.act.kind === "coffee")) {
+    const s = steamClock(now);
+    for (let i = 0; i < 3; i++) px(23 * TS + 6 + i * 2, 14 * TS - 4 - ((s / 500 + i * 2) % 6), 2, 2, "#e8e8f0");
+  }
   drawSeason(now);
 }
 

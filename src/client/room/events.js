@@ -4,7 +4,7 @@ import { season } from "./seasons.js";
 import { drawParticles } from "./weather.js";
 import { dc, partyYear, setDc } from "./art.js";
 import { stillHasEvent } from "./scene.js";
-import { stepped } from "./beat.js";
+import { travelClock } from "./beat.js";
 import christmas from "./events/christmas.js";
 import halloween from "./events/halloween.js";
 import thanksgiving from "./events/thanksgiving.js";
@@ -40,10 +40,10 @@ function drawEvent(now) {
   const art = EVENT_ART[season];
   if (!art) return;
   if (!stillHasEvent) ctx.drawImage(eventLayer, 0, 0);
-  art.live(stepped(now));
+  art.live(travelClock(now));
 }
 // Things on the hero's counter, drawn after the counter itself.
-export function drawEventCounter(now) { const counter = EVENT_ART[season]?.counter; if (counter) counter(stepped(now)); }
+export function drawEventCounter(now) { const counter = EVENT_ART[season]?.counter; if (counter) counter(travelClock(now)); }
 export function drawSeason(now) {
   drawEvent(now);
   drawParticles(now);

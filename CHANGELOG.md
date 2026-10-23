@@ -5,6 +5,25 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-23
+
+### Added
+
+- **A PERFORMANCE setting in SETTINGS: SMOOTH, BALANCED or POWER SAVER**, saved on the server with the other
+  settings and applied at once. SMOOTH (the default) draws walking, the hero's dance, snow, leaves, event effects
+  and steam at 30 frames a second, focused or not. BALANCED is the 0.5.0 room: walking at 10 frames a second, small
+  motions on a slow beat. POWER SAVER freezes everything but walking workers (8 frames a second); a room where
+  nobody walks shows no new frames at all. What it costs, measured in Safari with the page in front: SMOOTH about
+  3 to 4% on an ordinary day, but about 15% all day in snowy and event weeks, when the weather never stops; BALANCED
+  about 2%; POWER SAVER about 1%.
+
+### Changed
+
+- **A quiet room costs less.** The room's small motions (desk screens, HQ's terminal, coffee lights, bobs, nods,
+  bubbles) now share one beat, so they share frames: in BALANCED a room where nobody walks shows 1 frame a second
+  (was 2) in a plain season and 2 (was 4) in snowy and event weeks. The coffee machines' lights blink once a
+  second, and the kitchen machine steams only while someone takes a coffee.
+
 ## [0.5.1] - 2026-10-23
 
 ### Changed

@@ -64,9 +64,9 @@ test("a second migration does not overwrite what is there", async () => {
 });
 
 test("a change sets only the keys given; null goes back to the default", async () => {
-  const res = await post({ settings: { season: "winter", hat: null } });
-  expect((await res.json()).settings).toEqual({ hero: "IVY", season: "winter", sound: true });
-  expect(await stateSettings()).toEqual({ hero: "IVY", season: "winter", sound: true });
+  const res = await post({ settings: { season: "winter", hat: null, performance: "saver" } });
+  expect((await res.json()).settings).toEqual({ hero: "IVY", season: "winter", sound: true, performance: "saver" });
+  expect(await stateSettings()).toEqual({ hero: "IVY", season: "winter", sound: true, performance: "saver" });
 });
 
 test("bad names and values are refused", async () => {
@@ -76,11 +76,11 @@ test("bad names and values are refused", async () => {
   }
   const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`k${i}`, i]));
   expect((await post({ settings: many })).status).toBe(400);
-  expect(await stateSettings()).toEqual({ hero: "IVY", season: "winter", sound: true });
+  expect(await stateSettings()).toEqual({ hero: "IVY", season: "winter", sound: true, performance: "saver" });
 });
 
 test("settings survive a restart", async () => {
   await stop();
   await start();
-  expect(await stateSettings()).toEqual({ hero: "IVY", season: "winter", sound: true });
+  expect(await stateSettings()).toEqual({ hero: "IVY", season: "winter", sound: true, performance: "saver" });
 });

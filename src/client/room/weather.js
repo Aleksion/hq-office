@@ -2,7 +2,7 @@
 import { H, TS, W, px } from "./canvas.js";
 import { season, snowy } from "./seasons.js";
 import { EVENT_ART } from "./events.js";
-import { stepped } from "./beat.js";
+import { travelClock } from "./beat.js";
 
 export const CANOPY = ["..xxxxxx..", ".xxxxxxxx.", "xxxxxxxxxx", "xxxxxxxxxx", "xxxxxxxxxx", ".xxxxxxxx.", "..xxxxxx.."];
 const FALL_LEAVES = ["#e8802a", "#f0c030", "#d0402a"];
@@ -31,7 +31,7 @@ const FLAKES = Array.from({ length: 26 }, (_, i) => ({ x: (i * 97 + 13) % (W * T
 export function drawParticles(now) {
   const leaves = season === "fall";
   if (!leaves && season !== "winter") return; // Christmas has its own snow and hearts
-  const t = stepped(now) / 1000;
+  const t = travelClock(now) / 1000;
   for (let i = 0; i < FLAKES.length; i++) {
     const f = FLAKES[i];
     const y = ((f.p + t * f.v * (leaves ? 1.6 : 1)) % (H * TS + 8)) - 4;

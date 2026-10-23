@@ -44,7 +44,7 @@ test.skipIf(!chromeFound)("settings this browser remembered from before are sent
   errors.length = 0; // that page's missing favicon
   await open();
   for (let i = 0; i < 100 && !Object.keys(await serverSettings()).length; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth" });
   expect(await page.evaluate(`document.getElementById("alerts").textContent`)).toBe("SOUND ON");
   await until(`localStorage.getItem("hq-sound") === null`);
   expect(await shownHero()).toBe("IVY");
@@ -56,7 +56,7 @@ test.skipIf(!chromeFound)("after the browser's data is cleared, the server's set
   await until(`document.getElementById("alerts").textContent === "SOUND ON"`);
   expect(await shownHero()).toBe("IVY");
   expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).season`)).toBe("winter");
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth" });
 });
 
 test.skipIf(!chromeFound)("the server's settings win over a different copy in the browser", async () => {
@@ -78,6 +78,6 @@ test.skipIf(!chromeFound)("a change on the page reaches the server, and one on t
   await until(`document.querySelector('[data-set="hero"].on')?.dataset.val === "MARA" && document.getElementById("alerts").textContent === "SOUND ON"`);
   await page.evaluate(`document.querySelector("[data-reset]").click()`);
   for (let i = 0; i < 100 && (await serverSettings()).hero !== "YOU"; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "YOU", season: "auto", hat: "auto", sound: false });
+  expect(await serverSettings()).toEqual({ hero: "YOU", season: "auto", hat: "auto", sound: false, performance: "smooth" });
   expect(errors).toEqual([]);
 });

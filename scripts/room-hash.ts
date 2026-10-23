@@ -29,7 +29,7 @@ export function findChrome(): string | null {
 }
 
 // The page's clock, randomness and frames, frozen. #t=<epoch ms> turns it on; __hq.advance(n) runs n frames.
-const FREEZE = `(() => {
+export const FREEZE = `(() => {
   const m = location.hash.match(/t=(\\d+)/);
   if (!m) return;
   const EPOCH = Number(m[1]);
@@ -109,13 +109,15 @@ const FREEZE = `(() => {
 // The dancing hero's box (with his notes, sparkles and shadow), in canvas pixels. The dance steps on the room's
 // beat, two beats a move, so its frames differ from a tree with another tempo; idle captures leave this box out.
 const DANCE_BOX = [888, 0, 180, 138];
+// The coffee machines' lights (both) and the kitchen steam, in canvas pixels. From 0.6 the lights blink once a second
+// (they blinked every 500 ms) and the steam rises only while someone takes a coffee, so every capture leaves them out.
+const COFFEE_BOXES = [[1137, 306, 6, 6], [1140, 699, 6, 6], [1118, 638, 27, 33]];
 // The page's clock starts at 900; captures are taken on whole beats of the room's coming ambient beat (multiples of
 // 500 ms), where an animation that steps on the beat draws exactly what it drew before.
-const canvasHash = (mask?: number[]) => `(async () => {
+const canvasHash = (masks: number[][]) => `(async () => {
   const c = document.getElementById("room");
   const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
-  const m = ${JSON.stringify(mask ?? null)};
-  if (m) for (let y = m[1]; y < m[1] + m[3]; y++) d.fill(0, (y * c.width + m[0]) * 4, (y * c.width + m[0] + m[2]) * 4);
+  for (const m of ${JSON.stringify(masks)}) for (let y = m[1]; y < m[1] + m[3]; y++) d.fill(0, (y * c.width + m[0]) * 4, (y * c.width + m[0] + m[2]) * 4);
   const h = await crypto.subtle.digest("SHA-256", d);
   return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
 })()`;
@@ -217,6 +219,9 @@ export async function seed(post: (p: string, b: object) => Promise<any>) {
     { name: "hotel-with-a-long-name", phase: "done", title: "Done three" },
   ];
   for (const l of lanes) await post("/api/lanes", { ...l, machine: "local" });
+  // BALANCED steps the room's motions on the same beats as the trees from before the PERFORMANCE setting (0.6), so
+  // the two draw the same; a tree from before keeps the unknown setting and ignores it.
+  await post("/api/settings", { settings: { performance: "balanced" } });
   const ask = await post("/api/asks", { lane: "bravo", kind: "decision", title: "Ship the thing?", body: "Two ways to go.\n```\nbun test\n```", options: ["Yes", "No"], recommended: "Yes", created_at: DAY - 7 * 60_000 });
   await post("/api/asks", { lane: "charlie", kind: "action", title: "Approve the deploy", created_at: DAY - 40 * 60_000 });
   await post("/api/updates", { lane: "golf", title: "Halfway there", body: "The first part is merged." });
@@ -254,7 +259,7 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
       throw new Error(`page did not render ${query}`);
     };
     const shot = async (name: string): Promise<Capture> => {
-      const hash = canvasHash(name.startsWith("day, idle") ? DANCE_BOX : undefined);
+      const hash = canvasHash(name.startsWith("day, idle") ? [DANCE_BOX, ...COFFEE_BOXES] : COFFEE_BOXES);
       // The first frame on the next whole beat (500 ms), the later one 3 s after it
       const t = await evaluate("__hq.advance(0)");
       await evaluate(`__hq.advance(${(500 - (t % 500)) / 100})`);
@@ -276,6 +281,8 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     styles["1440x900"] = await evaluate(STYLE_HASH);
     scroll["1440x900"] = await noScroll();
     await evaluate(`document.getElementById("settingsBtn").click()`);
+    // The PERFORMANCE row is new in 0.6; leave it out so the rest of the panel compares with a tree from before.
+    await evaluate(`document.querySelector('[data-set="performance"]')?.closest(".srow").remove()`);
     styles["1440x900 settings open"] = await evaluate(STYLE_HASH);
     await evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
     styles["1440x900 messages tab"] = await evaluate(STYLE_HASH);
