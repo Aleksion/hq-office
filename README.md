@@ -58,7 +58,7 @@ herdr plugin action invoke hq-office.install-service
 
 The service runs Bun on the plugin's `server.ts` with the values from `config.env`, `HUD_DATA_DIR` set to the plugin's state directory (the same data the start action uses), and a PATH that includes `~/.bun/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. Its log is `server.log` in the state directory. If something else is already answering on the port, the action stops and says so instead of installing a service that cannot start.
 
-With the service installed, start, stop and restart use it. The settings are written into the service, so after editing `config.env`, or after updating the plugin, run the restart action (or install service again): it writes the service again and restarts it. Stop unloads the service until the next login or the next start; remove service takes it away for good:
+With the service installed, start, stop and restart use it. The settings are written into the service, so after editing `config.env`, or after updating the plugin, run the restart action, `herdr plugin action invoke hq-office.reload` (herdr takes the action as `hq-office.<action>`; options go before it), or install service again: it writes the service again and restarts it. Restart refuses to point the service at a different data folder than the one it uses, so running the plugin's script by hand cannot swap in an empty board; `--force` moves it on purpose. Stop unloads the service until the next login or the next start; remove service takes it away for good:
 
 ```sh
 herdr plugin action invoke hq-office.remove-service

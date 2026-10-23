@@ -5,6 +5,17 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-23
+
+### Fixed
+
+- **Running the plugin's script by hand could point the service at an empty board.** Outside herdr, the script fell
+  back to folders inside the plugin, so a restart rewrote the service to a new, empty database and dropped your
+  config.env settings (nothing was lost; the real data stayed put). The installed plugin now finds herdr's own
+  config and data folders when run by hand, and restart refuses to point an installed service at a different data
+  folder than the one it uses (`--force` moves it on purpose).
+- The plugin's messages give the exact restart command, `herdr plugin action invoke hq-office.reload`.
+
 ## [0.6.2] - 2026-10-23
 
 ### Fixed

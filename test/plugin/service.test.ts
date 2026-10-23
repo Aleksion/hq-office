@@ -37,7 +37,7 @@ function writeConfig(t: T, owner: string) {
 }
 
 // Runs the plugin as herdr would, with a made-up environment: nothing from this machine's but PATH.
-function plugin(t: T, command: string) {
+function plugin(t: T, command: string, extraEnv: Record<string, string> = {}, args: string[] = []) {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: t.home,
@@ -49,8 +49,9 @@ function plugin(t: T, command: string) {
     HQ_OFFICE_SYSTEMCTL: join(t.fake, "systemctl"),
     HQ_OFFICE_OPENER: "true",
     FAKE_SERVICE_DIR: t.fake,
+    ...extraEnv,
   };
-  const p = Bun.spawnSync([process.execPath, "bin/hud-plugin.ts", command], { cwd: ROOT, env, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
+  const p = Bun.spawnSync([process.execPath, "bin/hud-plugin.ts", command, ...args], { cwd: ROOT, env, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
   return { code: p.exitCode, out: p.stdout.toString() + p.stderr.toString() };
 }
 
@@ -135,6 +136,24 @@ describe("macOS: a LaunchAgent", () => {
     expect(plugin(t, "reload").code).toBe(0);
     expect(verbs(calls(t))).toEqual(["bootout", "bootstrap"]);
     expect(await owner(t)).toBe("Third");
+  });
+
+  test("restart pointed at another data folder is refused and changes nothing; --force moves it", async () => {
+    const other = join(t.dir, "other-state");
+    const before = readFileSync(plist, "utf8");
+    const r = plugin(t, "reload", { HERDR_PLUGIN_STATE_DIR: other });
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain(`uses the data in ${t.state}`);
+    expect(r.out).toContain("herdr plugin action invoke hq-office.reload");
+    expect(readFileSync(plist, "utf8")).toBe(before);
+    expect(verbs(calls(t)).filter((v) => v !== "print")).toEqual([]);
+    expect(await owner(t)).toBe("Third");
+    const forced = plugin(t, "reload", { HERDR_PLUGIN_STATE_DIR: other }, ["--force"]);
+    expect(forced.code).toBe(0);
+    expect(readFileSync(plist, "utf8")).toContain(`<string>${other}</string>`);
+    // back where the rest of this suite expects it, with the fake's call log drained
+    expect(plugin(t, "reload", {}, ["--force"]).code).toBe(0);
+    calls(t);
   });
 
   test("stop boots it out and leaves the agent; start brings it back", async () => {
