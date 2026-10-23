@@ -1,5 +1,5 @@
 // The MESSAGES tab: one thread of HQ's updates and your notes, with replies.
-import { $, toast } from "../core/dom.js";
+import { $, keepPlace, pageScrolls, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
@@ -20,13 +20,20 @@ const short = (s, n) => { const t = String(s ?? "").replace(/```[\s\S]*?```/g, "
 
 export function setQTab(t) {
   if (t === qTab) return;
+  // Where the page scrolls: a list you were in starts at its tabs, MESSAGES at its newest message; with the list
+  // above the screen, what is on screen stays where it is.
+  const wrap = $("qtabs").parentElement, was = pageScrolls() ? wrap.getBoundingClientRect() : null;
   if (qTab === "messages") msgFresh.clear();
   qTab = t;
   try { localStorage.setItem("hq-qtab", t); } catch {}
-  msgStick = true;
+  msgStick = !was || was.bottom > 0;
   renderQTabs();
   if (t === "messages") renderMsgs(); else renderBelow();
   renderWork();
+  if (!was) return;
+  const now = wrap.getBoundingClientRect();
+  if (was.bottom <= 0) scrollBy(0, now.bottom - was.bottom);
+  else if (t !== "messages" && now.top < 0) scrollBy(0, now.top);
 }
 export function renderQTabs() {
   for (const b of $("qtabs").querySelectorAll("[data-qtab]")) {
@@ -98,12 +105,31 @@ export function renderMsgs() {
     post(`/api/updates/${u.id}/read`, {}).catch(() => readSent.delete(u.id));
   }
   const caret = document.activeElement?.closest?.("[data-rbox]") ? document.activeElement.selectionStart : null;
-  const atBottom = msgStick || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  const top = box.scrollTop;
-  const replaced = setHTML(box, msgModel().roots.map((m) => msgNode(m, 0)).join("") || `<div class="empty">No messages yet. HQ's updates and your notes land here.</div>`);
-  if (replaced || msgStick) box.scrollTop = atBottom ? box.scrollHeight : top;
+  const html = msgModel().roots.map((m) => msgNode(m, 0)).join("") || `<div class="empty">No messages yet. HQ's updates and your notes land here.</div>`;
+  if (pageScrolls()) {
+    // The page scrolls, not the thread: on the newest message (just opened, or already there), stay on it;
+    // reading older ones, what you read stays where it is.
+    const pinned = msgStick || atNewest(box), place = pinned ? null : keepPlace(box, "data-msg");
+    setHTML(box, html);
+    if (pinned) showNewest(box); else place();
+  } else {
+    const atBottom = msgStick || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const top = box.scrollTop;
+    if (setHTML(box, html) || msgStick) box.scrollTop = atBottom ? box.scrollHeight : top;
+  }
   msgStick = false;
   if (caret != null) { const ta = box.querySelector("[data-rbox] textarea"); if (ta) { ta.focus(); ta.setSelectionRange(caret, caret); } }
+}
+const lastMsg = (box) => { const all = box.querySelectorAll("[data-msg]"); return all[all.length - 1]; };
+// The newest message is on screen, or its bottom is just under the edge.
+function atNewest(box) {
+  const r = lastMsg(box)?.getBoundingClientRect();
+  return !r || (r.bottom > 0 && r.bottom <= innerHeight + 40);
+}
+// Scroll the page only as far as it takes to show the newest message at the bottom of the screen.
+function showNewest(box) {
+  const r = lastMsg(box)?.getBoundingClientRect();
+  if (r && (r.bottom < 0 || r.bottom > innerHeight - 12)) scrollBy(0, r.bottom - innerHeight + 12);
 }
 async function sendReply(btn) {
   const text = replyText.trim();

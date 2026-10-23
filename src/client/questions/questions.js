@@ -1,6 +1,6 @@
 // The question panel: the open asks, their timers, and the pill for asks out of view.
 import { emit } from "../core/bus.js";
-import { $ } from "../core/dom.js";
+import { $, keepPlace } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
 import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
@@ -57,7 +57,9 @@ export function renderHud() {
   }).join("");
   // Values being pasted are kept in memory only and put back as the input's value, never as markup.
   for (const id of secretDrafts.keys()) if (!S.open.some((a) => a.id === id)) secretDrafts.delete(id);
+  const place = keepPlace(hud, "data-ask");
   if (!setHTML(hud, html)) return;
+  place();
   for (const inp of hud.querySelectorAll("[data-secret]")) {
     const v = secretDrafts.get(Number(inp.closest("[data-ask]").dataset.ask))?.[inp.dataset.secret];
     if (v) inp.value = v;

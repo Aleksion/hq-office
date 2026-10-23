@@ -5,6 +5,18 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-23
+
+### Fixed
+
+- **Messages scroll like a chat on a phone.** MESSAGES opens at the newest message instead of eight screens above
+  it; at the newest message, a new one stays in view; reading older ones, a live update or a reply landing above no
+  longer moves what you are reading (the same holds for the questions). The QUESTIONS / MESSAGES / WORK tabs stay at
+  the top of the screen while their list scrolls, and switching tabs starts the list at its top. The sent log under
+  the room no longer scrolls inside the page. The desktop layout is unchanged.
+- **No zoom on a phone.** The page no longer zooms on a pinch, a double tap or a tap into a text field (every text
+  field is 16px on a phone).
+
 ## [0.6.3] - 2026-10-23
 
 ### Fixed

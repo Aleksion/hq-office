@@ -1,4 +1,4 @@
-/* The page grid: the top bar's columns, the desk and the stage, and on desktop a page that never scrolls. */
+/* The page grid: the top bar's columns, the desk and the stage; on desktop a page that never scrolls, on a phone one that scrolls as one. */
 /* Layout: two zones under one top bar.
    left  = your desk: the questions, and Tell HQ right under them. The urgent count sits on top of this column.
    right = the office: the room, then the FROM HQ / sent-log tabs and the worker card underneath. */
@@ -27,6 +27,15 @@
   .under > * { min-height: 0; overflow: auto; }
   .feed { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden !important; }
   .feed .body { overflow: auto; min-height: 0; }
+}
+/* phone: a touch screen with the stacked layout. One page scroll and no zoom: no list scrolls inside the page, the
+   question tabs stay in reach while their list scrolls under them, the page only pans (no double-tap or pinch zoom),
+   and no text field is under 16px, which makes iOS zoom in when it gets focus. */
+@media (max-width: 1150px) and (pointer: coarse) {
+  html { touch-action: pan-x pan-y; }
+  .qtabs { position: sticky; top: 0; z-index: 5; margin-block: -8px -4px; padding-block: 8px 4px; background: var(--bg); }
+  html .reply textarea, html .compose textarea, html .sin { font-size: 16px; }
+  html .log { max-height: none; overflow: visible; }
 }
 .under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 270px); gap: 14px; }
 @media (max-width: 800px) { .under { grid-template-columns: minmax(0, 1fr); } }
