@@ -110,7 +110,22 @@ Values live in the server's memory only: never in the database, the log, `/api/s
 
 ## Lanes in levels
 
-Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name) and LEVEL THEME picks how the room dresses them: Office (suit, cardigan, everyday look) or Arena (masked guards and numbered players). The worker card shows a lane's level and its chain up to HQ. A room with no tree looks as it always did.
+Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name) and LEVEL THEME picks how the room dresses them. The worker card shows a lane's level and its chain up to HQ.
+
+A theme dresses every figure in the room, whatever the levels:
+
+| | Office (default) | Arena |
+| --- | --- | --- |
+| Level 1 | dark suit, tie in its own colour | masked guard, square mark, black belt |
+| Level 2 | light cardigan | masked guard, triangle mark |
+| Level 3 and deeper | everyday clothes | numbered player in a matching tracksuit |
+| No tree (every lane under HQ) | everyday clothes | numbered players |
+| Your hero | as picked in HERO | the game master: black coat, black mask with gold eyes, your hero's own hair (standing, dancing and asleep) |
+| HQ | its usual look | the senior guard, a gold crown on the hood |
+
+In Arena nothing seasonal is drawn over a mask (guards, the hero, HQ; so HERO HAT has no effect there), and players
+leave off seasonal hats and coats but keep what they hold. Office with no tree looks as it always did. The art is
+our own, not any show's.
 
 ## The work board
 

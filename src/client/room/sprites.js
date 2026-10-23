@@ -82,13 +82,29 @@ export const HEADS = [
 export const mirrored = (dir, step) => dir === "left" || (step === 2 && (dir === "up" || dir === "down"));
 // A look from room/themes.js (pal.look) dresses the body, and the head too when it has one. Hair that falls over the
 // shoulders stays over the look's clothes.
+// A look with a mask covers the face of the worker's own head: skin below the hairline turns to mask (m), an eye
+// (an outline pixel between two skin pixels, or e) to the mask's eyes (x). Hair, glasses and the outline stay.
+const FACE_FROM = 5;
+export function maskFace(rows) {
+  return rows.map((row, r) => r < FACE_FROM ? row : [...row].map((ch, c) => {
+    if (ch === "s" || ch === "S") return "m";
+    if (ch === "e") return "x";
+    if (ch === "k" && "sS".includes(row[c - 1]) && "sS".includes(row[c + 1])) return "x";
+    return ch;
+  }).join(""));
+}
+// The head rows a palette is drawn with, facing dir: the look's own head, or the worker's, masked when the look says.
+export function headRows(pal, dir) {
+  const look = pal.look, set = look?.head ?? HEADS[pal.t] ?? HEADS[0];
+  const rows = dir === "up" ? set.up : dir === "down" ? set.down : set.side;
+  return look?.mask ? maskFace(rows) : rows;
+}
 function frame(dir, step, style = 0, look = null) {
   // step: 0 stand, 1 and 2 alternate walk frames
   const side = dir === "left" || dir === "right";
-  const legsSet = side ? LEGS_SIDE : LEGS_FRONT;
+  const legsSet = side ? look?.legs?.side ?? LEGS_SIDE : look?.legs?.down ?? LEGS_FRONT;
   const legs = step === 0 ? legsSet[0] : legsSet[1];
-  const set = look?.head ?? HEADS[style] ?? HEADS[0];
-  const head = dir === "up" ? set.up : dir === "down" ? set.down : set.side;
+  const head = headRows({ t: style, look }, dir);
   const body = look?.body ? (side ? look.body.side : dir === "up" ? look.body.up : look.body.down) : side ? BODY_SIDE : BODY_FRONT;
   const over = look?.body ? head.slice(10).map((row, i) => [...row].map((ch, c) => ("cLCaA".includes(ch) ? body[i][c] : ch)).join("")) : head.slice(10);
   return { rows: [...head.slice(0, 10), ...over, ...body.slice(head.length - 10), ...legs], mirror: mirrored(dir, step) };

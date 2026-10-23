@@ -1,7 +1,7 @@
 // The hero behind the counter: the dance, the sleep at night, the shadow, sparkles and notes.
 import { SC, TS, ctx, px } from "./canvas.js";
-import { HEADS } from "./sprites.js";
-import { hero } from "../settings/prefs.js";
+import { headRows } from "./sprites.js";
+import { heroPal } from "./looks.js";
 import { BEAT_MS } from "./beat.js";
 
 // One routine of 30 beats, looping. Each move: facing, walk frame, sideways offset in pixels, how he moves
@@ -56,13 +56,15 @@ export function drawSleep(now) {
   px(bx + 4, 30, 24, 7, "#ffffff");
   px(bx + 4, 36, 24, 1, "#d8d2c6");
   px(bx + 4, 30, 1, 6, "#e6e0d4"); px(bx + 27, 30, 1, 6, "#e6e0d4");
-  // his head, the spiky mane of his own sprite, with the eyes shut and a blush
-  const me = hero().pal, pal = { ...me, r: "#f09a8a" };
-  const rows = HEADS[me.t].down;
+  // his head, the spiky mane of his own sprite, with the eyes shut and a blush. In a theme that dresses the hero, the
+  // head on the pillow wears the costume's mask too: gold eyes shut to gold lines, and no blush showing.
+  const me = heroPal(), masked = !!me.look?.mask, pal = { ...me, r: "#f09a8a" };
+  const skin = masked ? "m" : "s", eye = masked ? "x" : "k", lid = masked ? "x" : "k", blush = masked ? "m" : "r";
+  const rows = headRows(me, "down");
   for (let r = 0; r < 10; r++) for (let c = 0; c < 16; c++) {
     let ch = rows[r][c];
-    if (r === 7 && ch === "k" && c > 1 && c < 14) ch = "s";
-    if (r === 8) ch = c === 4 || c === 5 || c === 10 || c === 11 ? "k" : c === 3 || c === 12 ? "r" : ch === "k" && c > 1 && c < 14 ? "s" : ch;
+    if (r === 7 && ch === eye && c > 1 && c < 14) ch = skin;
+    if (r === 8) ch = c === 4 || c === 5 || c === 10 || c === 11 ? lid : c === 3 || c === 12 ? blush : ch === eye && c > 1 && c < 14 ? skin : ch;
     if (ch !== ".") px(bx + 8 + c, 23 + r, 1, 1, pal[ch]);
   }
   // a nose bubble that swells over three seconds, then pops
@@ -79,7 +81,7 @@ export function drawSleep(now) {
   } else {
     for (const [dx, dy] of [[-3, -3], [3, -3], [-3, 2], [3, 2], [0, -4]]) px(nx + dx, ny + dy, 1, 1, "#9fe3ff");
   }
-  // shoulders in his red shirt with the gold collar
+  // shoulders in his red shirt (or the costume's coat) with the gold collar
   px(bx + 7, 33, 18, 2, me.k);
   px(bx + 8, 33, 16, 1, me.c);
   px(bx + 8, 34, 16, 1, me.C);
@@ -96,7 +98,8 @@ export function drawSleep(now) {
     if ((sx + Math.floor(now / 600)) % 3 === 0) { px(bx + sx - 1, top + sy, 3, 1, gold); px(bx + sx, top + sy - 1, 1, 3, gold); }
   }
   // his hands on the blanket
-  for (const hx of [bx + 9, bx + 20]) { px(hx, top - 1, 3, 2, me.s); px(hx, top + 1, 3, 1, me.S); }
+  const hand = masked ? me.o : me.s, handShade = masked ? me.o : me.S; // the costume's gloves
+  for (const hx of [bx + 9, bx + 20]) { px(hx, top - 1, 3, 2, hand); px(hx, top + 1, 3, 1, handShade); }
   // a teddy tucked in at his side
   const tx = bx + 3, ty = top + 1, fur = "#b07a44";
   px(tx, ty, 2, 2, fur); px(tx + 5, ty, 2, 2, fur);

@@ -4,7 +4,7 @@ import { S } from "../core/state.js";
 import { hovered, selected } from "./input.js";
 import { SC, TS, ctx, cv, px } from "./canvas.js";
 import { drawSprite } from "./sprites.js";
-import { HQBOT } from "./palette.js";
+import { heroPal, hqPal } from "./looks.js";
 import { hero } from "../settings/prefs.js";
 import { chosenSeason, setSeason } from "./seasons.js";
 import { drawAccessories, wornBy } from "./accessories.js";
@@ -85,8 +85,9 @@ function drawScene(now, dt) {
       const move = idle ? danceMove(dance) : null;
       if (move) drawShadow(move.air, move.dx);
       const hx = 20 * TS - 8 + (move?.dx ?? 0), hy = 2 * TS - 6 + (move?.lift ?? 0), hdir = move?.dir ?? "down", hstep = move?.step ?? 0;
-      drawSprite(hero().pal, hx, hy, hdir, hstep);
-      drawAccessories(hero().pal, wornBy(hero().name, true), hx, hy, hdir, hstep);
+      const me = heroPal();
+      drawSprite(me, hx, hy, hdir, hstep);
+      drawAccessories(me, wornBy(hero().name, true, me.look?.hides), hx, hy, hdir, hstep);
       if (move?.sparkle) drawSparkles(dance);
       if (idle) drawNotes(slide ? danceClock(now) : dance);
     }
@@ -95,7 +96,7 @@ function drawScene(now, dt) {
     px(17 * TS, 3 * TS + 8, 6 * TS, 3, "#8a2a2a");
     drawEventCounter(now);
     drawLabel("YOU", 20 * TS, 3 * TS + 10, true);
-    drawSprite(HQBOT, 16 * TS, 5 * TS - 6, "up", 0);
+    drawSprite(hqPal(), 16 * TS, 5 * TS - 6, "up", 0);
     drawLabel("HQ", 16 * TS + 8, 5 * TS + 10, true);
 
     const list = [...workers.values()];

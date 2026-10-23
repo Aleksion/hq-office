@@ -1,8 +1,10 @@
-// Which look each worker wears: its lane's depth in the tree and the theme chosen in SETTINGS (room/themes.js).
-// A dressed palette is made once per name, look and number and kept, so the sprite cache paints each look once.
+// Which look each figure wears: a worker by its lane's depth in the tree, the hero and HQ by their place above the
+// lanes, all in the theme chosen in SETTINGS (room/themes.js). A dressed palette is made once per figure, look and
+// number and kept, so the sprite cache paints each costume once.
 import { hash } from "../core/format.js";
-import { palette } from "./palette.js";
+import { HQBOT, palette } from "./palette.js";
 import { THEMES } from "./themes.js";
+import { hero, settings } from "../settings/prefs.js";
 
 export const themeOf = (id) => THEMES[id] ?? THEMES.office;
 
@@ -28,12 +30,24 @@ export function dressed(name, look, number) {
   let pal = dressedCache.get(key);
   if (!pal && !look) dressedCache.set(key, (pal = palette(name)));
   if (!pal) {
-    const base = dressed(name, null);
-    pal = { ...base, ...look.pal(base, hash(name)), look, number: look.number ? number : null };
+    pal = over(dressed(name, null), look, hash(name), number);
     dressedCache.set(key, pal);
   }
   return pal;
 }
+const over = (base, look, h, number) => ({ ...base, ...look.pal(base, h), look, number: look.number ? number : null });
+
+// The hero and HQ in the chosen theme. No look: their own palette object, exactly as before.
+const figureCache = new Map();
+function dressedFigure(key, base, look) {
+  if (!look) return base;
+  const k = `${key}|${look.id}`;
+  let pal = figureCache.get(k);
+  if (!pal) figureCache.set(k, (pal = over(base, look, hash(key), null)));
+  return pal;
+}
+export const heroPal = (themeId = settings.theme) => dressedFigure(`hero:${hero().name}`, hero().pal, themeOf(themeId).hero);
+export const hqPal = (themeId = settings.theme) => dressedFigure("hq", HQBOT, themeOf(themeId).hq);
 
 // Dresses every worker for its lane's place in the tree and the theme. Run on every state and settings change: a
 // lookup per worker, and a worker keeps its palette object while its look stays the same.

@@ -5,6 +5,30 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-24
+
+### Fixed
+
+- **ARENA now visibly dresses the whole room.** With ARENA picked and no lane tree, every worker was already given
+  the player look, but that look was a teal shirt and a tiny number on the worker's everyday sprite, with the
+  season's hat still on top, so at real size nobody looked in costume. The hero and HQ were never dressed at all.
+
+### Changed
+
+- **A theme dresses every figure in the room, whatever the levels.** In ARENA:
+  - **Players** (the deepest level, and everyone when lanes have no tree) wear one matching numbered tracksuit:
+    top and trousers alike, white piping, a white zip, white trainers and a white number on the chest and back.
+    Each player keeps its own hair and face. Seasonal hats and coats are left off; seasonal things in the hand stay.
+  - **Guards** (levels 1 and 2 in a tree) are as before (a square or a triangle on the mask), now with nothing
+    seasonal over the mask.
+  - **Your hero** behind the counter is the game master: a long black coat with gold buttons, black gloves and a
+    black mask with gold eyes. The mask covers only the face, so the HERO you picked keeps its hair (and glasses).
+    It stays in costume while it stands, dances and moonwalks, and asleep in bed at night. No hat is drawn on the
+    mask, so HERO HAT has no effect in ARENA.
+  - **HQ** at its terminal is the senior guard: the hooded suit with a gold crown on the back of the hood.
+
+  OFFICE looks exactly as before: its everyday clothes are its costume, and a tree adds the suit and the cardigan.
+
 ## [0.7.1] - 2026-10-24
 
 ### Changed
