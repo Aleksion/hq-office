@@ -5,6 +5,17 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-23
+
+### Added
+
+- **HQ learns to talk to you through the HUD.** An HQ agent that answered your notes in its own terminal was never
+  heard. Now, when herdr detects your HQ agent starting, the plugin types a short guide into it once per session
+  (reply with `hud tell` or `hud comment ID`, ask with `hud ask` and edit in place, track work on the board, read
+  `hud board` every sweep), and every note, answer and reply typed into HQ ends with a one-line reminder to reply
+  through the HUD. `hud guide` prints the guide; the status pane says whether HQ's current session has it.
+  `HUD_HQ_HINT=0` and `HUD_HQ_GREET=0` turn the two off.
+
 ## [0.3.2] - 2026-10-23
 
 ### Fixed

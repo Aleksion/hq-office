@@ -29,6 +29,9 @@
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
 //   hud pause ISSUE REASON...  /  hud resume ISSUE deliberately on hold, so it is not called stalled
 //   hud board [--json]                            stalled first; refreshes GitHub if the cache is over a minute old
+//   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
+import { GUIDE } from "./src/hq-guide.ts";
+
 const BASE = process.env.HUD_URL ?? "http://127.0.0.1:4747";
 
 function parse(argv: string[]) {
@@ -183,8 +186,12 @@ switch (cmd) {
     process.stdout.write(await res.text());
     break;
   }
+  case "guide":
+    console.log(GUIDE);
+    break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|guide");
+    console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 
 // ---- secrets: the value only ever travels through stdin, the request body and stdout ----

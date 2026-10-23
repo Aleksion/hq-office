@@ -15,6 +15,7 @@ styles as before (see "How it was checked").
 server.ts                 entry: one import, so `bun server.ts` still starts everything
 hud.ts                    HQ's CLI (unchanged)
 bin/hud-plugin.ts         the herdr plugin's entry; bin/service.ts (service mode), bin/hud-command.ts (installs hud)
+src/hq-guide.ts           the HQ guide and its one-line reminder (hud guide, the plugin's greet, messages to HQ)
 public/index.html         the page shell: head, markup, <script type="module" src="/src/client/main.js">
 src/client/               the page, plain ES modules and stylesheets, served as they are
   main.js                 loads every built-in area in the old order

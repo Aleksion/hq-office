@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 // herdr plugin entrypoint for HQ Office: start | stop | reload | open | status | install-service | remove-service |
-// install-hud. herdr runs it with cwd = the plugin dir and hands over state and config dirs.
+// install-hud | greet. herdr runs it with cwd = the plugin dir and hands over state and config dirs.
 // HQ_OFFICE_OPENER replaces the browser opener (tests set it to `true`); bin/service.ts lists the service's fakes.
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { platform, pluginId, serviceFor, servicePath, type ServiceSpec } from "./service.ts";
 import { installHud } from "./hud-command.ts";
+import { GUIDE } from "../src/hq-guide.ts";
 
 const ROOT = dirname(import.meta.dir);
 const STATE = process.env.HERDR_PLUGIN_STATE_DIR || join(ROOT, ".data");
@@ -15,7 +17,7 @@ const CONFIG_FILE = join(CONFIG_DIR, "config.env");
 const PID_FILE = join(STATE, "hud.pid");
 const LOG_FILE = join(STATE, "server.log");
 const HEALTH_TIMEOUT_MS = 8_000;
-const COMMANDS = ["start", "stop", "reload", "open", "status", "install-service", "remove-service", "install-hud"];
+const COMMANDS = ["start", "stop", "reload", "open", "status", "install-service", "remove-service", "install-hud", "greet"];
 const command = process.argv[2] ?? "";
 const FORCE = process.argv.includes("--force");
 const PLUGIN_ID = pluginId(ROOT);
@@ -67,8 +69,12 @@ const BIND_HOST = setting("HUD_HOST") || "127.0.0.1";
 const HOST = BIND_HOST === "0.0.0.0" || BIND_HOST === "::" ? "127.0.0.1" : BIND_HOST;
 const URL_BASE = `http://${HOST.includes(":") ? `[${HOST}]` : HOST}:${PORT}`;
 const DATA_DIR = setting("HUD_DATA_DIR") || STATE;
-const HERDR = Bun.which(setting("HERDR_BIN") || "herdr") ?? (setting("HERDR_BIN") || "herdr");
+// herdr hands its own path to plugin commands as HERDR_BIN_PATH; HERDR_BIN in config.env wins.
+const HERDR_WANTED = setting("HERDR_BIN") || process.env.HERDR_BIN_PATH || "herdr";
+const HERDR = Bun.which(HERDR_WANTED) ?? HERDR_WANTED;
 const HQ_AGENT = setting("HUD_HQ_AGENT");
+const HQ_NAME = HQ_AGENT || "hq";
+const GREETED = join(STATE, "greeted");
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) fail(`HUD_PORT must be a port number, got "${setting("HUD_PORT")}"`);
 
@@ -96,16 +102,21 @@ function alive(pid: number): boolean {
   }
 }
 
-function herdrAgentNames(): string[] | null {
+function herdrAgents(): any[] | null {
   try {
     const proc = Bun.spawnSync([HERDR, "agent", "list"], { stdout: "pipe", stderr: "ignore", timeout: 5000 });
     if (proc.exitCode !== 0) return null;
     const agents = JSON.parse(proc.stdout.toString())?.result?.agents;
-    if (!Array.isArray(agents)) return null;
-    return [...new Set(agents.map((a: any) => a?.name).filter((n: unknown): n is string => typeof n === "string" && n !== ""))];
+    return Array.isArray(agents) ? agents : null;
   } catch {
     return null;
   }
+}
+
+function herdrAgentNames(): string[] | null {
+  const agents = herdrAgents();
+  if (!agents) return null;
+  return [...new Set(agents.map((a: any) => a?.name).filter((n: unknown): n is string => typeof n === "string" && n !== ""))];
 }
 
 function checkHqAgent() {
@@ -295,6 +306,7 @@ async function status() {
   }
   console.log(`Service:  ${serviceLine()}`);
   console.log(`HQ agent: ${HQ_AGENT || `not set (falls back to "hq"); set HUD_HQ_AGENT in ${CONFIG_FILE}`}`);
+  console.log(`HQ guide: ${guideLine()}`);
   console.log(`Data dir: ${DATA_DIR}`);
   console.log(`Config:   ${CONFIG_FILE}`);
   console.log(`URL:      ${URL_BASE}`);
@@ -308,7 +320,73 @@ async function status() {
   }
 }
 
+// ---- the HQ guide: typed once into each new session of the HQ agent ----
+// The owner reads the HUD, not HQ's terminal; an HQ that does not know that answers into a terminal nobody reads.
+// herdr runs `greet` on pane.agent_detected with HERDR_PANE_ID set. A session is remembered by herdr's
+// agent_session (or, without one, the pane and its terminal), so a re-detection never types the guide twice.
+
+const greetOff = () => setting("HUD_HQ_GREET") === "0";
+const sessionKey = (a: any) => (a?.agent_session?.value ? `session:${a.agent_session.value}` : `pane:${a?.pane_id}:${a?.terminal_id ?? ""}`);
+const greetFile = (key: string) => join(GREETED, `${createHash("sha256").update(key).digest("hex").slice(0, 24)}.json`);
+
+async function greet() {
+  if (greetOff()) return console.log("greet: off (HUD_HQ_GREET=0)");
+  let ev: any = {};
+  try {
+    ev = JSON.parse(process.env.HERDR_PLUGIN_EVENT_JSON || "{}");
+  } catch {}
+  if (ev?.released) return console.log("greet: the agent left its pane; nothing to send");
+  const pane = process.env.HERDR_PANE_ID || ev?.pane_id;
+  if (!pane) return console.log("greet: no pane in the event; nothing to send");
+  // A starting agent may not have its name, its session or an input box yet: look again for a while.
+  const waitMs = Number(process.env.HQ_OFFICE_GREET_WAIT_MS ?? 30_000);
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const late = Date.now() >= deadline;
+    const agent = herdrAgents()?.find((a) => a?.pane_id === pane);
+    if (agent?.name && agent.name !== HQ_NAME) return console.log(`greet: ${pane} runs ${agent.name}, not the HQ agent ${HQ_NAME}; nothing sent`);
+    if (agent?.name === HQ_NAME && agent.interactive_ready !== false && (agent.agent_session?.value || late)) return sendGuide(agent);
+    if (late) return console.log(`greet: no HQ agent ready in ${pane} after ${waitMs / 1000}s; nothing sent`);
+    await Bun.sleep(Math.min(1000, Math.max(10, waitMs / 20)));
+  }
+}
+
+function sendGuide(agent: any) {
+  const key = sessionKey(agent);
+  const file = greetFile(key);
+  mkdirSync(GREETED, { recursive: true });
+  // Created exclusively: two detections of one session racing each other send once.
+  try {
+    writeFileSync(file, JSON.stringify({ agent: agent.name, pane: agent.pane_id, session: key, at: Date.now() }), { flag: "wx" });
+  } catch {
+    return console.log(`greet: ${agent.name} (${key}) already has the guide; nothing sent`);
+  }
+  const proc = Bun.spawnSync([HERDR, "agent", "prompt", agent.name, GUIDE], { stdout: "ignore", stderr: "pipe", timeout: 15_000 });
+  if (proc.exitCode !== 0) {
+    rmSync(file, { force: true }); // not sent, so the next detection tries again
+    fail(`could not send the guide to ${agent.name}: ${proc.stderr.toString().trim() || `exit ${proc.exitCode}`}`);
+  }
+  console.log(`greet: sent the HQ guide to ${agent.name} in ${agent.pane_id} (${key})`);
+}
+
+function guideLine() {
+  const hint = setting("HUD_HQ_HINT") === "0" ? "reply reminder off (HUD_HQ_HINT=0)" : "reply reminder on every message";
+  if (greetOff()) return `off (HUD_HQ_GREET=0); ${hint}; hud guide prints it`;
+  const hq = herdrAgents()?.find((a) => a?.name === HQ_NAME);
+  if (!hq) return `on, sent when an agent named ${HQ_NAME} starts (none running now); ${hint}`;
+  const file = greetFile(sessionKey(hq));
+  if (!existsSync(file)) return `on, not sent to ${HQ_NAME}'s current session (it started before; hud guide prints it); ${hint}`;
+  let at = "";
+  try {
+    at = ` at ${new Date(JSON.parse(readFileSync(file, "utf8")).at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  } catch {}
+  return `on, sent to ${HQ_NAME} this session${at}; ${hint}`;
+}
+
 switch (command) {
+  case "greet":
+    await greet();
+    break;
   case "start":
     await start();
     break;

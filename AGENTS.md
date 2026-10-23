@@ -6,8 +6,9 @@ If `AGENTS.local.md` exists next to this file, read it too: it holds the rules o
 
 - `server.ts`, `public/`, `src/`: the server and the page, one file per concern (see the map below).
 - `hud.ts`: HQ's CLI (`hud` when linked onto PATH, or `bun hud.ts`).
+- `src/hq-guide.ts`: the HQ guide (how HQ reaches the owner: through the HUD) and its one-line reminder. The one copy: `hud guide`, the plugin's greet and the server's messages to HQ all use it.
 - `src/server/secrets.ts`: the secret drop. Values in server memory only; see the README.
-- `bin/hud-plugin.ts`, `herdr-plugin.toml`: the herdr plugin; `bin/service.ts` (service mode: launchd, systemd), `bin/hud-command.ts` (installs `hud`). Their tests (`test/plugin/`) use a fake home and `test/fake-service.ts` for launchctl and systemctl: never run the real ones from a test.
+- `bin/hud-plugin.ts`, `herdr-plugin.toml`: the herdr plugin (actions, the status pane, and `greet` on `pane.agent_detected`); `bin/service.ts` (service mode: launchd, systemd), `bin/hud-command.ts` (installs `hud`). Their tests (`test/plugin/`) use a fake home and `test/fake-service.ts` for launchctl and systemctl: never run the real ones from a test.
 
 Rules for anyone changing it:
 - The question panel is the point. A change to the room must never make an open question harder to see or answer.

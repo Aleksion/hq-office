@@ -42,7 +42,8 @@ To keep HQ Office running across crashes and restarts, install it as a service (
 | `hq-office.install-service` | Runs the server as a per-user service that starts at login and restarts when it stops. Run it again to update the service. |
 | `hq-office.remove-service` | Stops and removes the service. Your data stays. |
 | `hq-office.install-hud` | Puts the `hud` command in `~/.local/bin` for HQ. Run it again to update it. |
-| `status` pane | A popup with the server state, whether the service is installed and running, open questions, lanes by status, the HQ agent, the data directory and the URL. |
+| `status` pane | A popup with the server state, whether the service is installed and running, open questions, lanes by status, the HQ agent, whether HQ's current session has the HQ guide, the data directory and the URL. |
+| `pane.agent_detected` event | When an agent starts, `bin/hud-plugin.ts greet` types the HQ guide (below) into it, once per session, if it is your HQ agent. Other agents get nothing. |
 
 ## Service mode
 
@@ -75,11 +76,23 @@ herdr plugin action invoke hq-office.install-hud
 
 It creates `~/.local/bin` if needed and prints what to add to your shell profile if that folder is not on your PATH. Run it again after changing `HUD_PORT` or updating the plugin. If `~/.local/bin/hud` already exists and is not the plugin's own (for example a link to a `hud.ts` somewhere else), the action leaves it alone and prints what it points at; remove it and run the action again to replace it.
 
+## Teaching HQ to talk through the HUD
+
+You read the page, not HQ's terminal, so an HQ that answers your notes in its own terminal is never heard. The plugin
+teaches it without any setup per session:
+
+- **The HQ guide.** When herdr detects your HQ agent (`HUD_HQ_AGENT`) starting in a pane, the plugin types a short
+  guide into it, once per agent session: replies go back through `hud tell` or `hud comment ID`, questions are asks
+  edited in place, work in flight is on the board and `hud board` starts every sweep. `hud guide` prints it, and the
+  plugin log (`herdr plugin log list --plugin hq-office`) shows each greet. `HUD_HQ_GREET=0` turns it off.
+- **A reminder on every message.** Every note, answer, reply and secret the server types into HQ ends with one line:
+  reply through the HUD, the owner does not read this terminal. `HUD_HQ_HINT=0` leaves it out.
+
 ## The question panel and Tell HQ
 
 Questions from HQ appear at the top of the panel, most urgent first. Pick an option or type an answer; it goes to HQ the moment you send it. Tell HQ is a free-text box for anything HQ did not ask about, such as a new priority or a correction. Both are stored, so nothing is lost if HQ is busy.
 
-HQ uses the CLI in `hud.ts` (the `hud` command after the install hud command action, or `bun hud.ts` from the plugin directory with `HUD_URL` set if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read.
+HQ uses the CLI in `hud.ts` (the `hud` command after the install hud command action, or `bun hud.ts` from the plugin directory with `HUD_URL` set if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read. `hud guide` prints how HQ should reach you.
 
 ## Secrets
 
@@ -130,6 +143,8 @@ Set these in `config.env`. An empty value means the default.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `HUD_HQ_AGENT` | `hq` | herdr agent name of your HQ lane. Answers and notes are typed into it. |
+| `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
+| `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |
 | `HUD_OWNER` | empty | Your name: on the desk sign, on the default hero, and in the notes and answers HQ is sent. Empty means "the owner" (and "YOU" on the hero). |
 | `HUD_PORT` | `4747` | Port the server listens on. |
 | `HUD_HOST` | `127.0.0.1` | Address the server binds to. |

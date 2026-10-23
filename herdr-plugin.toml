@@ -1,9 +1,14 @@
 id = "hq-office"
 name = "HQ Office"
-version = "0.3.2"
+version = "0.4.0"
 min_herdr_version = "0.8.0"
 description = "A handheld-RPG office where every herdr agent lane is a worker, plus a panel where you answer your HQ agent's questions"
 platforms = ["macos", "linux"]
+
+# When an agent starts, the HQ agent's new session gets the HQ guide once: talk to the owner through the HUD.
+[[events]]
+on = "pane.agent_detected"
+command = ["sh", "-c", "PATH=\"$HOME/.bun/bin:$PATH\" exec bun bin/hud-plugin.ts greet"]
 
 [[actions]]
 id = "start"

@@ -4,6 +4,7 @@ import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { bump } from "./push.ts";
 import { event } from "./events.ts";
+import { withHint } from "../hq-guide.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
@@ -102,13 +103,14 @@ export async function syncHerdr() {
   if (changed) bump();
 }
 
-// The owner's answers reach HQ the moment they are sent: typed into HQ's session.
-const HQ_AGENT = process.env.HUD_HQ_AGENT ?? "hq";
+// The owner's answers reach HQ the moment they are sent: typed into HQ's session, with a one-line reminder to reply
+// through the HUD (the owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out).
+const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";
 export function notifyHq(text: string) {
   // The answer is already saved; a herdr that cannot even start must not turn it into an error for the page.
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn([HERDR, "agent", "prompt", HQ_AGENT, text], { stdout: "ignore", stderr: "pipe" });
+    proc = Bun.spawn([HERDR, "agent", "prompt", HQ_AGENT, withHint(text)], { stdout: "ignore", stderr: "pipe" });
   } catch (e) {
     event("hud", `could not reach HQ: ${(e as Error).message}`);
     return;
