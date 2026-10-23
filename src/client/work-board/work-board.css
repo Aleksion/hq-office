@@ -29,3 +29,5 @@
 .stall .k { font: 8px/1.4 var(--pixel); }
 .stall .row { font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .stall .row b { font: 8px/1 var(--pixel); margin-right: 6px; }
+/* the manager a group of work reports to, when lanes form a tree */
+.work .under { font: 7px/1 var(--pixel); color: var(--muted); margin: 8px 0 4px; display: flex; align-items: center; gap: 6px; }

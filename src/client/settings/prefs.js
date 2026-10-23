@@ -1,11 +1,13 @@
 // The owner's settings (hero, season, hat, sound, performance): kept on the server, with a copy in this browser for the first paint.
 import { HEROES } from "../room/palette.js";
+import { THEME_CHOICES } from "../room/themes.js";
 import { emit, on } from "../core/bus.js";
 import { post } from "../core/net.js";
 
 // The owner's choices, not per-view state such as the open tab. The defaults: the season follows the calendar, the
 // default hero (YOU) is the hero, its hat follows the season, the chime is off, and the room moves smoothly.
-export const DEFAULTS = { hero: "YOU", season: "auto", hat: "auto", sound: false, performance: "smooth" };
+// The level names (one per depth of the lane tree, comma-separated) and the theme that dresses the levels.
+export const DEFAULTS = { hero: "YOU", season: "auto", hat: "auto", sound: false, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" };
 // How much the room moves, and so what it costs (room/beat.js).
 export const PERFORMANCE_CHOICES = ["smooth", "balanced", "saver"];
 const LOCAL_KEY = "hq-settings";
@@ -32,6 +34,8 @@ export function withDefaults(v) {
   if (!HEROES.some((h) => h.name === s.hero)) s.hero = DEFAULTS.hero;
   s.sound = s.sound === true;
   if (!PERFORMANCE_CHOICES.includes(s.performance)) s.performance = DEFAULTS.performance;
+  if (!THEME_CHOICES.includes(s.theme)) s.theme = DEFAULTS.theme;
+  if (typeof s.levels !== "string" || !s.levels.split(",").some((n) => n.trim())) s.levels = DEFAULTS.levels;
   return s;
 }
 

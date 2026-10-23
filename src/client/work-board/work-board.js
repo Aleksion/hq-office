@@ -49,9 +49,17 @@ export function renderWork() {
   if (qTab !== "work") return;
   const open = b.items.filter((i) => i.state !== "done").length;
   const sum = WORK_ORDER.filter((s) => b.counts[s]).map((s) => `${b.counts[s]} ${WORK_STATE[s]}`).join(" · ");
+  // With lanes in a tree, each state's work is grouped under the lane its lane reports to (oldest change first).
+  const grouped = b.items.some((i) => i.manager);
+  const underManagers = (its) => {
+    if (!grouped) return its.map(workRow).join("");
+    const by = new Map();
+    for (const i of its) { const m = i.manager ?? "HQ"; if (!by.has(m)) by.set(m, []); by.get(m).push(i); }
+    return [...by].map(([m, list]) => `<div class="under">UNDER ${m === "HQ" ? "HQ" : `<button class="tag lane" data-select="${esc(m)}">${esc(m)}</button>`}</div>${list.map(workRow).join("")}`).join("");
+  };
   const groups = WORK_ORDER.map((s) => {
     const its = b.items.filter((i) => i.state === s);
-    return its.length ? `<h4 class="${s}">${WORK_STATE[s]} (${its.length})</h4>${its.map(workRow).join("")}` : "";
+    return its.length ? `<h4 class="${s}">${WORK_STATE[s]} (${its.length})</h4>${underManagers(its)}` : "";
   }).join("");
   $("work").innerHTML = b.items.length
     ? `<div class="sum">${open} OPEN · ${sum}</div>${groups}`

@@ -1,0 +1,121 @@
+// The lane tree in the page: each theme paints a distinct look per depth (compared pixel by pixel, the same worker
+// in each), a room with no tree wears the everyday look, the workers dress by their lane's depth and the chosen
+// theme, and the worker card shows the level and the path up to HQ. Needs Chrome (CHROME_BIN); skipped without it.
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { join } from "node:path";
+import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
+
+const ROOT = join(import.meta.dir, "..", "..");
+const chromeFound = !!findChrome();
+let chrome: Awaited<ReturnType<typeof startChrome>>;
+let server: Awaited<ReturnType<typeof startServer>>;
+let page: Awaited<ReturnType<typeof newSession>>;
+const errors: string[] = [];
+const until = async (expr: string, ms = 8000) => {
+  for (const end = Date.now() + ms; Date.now() < end; await Bun.sleep(50)) if (await page.evaluate(expr).catch(() => false)) return true;
+  throw new Error(`timed out waiting for ${expr}`);
+};
+// A sample tree: two managers, a lead under one, an engineer under the lead.
+const TREE = [["web-pm", ""], ["data-pm", ""], ["api-lead", "web-pm"], ["api-auth", "api-lead"]];
+
+beforeAll(async () => {
+  if (!chromeFound) return;
+  chrome = await startChrome();
+  server = await startServer(ROOT);
+  for (const [name] of TREE) await server.post("/api/lanes", { name, machine: "local" });
+  page = await newSession(chrome.cdp, errors);
+  await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.s("Page.navigate", { url: `${server.base}/` });
+  await until(`!!document.getElementById("card")?.innerHTML`);
+});
+
+afterAll(async () => {
+  await server?.stop();
+  chrome?.close();
+});
+
+// Paints one worker in each look of each theme, facing down and up, and returns each painting's pixels as a string.
+const PAINT = `(async () => {
+  const { drawSprite } = await import("/src/client/room/sprites.js");
+  const { setCtx, ctx: live } = await import("/src/client/room/canvas.js");
+  const { dressed, lookFor, themeOf } = await import("/src/client/room/looks.js");
+  const { palette } = await import("/src/client/room/palette.js");
+  const paint = (pal, dir) => {
+    const c = document.createElement("canvas"); c.width = 48; c.height = 48;
+    const g = c.getContext("2d");
+    setCtx(g);
+    try { drawSprite(pal, 0, 0, dir, 0); } finally { setCtx(live); }
+    return Array.from(g.getImageData(0, 0, 48, 48).data).join(",");
+  };
+  const out = {};
+  for (const t of ["office", "arena"]) for (const dir of ["down", "up"]) {
+    for (const d of [1, 2, 3, 4]) out[t + "|" + dir + "|" + d] = paint(dressed("sample-worker", lookFor(themeOf(t), d, false), 7), dir);
+    out[t + "|" + dir + "|flat"] = paint(dressed("sample-worker", lookFor(themeOf(t), 1, true), 7), dir);
+  }
+  for (const dir of ["down", "up"]) out["everyday|" + dir] = paint(palette("sample-worker"), dir);
+  return out;
+})()`;
+
+test.skipIf(!chromeFound)("a room with no tree wears the everyday look, and the card shows no path", async () => {
+  const looks = await page.evaluate(`import("/src/client/room/workers.js").then(({ workers }) => [...workers.values()].map((w) => w.pal.look?.id ?? null))`);
+  expect(looks).toEqual([null, null, null, null]);
+  expect(await page.evaluate(`import("/src/client/room/workers.js").then(({ workers }) => [...workers.values()].map((w) => w.mark ?? null))`)).toEqual([null, null, null, null]);
+  await page.evaluate(`(() => { const b = document.createElement("button"); b.dataset.select = "web-pm"; document.body.append(b); b.click(); b.remove(); })()`);
+  await until(`document.querySelector("#card h3")?.textContent === "web-pm"`);
+  expect(await page.evaluate(`!!document.querySelector("#card .path")`)).toBe(false);
+});
+
+test.skipIf(!chromeFound)("each theme paints a distinct look for each depth, from the front and from behind", async () => {
+  const px = await page.evaluate(PAINT);
+  for (const t of ["office", "arena"]) for (const dir of ["down", "up"]) {
+    const [d1, d2, d3, d4] = [1, 2, 3, 4].map((d) => px[`${t}|${dir}|${d}`]);
+    expect(d1).not.toBe(d2);
+    expect(d2).not.toBe(d3);
+    expect(d1).not.toBe(d3);
+    expect(d4).toBe(d3); // deeper than the theme's list: the last look
+  }
+  // Office: depth 3 and a room with no tree are the everyday look, pixel for pixel. Arena's flat room are players.
+  for (const dir of ["down", "up"]) {
+    expect(px[`office|${dir}|3`]).toBe(px[`everyday|${dir}`]);
+    expect(px[`office|${dir}|flat`]).toBe(px[`everyday|${dir}`]);
+    expect(px[`arena|${dir}|flat`]).toBe(px[`arena|${dir}|3`]);
+  }
+  // the two themes dress the same depth differently
+  expect(px["office|down|1"]).not.toBe(px["arena|down|1"]);
+});
+
+test.skipIf(!chromeFound)("with a tree, workers dress by depth and theme, and the card shows the level and the path", async () => {
+  for (const [name, parent] of TREE) if (parent) await server.post("/api/lanes", { name, parent });
+  const looksNow = `import("/src/client/room/workers.js").then(({ workers }) => JSON.stringify(Object.fromEntries([...workers].map(([n, w]) => [n, w.pal.look?.id ?? null]))))`;
+  await until(`${looksNow}.then((s) => JSON.parse(s)["api-auth"] === null && JSON.parse(s)["web-pm"] === "blazer")`);
+  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": null, "api-lead": "cardigan", "data-pm": "blazer", "web-pm": "blazer" });
+  // the label marks: three pips at the top level, then two, then one, so the level reads from behind too
+  const marks = `import("/src/client/room/workers.js").then(({ workers }) => JSON.stringify(Object.fromEntries([...workers].map(([n, w]) => [n, w.mark?.pips ?? null]))))`;
+  expect(JSON.parse(await page.evaluate(marks))).toEqual({ "api-auth": 1, "api-lead": 2, "data-pm": 3, "web-pm": 3 });
+  await server.post("/api/settings", { settings: { theme: "arena" } });
+  await until(`${looksNow}.then((s) => JSON.parse(s)["web-pm"] === "guard-square")`);
+  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": "player", "api-lead": "guard-triangle", "data-pm": "guard-square", "web-pm": "guard-square" });
+
+  await page.evaluate(`(() => { const b = document.createElement("button"); b.dataset.select = "api-auth"; document.body.append(b); b.click(); b.remove(); })()`);
+  await until(`document.querySelector("#card h3")?.textContent === "api-auth" && !!document.querySelector("#card .path")`);
+  expect(await page.evaluate(`document.querySelector("#card .path .level").textContent`)).toBe("ENGINEER");
+  expect(await page.evaluate(`document.querySelector("#card .path .chain").textContent`)).toBe("HQ > web-pm > api-lead > api-auth");
+  // a step in the path selects that lane
+  await page.evaluate(`document.querySelector('#card .path [data-select="web-pm"]').click()`);
+  await until(`document.querySelector("#card h3")?.textContent === "web-pm"`);
+  expect(await page.evaluate(`document.querySelector("#card .path .level").textContent`)).toBe("MANAGER");
+  expect(errors).toEqual([]);
+});
+
+test.skipIf(!chromeFound)("SETTINGS saves the level names and the theme", async () => {
+  await page.evaluate(`document.getElementById("settingsBtn").click()`);
+  await until(`!!document.querySelector("[data-levels]")`);
+  await page.evaluate(`(() => { const f = document.querySelector("[data-levels]"); f.elements.levels.value = " PM ,Senior,, Junior "; f.requestSubmit(); })()`);
+  for (let i = 0; i < 100 && (await (await fetch(`${server.base}/api/settings`)).json()).settings.levels !== "PM, Senior, Junior"; i++) await Bun.sleep(50);
+  expect((await (await fetch(`${server.base}/api/settings`)).json()).settings.levels).toBe("PM, Senior, Junior");
+  await until(`document.querySelector("#card .path .level")?.textContent === "PM"`);
+  await page.evaluate(`document.querySelector('[data-set="theme"][data-val="office"]').click()`);
+  for (let i = 0; i < 100 && (await (await fetch(`${server.base}/api/settings`)).json()).settings.theme !== "office"; i++) await Bun.sleep(50);
+  expect((await (await fetch(`${server.base}/api/settings`)).json()).settings.theme).toBe("office");
+  expect(errors).toEqual([]);
+});

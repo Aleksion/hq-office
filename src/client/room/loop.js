@@ -135,7 +135,7 @@ function drawScene(now, dt) {
       }
       drawSprite(w.pal, sx, sy, w.dir, step, ghost ? 0.4 : 1);
       const busyHand = !!(w.brain?.acting && (w.brain.act.kind === "coffee" || w.brain.act.kind === "snack"));
-      drawAccessories(w.pal, wornBy(w.lane.name), sx, sy, w.dir, step, ghost ? 0.4 : 1, busyHand);
+      drawAccessories(w.pal, wornBy(w.lane.name, false, w.pal.look?.hides), sx, sy, w.dir, step, ghost ? 0.4 : 1, busyHand);
       if (!moving && GLYPH[st]) {
         const bounce = st === "needs_you" ? Math.abs(Math.sin(steadyClock(now) / 220)) * 2.5 : 0;
         drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce);
@@ -143,7 +143,7 @@ function drawScene(now, dt) {
       drawProp(w, sx, sy);
       if (st === "waiting" && !moving) drawWatchCheck(w, sx, sy, now);
       const name = w.lane.name.length > 14 ? w.lane.name.slice(0, 13) + "…" : w.lane.name;
-      drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you");
+      drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you", w.mark);
     }
   }
   drawnHover = hovered;

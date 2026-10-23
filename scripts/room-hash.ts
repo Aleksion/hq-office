@@ -283,6 +283,8 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     await evaluate(`document.getElementById("settingsBtn").click()`);
     // The PERFORMANCE row is new in 0.6; leave it out so the rest of the panel compares with a tree from before.
     await evaluate(`document.querySelector('[data-set="performance"]')?.closest(".srow").remove()`);
+    // The LEVEL NAMES and LEVEL THEME rows are new in the lane tree's release; left out the same way.
+    await evaluate(`document.querySelector("[data-levels]")?.remove(); document.querySelector('[data-set="theme"]')?.closest(".srow").remove()`);
     styles["1440x900 settings open"] = await evaluate(STYLE_HASH);
     await evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
     styles["1440x900 messages tab"] = await evaluate(STYLE_HASH);

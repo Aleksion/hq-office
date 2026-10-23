@@ -4,7 +4,7 @@ import { db } from "./db.ts";
 import type { Ask, Lane } from "./types.ts";
 import { secrets, version } from "./push.ts";
 import { lastSync, untracked } from "./herdr.ts";
-import { laneStatus } from "./lanes.ts";
+import { laneStatus, withTree } from "./lanes.ts";
 import { score } from "./score.ts";
 import { pageStamp } from "./page.ts";
 import { machineHealth } from "./machines.ts";
@@ -23,7 +23,7 @@ export function state() {
   return {
     now,
     version,
-    lanes: lanes.map((l) => ({ ...l, status: laneStatus(l, openByLane, now) })),
+    lanes: withTree(lanes).map((l) => ({ ...l, status: laneStatus(l, openByLane, now) })),
     open: open.map(parse),
     answered: answered.map(parse),
     notes: db.query("SELECT * FROM notes ORDER BY at DESC LIMIT 20").all(),

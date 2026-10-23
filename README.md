@@ -108,6 +108,10 @@ hud secret list                          # names, who set them, when they expire
 
 Values live in the server's memory only: never in the database, the log, `/api/state` or any listing, and a restart clears them all. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
 
+## Lanes in levels
+
+Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name) and LEVEL THEME picks how the room dresses them: Office (suit, cardigan, everyday look) or Arena (masked guards and numbered players). The worker card shows a lane's level and its chain up to HQ. A room with no tree looks as it always did.
+
 ## The work board
 
 The WORK tab lists every piece of work in flight: an issue key, its pull requests and the lane that owns it. HQ adds one with `hud track ISSUE --lane L --pr N`, and `hud lane NAME --issue X --pr N` links a lane's work too. Each item's state is worked out from facts, in this order: done (all PRs merged or closed, or `hud done ISSUE`), waiting on you (an open question names its lane, issue or PR), waiting on CI (a check is running), paused (`hud pause ISSUE REASON`, undone with `hud resume ISSUE`), moving (the lane is working, or something changed in the last 45 minutes), and otherwise stalled. Stalled work shows red at the top of the question column and at the top of `hud board` (`--json` for JSON).

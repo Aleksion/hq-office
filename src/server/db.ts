@@ -13,3 +13,5 @@ for (const f of readdirSync(SCHEMA).filter((f) => f.endsWith(".sql")).sort()) db
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "bg")) db.exec("ALTER TABLE lanes ADD COLUMN bg TEXT");
 // Names of the secrets an ask requests (JSON array). Names only: values never reach the database.
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "secrets")) db.exec("ALTER TABLE asks ADD COLUMN secrets TEXT");
+// The lane a lane reports to; empty means straight under HQ. Depth is computed from the chain, never stored.
+if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "parent")) db.exec("ALTER TABLE lanes ADD COLUMN parent TEXT");

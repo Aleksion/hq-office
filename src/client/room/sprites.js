@@ -80,19 +80,35 @@ export const HEADS = [
 
 // Left is the right-facing frame flipped; the second walk frame facing up or down is the first one flipped.
 export const mirrored = (dir, step) => dir === "left" || (step === 2 && (dir === "up" || dir === "down"));
-function frame(dir, step, style = 0) {
+// A look from room/themes.js (pal.look) dresses the body, and the head too when it has one. Hair that falls over the
+// shoulders stays over the look's clothes.
+function frame(dir, step, style = 0, look = null) {
   // step: 0 stand, 1 and 2 alternate walk frames
-  const legsSet = dir === "left" || dir === "right" ? LEGS_SIDE : LEGS_FRONT;
+  const side = dir === "left" || dir === "right";
+  const legsSet = side ? LEGS_SIDE : LEGS_FRONT;
   const legs = step === 0 ? legsSet[0] : legsSet[1];
-  const set = HEADS[style] || HEADS[0];
+  const set = look?.head ?? HEADS[style] ?? HEADS[0];
   const head = dir === "up" ? set.up : dir === "down" ? set.down : set.side;
-  const body = dir === "left" || dir === "right" ? BODY_SIDE : BODY_FRONT;
-  return { rows: [...head, ...body.slice(head.length - 10), ...legs], mirror: mirrored(dir, step) };
+  const body = look?.body ? (side ? look.body.side : dir === "up" ? look.body.up : look.body.down) : side ? BODY_SIDE : BODY_FRONT;
+  const over = look?.body ? head.slice(10).map((row, i) => [...row].map((ch, c) => ("cLCaA".includes(ch) ? body[i][c] : ch)).join("")) : head.slice(10);
+  return { rows: [...head.slice(0, 10), ...over, ...body.slice(head.length - 10), ...legs], mirror: mirrored(dir, step) };
+}
+
+// Digits for a look's number, 3 dots by 5, each dot 2 screen pixels: finer than the sprite's own pixels, so two
+// digits fit on a chest and still read at real size.
+const DIGITS = ["xxxx.xx.xx.xxxx", ".x.xx..x..x.xxx", "xxx..xxxxx..xxx", "xxx..x.xx..xxxx", "x.xx.xxxx..x..x", "xxxx..xxx..xxxx", "xxxx..xxxx.xxxx", "xxx..x..x..x..x", "xxxx.xxxxx.xxxx", "xxxx.xxxx..xxxx"];
+function paintNumber(n, color) {
+  const text = String(n), d = 2 / 3, w = text.length * 3 * d + (text.length - 1) * d;
+  const x0 = 8 - w / 2, y0 = 10 + 1 / 3;
+  [...text].forEach((ch, i) => {
+    const g = DIGITS[ch.charCodeAt(0) - 48];
+    for (let k = 0; k < 15; k++) if (g[k] === "x") px(x0 + i * 4 * d + (k % 3) * d, y0 + Math.floor(k / 3) * d, d, d, color);
+  });
 }
 
 export function drawSprite(pal, x, y, dir, step, alpha = 1) {
   blit(`s${artId(pal)}|${dir}|${step}`, x, y, alpha, () => {
-    const { rows, mirror } = frame(dir, step, pal.t);
+    const { rows, mirror } = frame(dir, step, pal.t, pal.look);
     for (let r = 0; r < 16; r++) {
       const row = rows[r];
       for (let c = 0; c < 16; c++) {
@@ -101,5 +117,7 @@ export function drawSprite(pal, x, y, dir, step, alpha = 1) {
         px(c, r, 1, 1, pal[ch]);
       }
     }
+    // The number reads the same both ways, so it is painted after the mirror; side-on it does not show.
+    if (pal.look?.number && pal.number != null && (dir === "up" || dir === "down")) paintNumber(pal.number, pal.w);
   });
 }

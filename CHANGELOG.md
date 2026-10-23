@@ -5,6 +5,34 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-24
+
+### Added
+
+- **Lanes in levels.** Lanes can now form a tree under HQ: a lane reports to HQ (level 1), or to another lane, which
+  puts it one level deeper. HQ or a lane sets it with `hud lane NAME --parent OTHER`; `--parent hq` puts a lane
+  straight back under HQ. A lane that starts lanes of its own registers them with itself as their parent. A parent
+  that would make a loop is refused with an error that shows the chain, and when you remove a lane, the lanes that
+  reported to it move up one level instead of being lost. Nothing changes until a lane gets a parent.
+- **Name your levels.** SETTINGS has LEVEL NAMES: one name per level from the top, comma-separated. The default is
+  `Manager, Lead, Engineer`; `PM, Senior, Junior` or `L1, L2, L3` work just as well. Lanes deeper than your list take
+  the last name.
+- **See the levels in the room.** Once there is a tree, each level dresses differently, and every worker keeps its own
+  hair, skin and colours. Pick the look in SETTINGS under LEVEL THEME:
+  - **Office** (the default): level 1 wears a dark suit and a tie in its own colour (all suit from behind), level 2 a light cardigan over
+    its own shirt, level 3 and deeper the everyday look. A room without a tree looks exactly as before.
+  - **Arena**: levels 1 and 2 are masked guards in a magenta hooded suit, with a white square (level 1, who also
+    wears a black belt) or a triangle (level 2) on the black mask and on the back of the hood; level 3 and deeper are
+    players in a teal tracksuit with a white number. In a room without a tree, everyone is a player. Our own art, not
+    any show's.
+- **A level mark on every name label**, so the level reads from any side, even from behind at a desk: three pips
+  for level 1, two for level 2, one for level 3 and deeper, in a colour that matches the theme's look (Office: gold,
+  cream, blue; Arena: pink for guards, teal for players). Only in a room with a tree.
+- **The worker card** shows the lane's level and its chain up to HQ, for example `HQ > web-pm > api-lead > api-auth`;
+  click a step to open that lane.
+- **`hud tree`** prints the tree with each lane's level name and status (`--json` for JSON). On the WORK tab and in
+  `hud board`, the work in each state is grouped under the lane its lane reports to; stalled work still comes first.
+
 ## [0.6.4] - 2026-10-23
 
 ### Fixed
