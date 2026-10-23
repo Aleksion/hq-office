@@ -5,6 +5,13 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-23
+
+### Fixed
+
+- **SETTINGS no longer hides your hero.** The panel opens from the bottom right, so the hero behind the counter
+  stays in view and a click on a hero or a hat shows its result at once.
+
 ## [0.6.0] - 2026-10-23
 
 ### Added
