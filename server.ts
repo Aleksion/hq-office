@@ -21,6 +21,8 @@ const CONFIG = {
   githubRepo: process.env.HUD_GITHUB_REPO ?? "",
   linearWorkspace: process.env.HUD_LINEAR_WORKSPACE ?? "",
 };
+// How HQ and the event log name the person at the page: their configured name, else a neutral word.
+const OWNER = CONFIG.owner || "the owner";
 const SYNC_MS = 20_000;
 const STALE_MS = 15 * 60_000;
 
@@ -63,6 +65,14 @@ CREATE TABLE IF NOT EXISTS notes (
   at INTEGER NOT NULL,
   text TEXT NOT NULL,
   acked_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at INTEGER NOT NULL,
+  lane TEXT,
+  title TEXT NOT NULL,
+  body TEXT,
+  read_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,6 +214,8 @@ function state() {
     open: open.map(parse),
     answered: answered.map(parse),
     notes: db.query("SELECT * FROM notes ORDER BY at DESC LIMIT 20").all(),
+    updates: db.query("SELECT * FROM updates ORDER BY at DESC, id DESC LIMIT 100").all(),
+    updatesUnread: (db.query("SELECT COUNT(*) AS n FROM updates WHERE read_at IS NULL").get() as { n: number }).n,
     events: db.query("SELECT * FROM events ORDER BY at DESC LIMIT 60").all(),
     score: score(now),
     untracked,
@@ -266,16 +278,24 @@ function createAsk(body: any) {
   return Number(res.lastInsertRowid);
 }
 
+function createUpdate(body: any) {
+  if (!String(body.title ?? "").trim()) throw new Error("title is required");
+  const res = db
+    .query("INSERT INTO updates (at, lane, title, body) VALUES (?, ?, ?, ?)")
+    .run(Date.now(), body.lane ?? null, String(body.title).trim(), body.body ?? null);
+  return Number(res.lastInsertRowid);
+}
+
 function answerAsk(id: number, answer: string) {
   const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
   if (!ask) throw new Error(`no ask ${id}`);
   if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
   db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ? WHERE id = ?").run(answer, Date.now(), id);
-  event("nico", `answered "${ask.title}": ${answer}`, ask.lane);
+  event(OWNER, `answered "${ask.title}": ${answer}`, ask.lane);
   notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`);
 }
 
-// Nico's answers reach HQ the moment he sends them: typed into HQ's session.
+// The owner's answers reach HQ the moment they are sent: typed into HQ's session.
 const HQ_AGENT = process.env.HUD_HQ_AGENT ?? "hq";
 function notifyHq(text: string) {
   const proc = Bun.spawn([HERDR, "agent", "prompt", HQ_AGENT, text], { stdout: "ignore", stderr: "pipe" });
@@ -467,9 +487,12 @@ Bun.serve({
       else if (path === "/api/notes") {
         if (!String(body.text ?? "").trim()) throw new Error("text is required");
         db.query("INSERT INTO notes (at, text) VALUES (?, ?)").run(Date.now(), String(body.text).trim());
-        event("nico", `told HQ: ${String(body.text).trim()}`);
-        notifyHq(`HUD note from Nico: ${String(body.text).trim()}`);
+        event(OWNER, `told HQ: ${String(body.text).trim()}`);
+        notifyHq(`HUD note from ${OWNER}: ${String(body.text).trim()}`);
       } else if ((m = path.match(/^\/api\/notes\/(\d+)\/ack$/))) db.query("UPDATE notes SET acked_at = ? WHERE id = ?").run(Date.now(), Number(m[1]));
+      else if (path === "/api/updates") result = { id: createUpdate(body) };
+      else if (path === "/api/updates/read-all") db.query("UPDATE updates SET read_at = ? WHERE read_at IS NULL").run(Date.now());
+      else if ((m = path.match(/^\/api\/updates\/(\d+)\/read$/))) db.query("UPDATE updates SET read_at = ? WHERE id = ? AND read_at IS NULL").run(Date.now(), Number(m[1]));
       else if (path === "/api/events") event(body.who ?? "hq", String(body.text ?? ""), body.lane);
       else if (path === "/api/sync") await syncHerdr();
       else return json({ error: "not found" }, 404);

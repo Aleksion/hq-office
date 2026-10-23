@@ -77,3 +77,28 @@ test("uploads land in the data dir and are served back", async () => {
   expect(back.status).toBe(200);
   expect(new Uint8Array(await back.arrayBuffer())).toEqual(bytes);
 });
+
+const post = (path: string, body: unknown, headers: Record<string, string> = { "x-hud": "1" }) =>
+  fetch(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+const getState = async () => (await fetch(`${BASE}/api/state`)).json();
+
+test("an update from HQ shows in state as unread, and reading clears it", async () => {
+  const first = await (await post("/api/updates", { title: "PR is up", body: "details", lane: "build" })).json();
+  await post("/api/updates", { title: "Second" });
+  let state = await getState();
+  expect(state.updatesUnread).toBe(2);
+  expect(state.updates.map((u: any) => u.title)).toEqual(["Second", "PR is up"]);
+
+  await post(`/api/updates/${first.id}/read`, {});
+  state = await getState();
+  expect(state.updatesUnread).toBe(1);
+
+  await post("/api/updates/read-all", {});
+  state = await getState();
+  expect(state.updatesUnread).toBe(0);
+});
+
+test("an update needs a title and the x-hud header", async () => {
+  expect((await post("/api/updates", { body: "no title" })).status).toBe(400);
+  expect((await post("/api/updates", { title: "x" }, {})).status).toBe(403);
+});

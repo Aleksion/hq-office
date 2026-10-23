@@ -5,9 +5,10 @@
 //   hud rm-lane NAME
 //   hud withdraw ID [--reason R]
 //   hud event [--lane L] TEXT
+//   hud say --title T [--body B] [--lane L]   post an update to the "From HQ" tab
 //   hud inbox            answers and notes HQ has not acted on
 //   hud ack a:ID | n:ID  mark an answer or note as acted on
-//   hud wait             block until Nico answers or writes (exits with the inbox)
+//   hud wait             block until the owner answers or writes (exits with the inbox)
 //   hud state            the board as JSON
 //   hud sync             refresh herdr status now
 const BASE = process.env.HUD_URL ?? "http://127.0.0.1:4747";
@@ -86,6 +87,11 @@ switch (cmd) {
   case "event":
     await call("POST", "/api/events", { lane: one("lane"), text: rest.join(" ") });
     break;
+  case "say": {
+    const out = await call("POST", "/api/updates", { title: one("title"), body: one("body"), lane: one("lane") });
+    console.log(`update #${out.id}`);
+    break;
+  }
   case "inbox":
     console.log(JSON.stringify(await call("GET", "/api/inbox"), null, 2));
     break;
@@ -112,5 +118,5 @@ switch (cmd) {
     await call("POST", "/api/sync", {});
     break;
   default:
-    console.log("usage: hud ask|lane|rm-lane|withdraw|event|inbox|ack|wait|state|sync");
+    console.log("usage: hud ask|lane|rm-lane|withdraw|event|say|inbox|ack|wait|state|sync");
 }

@@ -44,7 +44,7 @@ The database and uploaded images live in the plugin's state directory, so they s
 
 Questions from HQ appear at the top of the panel, most urgent first. Pick an option or type an answer; it goes to HQ the moment you send it. Tell HQ is a free-text box for anything HQ did not ask about, such as a new priority or a correction. Both are stored, so nothing is lost if HQ is busy.
 
-HQ uses the CLI in `hud.ts` (`bun hud.ts help` from the plugin directory; set `HUD_URL` if you changed the port) to add lanes, ask questions and wait for your answers.
+HQ uses the CLI in `hud.ts` (`bun hud.ts help` from the plugin directory; set `HUD_URL` if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **From HQ** tab with `bun hud.ts say --title "PR is up" [--body "details"] [--lane NAME]`; the tab counts unread updates until you open them or press MARK ALL READ.
 
 ## Images
 
