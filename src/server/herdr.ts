@@ -18,6 +18,22 @@ async function herdrList(machine: string): Promise<any[]> {
   return JSON.parse(out).result.agents;
 }
 
+// An idle agent can still be working: its pane ends with "· 2 shells still running" or "monitor still running".
+const BG = /(\d+\s+shells?\s+still running|monitors?\s+still running)/i;
+async function backgroundWork(machine: string, pane: string): Promise<string | null> {
+  const args = machine === LOCAL ? [HERDR, "pane", "read", pane, "--lines", "4"] : [HERDR, "--machine", machine, "pane", "read", pane, "--lines", "4"];
+  try {
+    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "ignore" });
+    const timer = setTimeout(() => proc.kill(), 8_000);
+    const out = await new Response(proc.stdout).text();
+    clearTimeout(timer);
+    await proc.exited;
+    return out.match(BG)?.[1].replace(/\s+/g, " ") ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function syncHerdr() {
   const errors: string[] = [];
   const seen = new Map<string, { machine: string; agent: any }>();
@@ -35,6 +51,16 @@ export async function syncHerdr() {
   const now = Date.now();
   const lanes = db.query("SELECT * FROM lanes").all() as Lane[];
   const known = new Set(lanes.map((l) => l.name));
+  // Only lanes that would otherwise read as HQ's turn: running, agent not working, no open question waiting on the owner.
+  const asking = new Set((db.query("SELECT DISTINCT lane FROM asks WHERE status = 'open' AND lane IS NOT NULL").all() as { lane: string }[]).map((r) => r.lane));
+  const bg = new Map<string, string | null>();
+  await Promise.all(
+    lanes.map(async (lane) => {
+      const hit = seen.get(lane.name);
+      if (!hit || hit.agent.agent_status === "working" || (lane.phase ?? "running") !== "running" || asking.has(lane.name)) return;
+      bg.set(lane.name, await backgroundWork(hit.machine, hit.agent.pane_id));
+    }),
+  );
   let changed = false;
   // One transaction for the whole sync: one write to disk instead of one per lane, three times a minute.
   db.transaction(() => {
@@ -54,6 +80,11 @@ export async function syncHerdr() {
         db.query(
           "UPDATE lanes SET herdr = ?, herdr_since = CASE WHEN herdr = ? THEN herdr_since ELSE ? END, pane = ?, machine = ?, agent = ? WHERE name = ?",
         ).run(status, status, now, hit.agent.pane_id, hit.machine, hit.agent.agent, lane.name);
+        changed = true;
+      }
+      const work = bg.get(lane.name) ?? null;
+      if (work !== (lane.bg ?? null)) {
+        db.query("UPDATE lanes SET bg = ? WHERE name = ?").run(work, lane.name);
         changed = true;
       }
       db.query("UPDATE lanes SET herdr_seen = ? WHERE name = ?").run(now, lane.name);

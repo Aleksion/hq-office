@@ -29,21 +29,57 @@ herdr plugin install NicolaiHerforth/hq-office
 
 The database and uploaded images live in the plugin's state directory, so they survive reinstalls.
 
+To keep HQ Office running across crashes and restarts, install it as a service (below). To give HQ the `hud` command, run `herdr plugin action invoke hq-office.install-hud`.
+
 ## Actions and pane
 
 | Name | What it does |
 | --- | --- |
-| `hq-office.start` | Starts the server if it is not running, then opens the page in your browser. |
-| `hq-office.stop` | Stops the server the plugin started. |
-| `hq-office.reload` | Stop, then start. Use it after editing `config.env`. |
+| `hq-office.start` | Starts the server if it is not running (through the service, when it is installed), then opens the page in your browser. |
+| `hq-office.stop` | Stops the server the plugin started. With the service installed, stops the service until the next login or start. |
+| `hq-office.reload` | Restarts the server. Use it after editing `config.env`. With the service installed, it writes the service again with the new settings. |
 | `hq-office.open` | Opens the page without touching the server. |
-| `status` pane | A popup with the server state, open questions, lanes by status, the HQ agent, the data directory and the URL. |
+| `hq-office.install-service` | Runs the server as a per-user service that starts at login and restarts when it stops. Run it again to update the service. |
+| `hq-office.remove-service` | Stops and removes the service. Your data stays. |
+| `hq-office.install-hud` | Puts the `hud` command in `~/.local/bin` for HQ. Run it again to update it. |
+| `status` pane | A popup with the server state, whether the service is installed and running, open questions, lanes by status, the HQ agent, the data directory and the URL. |
+
+## Service mode
+
+The start action runs the server as a background process, which ends when the machine restarts or the server crashes. The install service action makes it a per-user service instead:
+
+```sh
+herdr plugin action invoke hq-office.install-service
+```
+
+- **macOS**: a LaunchAgent, `~/Library/LaunchAgents/dev.hq-office.server.plist`, loaded with `launchctl bootstrap gui/<your uid>`. It runs at login and launchd restarts it whenever it stops (`RunAtLoad`, `KeepAlive`).
+- **Linux**: a systemd user unit, `~/.config/systemd/user/hq-office.service`, with `Restart=always`, enabled and started with `systemctl --user enable --now`. User services run while you are logged in; to keep it running when you are not, and to start it at boot, run `loginctl enable-linger "$USER"` once.
+
+The service runs Bun on the plugin's `server.ts` with the values from `config.env`, `HUD_DATA_DIR` set to the plugin's state directory (the same data the start action uses), and a PATH that includes `~/.bun/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. Its log is `server.log` in the state directory. If something else is already answering on the port, the action stops and says so instead of installing a service that cannot start.
+
+With the service installed, start, stop and restart use it. The settings are written into the service, so after editing `config.env`, or after updating the plugin, run the restart action (or install service again): it writes the service again and restarts it. Stop unloads the service until the next login or the next start; remove service takes it away for good:
+
+```sh
+herdr plugin action invoke hq-office.remove-service
+```
+
+Removing the service never touches the database or the uploads.
+
+## The `hud` command
+
+HQ talks to the server with `hud`. The install hud command action writes `~/.local/bin/hud`, a small script that runs the plugin's `hud.ts` with `HUD_URL` set to your server's address (a `HUD_URL` in the environment still wins):
+
+```sh
+herdr plugin action invoke hq-office.install-hud
+```
+
+It creates `~/.local/bin` if needed and prints what to add to your shell profile if that folder is not on your PATH. Run it again after changing `HUD_PORT` or updating the plugin. If `~/.local/bin/hud` already exists and is not the plugin's own (for example a link to a `hud.ts` somewhere else), the action leaves it alone and prints what it points at; remove it and run the action again to replace it.
 
 ## The question panel and Tell HQ
 
 Questions from HQ appear at the top of the panel, most urgent first. Pick an option or type an answer; it goes to HQ the moment you send it. Tell HQ is a free-text box for anything HQ did not ask about, such as a new priority or a correction. Both are stored, so nothing is lost if HQ is busy.
 
-HQ uses the CLI in `hud.ts` (`bun hud.ts help` from the plugin directory; set `HUD_URL` if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read.
+HQ uses the CLI in `hud.ts` (the `hud` command after the install hud command action, or `bun hud.ts` from the plugin directory with `HUD_URL` set if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read.
 
 ## Secrets
 
@@ -79,6 +115,10 @@ hud item ID add TEXT                         # add an item to an open question
 
 Your typed answer stays on the card through an edit; a picked option the edit removed is unpicked. Comments are information: they never reach HQ's inbox, cost no points and leave the question's timer alone. An item that names a PR (`#1234`, `owner/repo#1234` or a PR link) ticks itself when that PR merges. Its facts come from the work board's GitHub cache, on the board's own refresh, and only while the question is open. When every item is done the question closes itself with the answer "all done". If HQ ticked the last item, it is already acked. If a merge did, it waits in `hud inbox` and is not typed into HQ's session.
 
+## Settings
+
+SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND next to it turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
+
 ## Images
 
 Drop or paste an image into any text box on the page. It is saved in the data directory and its path is put into the text, so HQ can open it.
@@ -99,7 +139,7 @@ Set these in `config.env`. An empty value means the default.
 | `HUD_MACHINES` | this machine | Comma-separated herdr machine labels to poll for agents and sample for CPU and memory. Remote machines need SSH access. |
 | `HERDR_BIN` | `herdr` on PATH | Path to the herdr binary. |
 | `HUD_GH_BIN` | `gh` on PATH | Path to the GitHub CLI, used by the work board. |
-| `HUD_DATA_DIR` | plugin state dir | Where the database and uploads live. The plugin sets it; leave it empty. |
+| `HUD_DATA_DIR` | plugin state dir | Where the database, uploads and settings live. The plugin sets it; leave it empty. |
 
 ## Running without the herdr plugin
 

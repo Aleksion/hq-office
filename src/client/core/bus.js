@@ -4,6 +4,7 @@
 //   "state" (S)      after every /api/state load, once the built-in panels have rendered
 //   "tick"           whenever the page clock wakes: only for a visible change, never on a fixed timer
 //   "room:draw" (now) at the end of every room frame, after the workers; draw with px() from room/canvas.js
+//   "settings" (settings) when the owner's settings change, here, on another page or from the server
 const handlers = new Map();
 
 export function on(name, fn) {

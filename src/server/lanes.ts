@@ -8,7 +8,7 @@ export function laneStatus(lane: Lane, openByLane: Map<string, number>, now: num
   if (openByLane.get(lane.name)) return "needs_you";
   if (lane.phase === "done" || lane.phase === "parked") return lane.phase;
   if (lane.phase === "waiting") return "waiting";
-  if (lane.herdr === "working") return "moving";
+  if (lane.herdr === "working" || lane.bg) return "moving"; // an idle agent with shells or a monitor still running is working
   if (lane.herdr === "gone") return "gone";
   if (lane.herdr_since && now - lane.herdr_since > STALE_MS) return "stale";
   return "hq_turn";

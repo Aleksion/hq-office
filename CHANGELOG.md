@@ -3,6 +3,35 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.3.0] - 2026-10-23
+
+### Added
+
+- **Service mode.** The new **install service** action runs HQ Office as a per-user service that starts when you
+  log in and restarts if it stops: a LaunchAgent on macOS, a systemd user unit on Linux. Run it again after a
+  `config.env` change or a plugin update to rewrite the service and restart it; **remove service** takes it away
+  and leaves your data where it is. With the service installed, start, stop and restart use it instead of a
+  background process, and the status pane says whether the service is installed and running.
+- **The `hud` command, installed for you.** The **install hud command** action puts `hud` in `~/.local/bin`,
+  pointing at the plugin's `hud.ts` and your server's port, and tells you if that folder is not on your PATH. Run
+  it again to update it. It never replaces a `hud` that is not its own; it tells you what that one points at and
+  how to replace it.
+
+### Changed
+
+- **Settings are kept on the server.** Your hero, season, hero hat and SOUND are saved in the data directory, so
+  they survive a restart, a plugin update and clearing your browser's data, and every browser you open HQ Office
+  in shows the same ones. The first time you open the page after updating, the settings your browser remembered
+  are moved to the server.
+
+### Fixed
+
+- **Lanes that were working read as waiting on HQ.** An agent that is idle but still has shells or a monitor running
+  in the background (its pane ends with "2 shells still running" or "monitor still running") now counts as moving,
+  in the room, the top bar and the work board, instead of HQ's turn or stale.
+
 ## [0.2.0] - 2026-10-23
 
 ### Added

@@ -1,12 +1,13 @@
 // Sound: the chime for a new question, generated in the browser, and the SOUND button.
 import { $ } from "../core/dom.js";
+import { on } from "../core/bus.js";
+import { changeSettings, settings } from "../settings/prefs.js";
 
 export let audio = null;
 // Everything is generated in the browser; no audio files. SOUND plays one chime when a new question arrives.
-// The setting is remembered in this browser only. The browser needs a click before it allows sound.
-const pref = (key, fallback) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch { return fallback; } };
-const setPref = (key, on) => { try { localStorage.setItem(key, on ? "1" : "0"); } catch {} };
-export let sound = pref("hq-sound", false);
+// It is one of the owner's settings (settings/prefs.js), kept on the server. The browser needs a click before it
+// allows sound.
+export let sound = settings.sound;
 
 function ensureAudio() {
   audio = audio || new AudioContext();
@@ -36,10 +37,11 @@ function renderSoundButtons() {
 }
 $("alerts").addEventListener("click", () => {
   sound = !sound;
-  setPref("hq-sound", sound);
+  changeSettings({ sound });
   if (sound) { ensureAudio(); chime(); }
   renderSoundButtons();
 });
+on("settings", (s) => { sound = s.sound; renderSoundButtons(); });
 // A saved setting may be on from last time; the first click anywhere unlocks audio for it.
 document.addEventListener("pointerdown", () => { if (sound) ensureAudio(); }, { once: true });
 renderSoundButtons();

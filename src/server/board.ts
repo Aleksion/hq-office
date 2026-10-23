@@ -368,9 +368,9 @@ export function createBoard(opts: {
       } else if (it.paused_reason) {
         state = "paused";
         why = it.paused_reason;
-      } else if (lane?.herdr === "working") {
+      } else if (lane?.herdr === "working" || lane?.bg) {
         state = "moving";
-        why = "lane is working";
+        why = lane?.bg ? `lane is working (${lane.bg})` : "lane is working";
       } else if (lastMove && t - lastMove.at < STALL_MS) {
         state = "moving";
         why = "changed recently";

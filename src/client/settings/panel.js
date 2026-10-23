@@ -3,7 +3,8 @@ import { $ } from "../core/dom.js";
 import { esc } from "../core/format.js";
 import { CONFIG } from "../core/state.js";
 import { HEROES } from "../room/palette.js";
-import { DEFAULTS, saveSettings, setHeroIndex, setSettings, settings } from "./prefs.js";
+import { DEFAULTS, changeSettings, resetSettings, settings } from "./prefs.js";
+import { on } from "../core/bus.js";
 import { SEASONS, chosenSeason, setSeason } from "../room/seasons.js";
 import { ACCESSORIES } from "../room/accessory-table.js";
 import { wornCache } from "../room/accessories.js";
@@ -25,13 +26,12 @@ function renderSettings() {
     + `<div class="sfoot"><button class="btn-s" type="button" data-reset>RESET TO DEFAULTS</button></div>`;
 }
 function renderSettingsButton() { $("settingsBtn").textContent = "SETTINGS"; }
-function applySettings() {
-  saveSettings();
-  setHeroIndex(Math.max(0, HEROES.findIndex((h) => h.name === settings.hero)));
+// The settings changed, here, on another page or from the server: the room picks the season and the hats again.
+on("settings", () => {
   setSeason(chosenSeason());
   wornCache.clear();
-  renderSettings();
-}
+  if (!$("settings").hidden) renderSettings();
+});
 $("settingsBtn").addEventListener("click", () => {
   const panel = $("settings");
   panel.hidden = !panel.hidden;
@@ -39,8 +39,8 @@ $("settingsBtn").addEventListener("click", () => {
 });
 $("settings").addEventListener("click", (e) => {
   const choice = e.target.closest("[data-set]");
-  if (choice) { settings[choice.dataset.set] = choice.dataset.val; applySettings(); return; }
-  if (e.target.closest("[data-reset]")) { setSettings({ ...DEFAULTS }); applySettings(); return; }
+  if (choice) { changeSettings({ [choice.dataset.set]: choice.dataset.val }); return; }
+  if (e.target.closest("[data-reset]")) { resetSettings(); return; }
   if (e.target.closest("[data-close]")) $("settings").hidden = true;
 });
 renderSettingsButton();

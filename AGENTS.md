@@ -7,7 +7,7 @@ If `AGENTS.local.md` exists next to this file, read it too: it holds the rules o
 - `server.ts`, `public/`, `src/`: the server and the page, one file per concern (see the map below).
 - `hud.ts`: HQ's CLI (`hud` when linked onto PATH, or `bun hud.ts`).
 - `src/server/secrets.ts`: the secret drop. Values in server memory only; see the README.
-- `bin/hud-plugin.ts`, `herdr-plugin.toml`: the herdr plugin.
+- `bin/hud-plugin.ts`, `herdr-plugin.toml`: the herdr plugin; `bin/service.ts` (service mode: launchd, systemd), `bin/hud-command.ts` (installs `hud`). Their tests (`test/plugin/`) use a fake home and `test/fake-service.ts` for launchctl and systemctl: never run the real ones from a test.
 
 Rules for anyone changing it:
 - The question panel is the point. A change to the room must never make an open question harder to see or answer.
@@ -30,7 +30,7 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 - `src/client/room/`: the canvas room: `canvas.js` (pixel grid, px, art cache), `sprites.js`, `palette.js`, `scene.js`, `workers.js`, `spots.js`, `collision.js`, `hero.js`, `breakroom.js`, `loop.js`, `input.js`, `seasons.js`, `weather.js`, `accessory-table.js` (data), `accessories.js`, `art.js` (tools for event art), `events.js` (runs the current event), `room.css`.
 - `src/client/room/events/`: one file per event room.
 - `src/client/topbar/`, `questions/`, `tell/`, `feed/`, `card/`, `messages/`, `images/`, `sound/`, `settings/`: one folder per panel or feature, its module(s) and its stylesheet.
-- `src/server/`: one file per concern: `config.ts`, `db.ts`, `push.ts` (version, bump), `router.ts`, `page.ts` (shell, client files, autoreload stamp), `json.ts`, `http.ts`, `herdr.ts`, `lanes.ts`, `asks.ts`, `updates.ts`, `events.ts`, `inbox.ts`, `score.ts`, `state.ts`, `machines.ts` (+ `machine-stats.sh`), `main.ts`.
+- `src/server/`: one file per concern: `config.ts`, `db.ts`, `push.ts` (version, bump), `router.ts`, `page.ts` (shell, client files, autoreload stamp), `json.ts`, `http.ts`, `herdr.ts`, `lanes.ts`, `asks.ts`, `updates.ts`, `events.ts`, `inbox.ts`, `score.ts`, `state.ts`, `machines.ts` (+ `machine-stats.sh`), `settings.ts` (the owner's settings), `main.ts`.
 - `src/server/routes/`: one file per resource; the router loads them all.
 - `src/server/schema/`: one `.sql` file per table, applied at startup.
 - `test/`: the original tests; `test/server/` and `test/client/` mirror `src/`.

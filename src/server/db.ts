@@ -9,5 +9,7 @@ db.exec("PRAGMA journal_mode = WAL;");
 const SCHEMA = join(import.meta.dir, "schema");
 for (const f of readdirSync(SCHEMA).filter((f) => f.endsWith(".sql")).sort()) db.exec(readFileSync(join(SCHEMA, f), "utf8"));
 // Migrations for databases made before a column existed; they run after the tables exist.
+// What an idle agent still has running in the background (for example "2 shells still running"), from its pane.
+if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "bg")) db.exec("ALTER TABLE lanes ADD COLUMN bg TEXT");
 // Names of the secrets an ask requests (JSON array). Names only: values never reach the database.
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "secrets")) db.exec("ALTER TABLE asks ADD COLUMN secrets TEXT");
