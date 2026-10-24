@@ -81,6 +81,19 @@ describe("board.ts with a fake gh and a fake clock", () => {
     s.board.stop();
   });
 
+  test("c2) a cancelled run superseded at the same head does not make CI red; a failed CI gate does", async () => {
+    const run = (name: string, conclusion: string, at: string) => ({ __typename: "CheckRun", name, workflowName: "PR checks", status: "COMPLETED", conclusion, startedAt: at });
+    const old = "2026-01-05T06:00:00Z";
+    const good = [run("Static", "CANCELLED", "2026-01-05T06:01:00Z"), run("Static", "SUCCESS", "2026-01-05T06:05:00Z"), run("CI gate", "SUCCESS", "2026-01-05T06:09:00Z")];
+    const bad = [run("Static", "SUCCESS", "2026-01-05T06:05:00Z"), run("CI gate", "FAILURE", "2026-01-05T06:09:00Z")];
+    const noGate = [run("Static", "FAILURE", "2026-01-05T06:01:00Z"), run("Static", "SUCCESS", "2026-01-05T06:05:00Z")];
+    const s = setup({ 51: pr({ updatedAt: old, statusCheckRollup: good }), 52: pr({ updatedAt: old, statusCheckRollup: bad }), 53: pr({ updatedAt: old, statusCheckRollup: noGate }) });
+    s.board.track({ issue: "OPE-8", lane: "g", prs: ["51", "52", "53"] });
+    await s.board.refresh(0);
+    expect(s.item("OPE-8").prs.map((p: any) => p.ci)).toEqual(["passed", "failed", "passed"]);
+    s.board.stop();
+  });
+
   test("d) no movement and no reason past the threshold shows stalled, first in hud board", async () => {
     const s = setup({ 41: pr({ isDraft: true }), 42: pr({ statusCheckRollup: [check("QUEUED")] }) });
     s.board.track({ issue: "OPE-6", lane: "zeta", prs: ["41"] });

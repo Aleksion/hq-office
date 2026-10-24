@@ -85,7 +85,20 @@ function readChecks(rollup: any[]): { ci: PrFact["ci"]; ciAt: number | null } {
   let running = false;
   let failed = false;
   let at: number | null = null;
+  // The rollup keeps every run at the head sha, so a run superseded by a newer one (CANCELLED when a push
+  // restarts CI) still shows. Only the newest run per check name counts (24 Oct 2026: #3533 read red from
+  // cancelled jobs while its CI gate had passed). A completed "CI gate" decides on its own.
+  const newest = new Map<string, any>();
   for (const c of rollup) {
+    const key = `${c.workflowName ?? ""}\u0000${c.name ?? c.context ?? ""}`;
+    const prev = newest.get(key);
+    if (!prev || (ts(c.startedAt) ?? 0) >= (ts(prev.startedAt) ?? 0)) newest.set(key, c);
+  }
+  const gate = newest.get("PR checks\u0000CI gate") ?? [...newest.values()].find((c) => c.name === "CI gate");
+  if (gate && gate.status === "COMPLETED" && ["SUCCESS", "FAILURE"].includes(gate.conclusion)) {
+    return { ci: gate.conclusion === "SUCCESS" ? "passed" : "failed", ciAt: ts(gate.completedAt) ?? ts(gate.startedAt) };
+  }
+  for (const c of newest.values()) {
     const isRun = c.__typename === "CheckRun" || "conclusion" in c;
     if (isRun) {
       if (c.status && c.status !== "COMPLETED") running = true;
