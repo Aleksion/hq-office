@@ -145,7 +145,9 @@ switch (cmd) {
     break;
   case "tell":
   case "say":
-    await call("POST", "/api/updates", { lane: one("lane"), title: one("title"), body: one("body") });
+    // The text may come as --body or as the trailing words: on 24 Oct 2026 every HQ tell passed it positionally,
+    // it was dropped, and Aleks saw titles only.
+    await call("POST", "/api/updates", { lane: one("lane"), title: one("title"), body: one("body") ?? (rest.join(" ") || undefined) });
     break;
   case "inbox":
     console.log(JSON.stringify(await call("GET", "/api/inbox"), null, 2));
