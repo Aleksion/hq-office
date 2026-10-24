@@ -5,6 +5,20 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-24
+
+### Changed
+
+- **Every send box is one composer, like a chat app.** Tell HQ, each question's answer box and a reply in MESSAGES
+  are now a single rounded box: your images on top, the text field at full width (no more short lines wrapping
+  beside the buttons), and a slim row under it with the photo button on the left and SEND, DONE or OK on the right.
+  The field grows with what you type, up to five lines, then scrolls. On a computer the box stays compact: about
+  22 px taller than before for a question's answer, 16 px for Tell HQ, and about the same for a reply.
+- **Images are thumbnails in the box.** Each attached image is a rounded thumbnail with a small round × on its corner
+  (an easy target on a phone). While it uploads it is dimmed under a spinner; a failed upload gets a red ring and a
+  retry icon (tap it to try again); an image that is too big or that the browser cannot read stays in the box with
+  one line saying why. Tap a thumbnail to see it full screen; tap outside it or the close button to go back.
+
 ## [0.8.0] - 2026-10-24
 
 ### Added

@@ -6,7 +6,7 @@ import { S } from "../core/state.js";
 import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
 import { renderSecretTimes } from "../secrets/secrets.js";
-import { attachButton, chipsBox, clearImages, hasImages, imageKeys } from "../images/images.js";
+import { clearImages, composer, hasImages, imageKeys } from "../images/images.js";
 
 // A question below the fold gets a red pill at the bottom of the list. Click it to go to the next one.
 export function renderBelow() {
@@ -59,12 +59,8 @@ export function renderHud() {
       ${opts ? `<div class="menu">${opts}</div>` : ""}
       ${want.length ? `<div class="asksec">${want.map((n) => `<label><span class="tag secret">${esc(n)}</span><input class="sin val" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore placeholder="paste ${esc(n)}" data-secret="${esc(n)}"></label>`).join("")}
         <label><span class="sk">READABLE FOR</span><input class="sin min" type="number" min="1" max="10080" step="1" autocomplete="off" data-secret-min value="${esc(d.minutes ?? 60)}"><span class="sk">MIN</span></label></div>` : ""}
-      <div class="reply">
-        <textarea rows="1" placeholder="${kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or answer in your own words" : "Your answer"}">${esc(d.text || "")}</textarea>
-        ${attachButton(a.id)}
-        <button class="send ${kind !== "decision" ? "go" : ""}" ${canSend(a, d) ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>
-      </div>
-      ${chipsBox(a.id)}
+      ${composer(a.id, `<textarea rows="1" placeholder="${kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or your own answer" : "Your answer"}">${esc(d.text || "")}</textarea>`,
+        `<button class="send ${kind !== "decision" ? "go" : ""}" ${canSend(a, d) ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>`)}
     </article>`;
   }).join("");
   // Values being pasted are kept in memory only and put back as the input's value, never as markup.

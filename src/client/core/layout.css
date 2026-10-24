@@ -42,7 +42,7 @@
      as blocks so a fade can stick to each end without taking space: it shows where there is more that way
      (data-more, set by messages.js and feed.js). The thread's fades stay inside the box's inner frame. */
   html .msgs, html .feed .body { display: block; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-  html .msgs { max-height: max(240px, calc(100vh - 200px)); max-height: max(240px, calc(100svh - 200px)); }
+  html .msgs { max-height: max(240px, calc(100vh - 230px)); max-height: max(240px, calc(100svh - 230px)); }
   html .feed .body { max-height: max(200px, calc(100vh - 430px)); max-height: max(200px, calc(100svh - 430px)); }
   html .msgs > * + *, html .feed .body > * + * { margin-top: 8px; }
   html .msgs::before, html .msgs::after, html .feed .body::before, html .feed .body::after { content: ""; display: block; position: sticky; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .15s; height: 36px; }

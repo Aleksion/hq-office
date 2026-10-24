@@ -7,7 +7,7 @@ import { post } from "../core/net.js";
 import { renderBelow } from "../questions/questions.js";
 import { renderWork } from "../work-board/work-board.js";
 import { on } from "../core/bus.js";
-import { attachButton, chipsBox, clearImages, hasImages, notReady, withImages } from "../images/images.js";
+import { clearImages, composer, hasImages, notReady, withImages } from "../images/images.js";
 
 // QUESTIONS and MESSAGES share the question column; one shows at a time. The choice is remembered in this browser.
 // MESSAGES is one thread, oldest at the top: HQ's updates and your notes, by time. A reply is an ordinary note
@@ -88,8 +88,7 @@ function msgItem(m, nameParent) {
 function replyBox(m) {
   return `<div class="thread rbox" data-rbox>
       <div class="quote">↩ ${m.who} ${clock(m.at)}: ${esc(short(m.title || m.text, 90))}</div>
-      <div class="reply"><textarea name="reply" rows="2" placeholder="Your reply. ⌘↩ sends, Esc closes.">${esc(replyText)}</textarea>${attachButton("reply")}<button class="send go" type="button" data-rsend ${replyText.trim() || hasImages("reply") ? "" : "disabled"}>SEND</button></div>
-      ${chipsBox("reply")}
+      ${composer("reply", `<textarea name="reply" rows="1" placeholder="Your reply. ⌘↩ sends, Esc closes.">${esc(replyText)}</textarea>`, `<button class="send go" type="button" data-rsend ${replyText.trim() || hasImages("reply") ? "" : "disabled"}>SEND</button>`)}
     </div>`;
 }
 // Two levels of indent at most. Under the second level, every deeper reply sits at that level and names its parent.

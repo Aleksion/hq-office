@@ -4,9 +4,7 @@
 .tell .head { display: flex; align-items: baseline; gap: 10px; }
 .tell h2 { margin: 0; font: 10px/1.4 var(--pixel); }
 .tell .hint { color: var(--muted); font-size: 13px; }
-.tell .compose textarea { min-height: 44px; height: 48px; }
 .tell .lastnote { font-size: 13px; color: #3a3a52; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tell .lastnote b { font: 7px/1 var(--pixel); color: var(--muted); margin-right: 6px; }
 .tell .lastnote button { background: none; border: 0; padding: 0 0 0 6px; font: 7px/1 var(--pixel); color: var(--blue); }
 .compose { display: grid; gap: 8px; }
-.compose textarea { width: 100%; min-height: 70px; resize: vertical; border: 3px solid var(--edge-2); border-radius: 8px; padding: 8px 10px; font: 14px/1.4 var(--text); }
