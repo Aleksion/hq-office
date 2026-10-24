@@ -51,10 +51,15 @@ function parse(argv: string[]) {
 }
 
 async function call(method: string, path: string, body?: unknown) {
+  // A builder's sandbox can refuse the loopback connection (EPERM); say so in one line instead of a stack trace,
+  // so the builder ends with its report in its own pane, where the hand-back relay reads it (24 Oct 2026).
   const res = await fetch(BASE + path, {
     method,
     headers: { "content-type": "application/json", "x-hud": "1" },
     body: body === undefined ? undefined : JSON.stringify(body),
+  }).catch((e: unknown) => {
+    console.error(`HUD unreachable at ${BASE} (${e instanceof Error ? e.message : String(e)}). End with your full report in your own pane; the relay sends it to your lead.`);
+    process.exit(2);
   });
   const data = await res.json();
   if (!res.ok) {
