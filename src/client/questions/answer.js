@@ -4,7 +4,8 @@ import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
 import { copyCode } from "../core/text.js";
 import { post } from "../core/net.js";
-import { renderHud } from "./questions.js";
+import { canSend, renderHud } from "./questions.js";
+import { clearImages, notReady, withImages } from "../images/images.js";
 
 $("main").addEventListener("click", async (e) => {
   const copyBtn = e.target.closest(".copy");
@@ -26,7 +27,9 @@ $("main").addEventListener("click", async (e) => {
   if (opt) { d.opt = d.opt === opt.dataset.opt ? undefined : opt.dataset.opt; drafts.set(id, d); renderHud(); return; }
   if (e.target.closest(".send")) {
     const ask = S.open.find((a) => a.id === id);
-    const text = (d.text || "").trim();
+    const wait = notReady(id);
+    if (wait) { toast(wait); return; }
+    const text = withImages(id, (d.text || "").trim());
     const answer = d.opt ? (text ? `${d.opt}. ${text}` : d.opt) : text || (ask.kind === "action" ? "done" : "seen");
     const values = secretDrafts.get(id);
     if (ask.secrets?.length && values && Object.values(values).some(Boolean)) {
@@ -34,12 +37,12 @@ $("main").addEventListener("click", async (e) => {
       secretDrafts.delete(id);
       for (const inp of card.querySelectorAll("[data-secret]")) inp.value = "";
       e.target.disabled = true;
-      try { await post(`/api/asks/${id}/secrets`, { values, minutes: Number(d.minutes ?? 60), note: d.opt ? answer : text }); drafts.delete(id); toast("SECRETS SAVED. HQ HAS THE NAMES."); }
+      try { await post(`/api/asks/${id}/secrets`, { values, minutes: Number(d.minutes ?? 60), note: d.opt ? answer : text }); drafts.delete(id); clearImages(id); toast("SECRETS SAVED. HQ HAS THE NAMES."); }
       catch (err) { toast(err.message); renderHud(); }
       return;
     }
     e.target.disabled = true;
-    try { await post(`/api/asks/${id}/answer`, { answer }); drafts.delete(id); toast("SENT. HQ HAS IT."); }
+    try { await post(`/api/asks/${id}/answer`, { answer }); drafts.delete(id); clearImages(id); toast("SENT. HQ HAS IT."); }
     catch (err) { toast(err.message); e.target.disabled = false; }
   }
 });
@@ -52,15 +55,13 @@ $("main").addEventListener("input", (e) => {
   if (e.target.dataset.secret !== undefined || e.target.dataset.secretMin !== undefined) {
     if (e.target.dataset.secretMin !== undefined) { d.minutes = e.target.value; drafts.set(id, d); }
     else secretDrafts.set(id, { ...secretDrafts.get(id), [e.target.dataset.secret]: e.target.value });
-    const filled = (ask.secrets ?? []).filter((n) => secretDrafts.get(id)?.[n]).length;
-    card.querySelector(".send").disabled = !(filled ? filled === ask.secrets.length : ask.kind !== "decision" || d.opt || (d.text || "").trim());
+    card.querySelector(".send").disabled = !canSend(ask, d);
     return;
   }
   if (e.target.tagName !== "TEXTAREA") return;
   d.text = e.target.value;
   drafts.set(id, d);
-  const filled = (ask.secrets ?? []).filter((n) => secretDrafts.get(id)?.[n]).length;
-  card.querySelector(".send").disabled = !(filled ? filled === ask.secrets.length : ask.kind !== "decision" || d.opt || d.text.trim());
+  card.querySelector(".send").disabled = !canSend(ask, d);
 });
 $("main").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.target.closest("[data-ask]")?.querySelector(".send")?.click();

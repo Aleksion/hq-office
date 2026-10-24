@@ -5,6 +5,31 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-24
+
+### Added
+
+- **Attach images from a phone.** Every send box (Tell HQ, each question's answer, a reply in MESSAGES) has an
+  ATTACH button beside SEND. On a phone it opens the phone's own menu (photo library, camera, files); on a computer,
+  a file picker. Pick several at once. Each image is shrunk in the browser to at most 2048 px on its longest side,
+  as JPEG (or WebP where that is smaller), so uploads are quick on a phone connection and iPhone HEIC photos, which
+  the server does not take, arrive as JPEG. GIFs and images already small are sent as they are.
+
+### Changed
+
+- **Images show as chips under the box, not as paths in your text.** Picked, dropped or pasted images appear as
+  thumbnails with a × to remove them, and the text box stays clean. On send the `[image: /path]` tokens are added at
+  the end of the message, so HQ receives the same as before. A failed upload shows on its chip with RETRY; an image
+  that is too big or that the browser cannot read says why. Images are part of the draft: they stay through live
+  updates and a reload, and clear once sent.
+- **Drafts survive any reload.** Unsent text, an open reply and attached images used to be kept only when the page
+  reloaded itself after an update; now they are kept on every reload, and when a phone drops the page while its
+  camera is open.
+
+### Fixed
+
+- On a phone, any tap inside MESSAGES or FROM HQ rebuilt the question list, the thread and the log. Only MORE does now.
+
 ## [0.7.2] - 2026-10-24
 
 ### Fixed

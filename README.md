@@ -153,7 +153,11 @@ SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND ne
 
 ## Images
 
-Drop or paste an image into any text box on the page. It is saved in the data directory and its path is put into the text, so HQ can open it.
+Every send box (Tell HQ, each question's answer, a reply in MESSAGES) has an ATTACH button beside SEND. On a phone it opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker, and dropping or pasting an image into a text box works too.
+
+Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the data directory (10 MB at most).
+
+Attached images show as small chips under the box, each with a × to remove it; the text you type stays clean. A failed upload says so on its chip with a RETRY button, and an image that is too big or that the browser cannot read says why. When you send, each image's path is added to the end of your text as `[image: /path]`, which is how HQ opens it. Images are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never the pictures), and are cleared once the message is sent.
 
 ## Configuration
 

@@ -1,11 +1,12 @@
 // The question panel: the open asks, their timers, and the pill for asks out of view.
-import { emit } from "../core/bus.js";
+import { emit, on } from "../core/bus.js";
 import { $, keepPlace } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
 import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
 import { renderSecretTimes } from "../secrets/secrets.js";
+import { attachButton, chipsBox, clearImages, hasImages, imageKeys } from "../images/images.js";
 
 // A question below the fold gets a red pill at the bottom of the list. Click it to go to the next one.
 export function renderBelow() {
@@ -19,6 +20,18 @@ export function renderBelow() {
 $("hud").addEventListener("scroll", renderBelow, { passive: true });
 new ResizeObserver(renderBelow).observe($("hud"));
 
+// An ask for secrets is answered with all of them, or (with none filled) in words, an image, or like any other ask.
+export function canSend(a, d) {
+  const want = a.secrets ?? [];
+  const filled = want.filter((n) => secretDrafts.get(a.id)?.[n]).length;
+  return want.length && filled ? filled === want.length : a.kind !== "decision" || !!d.opt || !!(d.text || "").trim() || hasImages(a.id);
+}
+// A picked, uploaded or removed image can change whether its ask can be sent.
+on("attach", (key) => {
+  const a = S?.open.find((x) => String(x.id) === key), btn = document.querySelector(`[data-ask="${CSS.escape(key)}"] .send`);
+  if (a && btn) btn.disabled = !canSend(a, drafts.get(a.id) || {});
+});
+
 export function renderHud() {
   const hud = $("hud");
   const focused = document.activeElement?.closest?.("[data-ask]")?.dataset.ask;
@@ -31,9 +44,6 @@ export function renderHud() {
     const d = drafts.get(a.id) || {};
     const kind = a.kind;
     const want = a.secrets ?? [];
-    const filled = want.filter((n) => secretDrafts.get(a.id)?.[n]).length;
-    // An ask for secrets is answered with all of them, or (with none filled) in words like any other ask.
-    const canSend = want.length && filled ? filled === want.length : kind !== "decision" || d.opt || (d.text || "").trim();
     const opts = a.options.map((o) => `<button class="opt ${d.opt === o ? "sel" : ""}" data-opt="${esc(o)}">${esc(o)}${a.recommended === o ? ` <span class="pick">HQ PICK</span>` : ""}</button>`).join("");
     return `<article class="box ask" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
       <div class="meta">
@@ -51,12 +61,15 @@ export function renderHud() {
         <label><span class="sk">READABLE FOR</span><input class="sin min" type="number" min="1" max="10080" step="1" autocomplete="off" data-secret-min value="${esc(d.minutes ?? 60)}"><span class="sk">MIN</span></label></div>` : ""}
       <div class="reply">
         <textarea rows="1" placeholder="${kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or answer in your own words" : "Your answer"}">${esc(d.text || "")}</textarea>
-        <button class="send ${kind !== "decision" ? "go" : ""}" ${canSend ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>
+        ${attachButton(a.id)}
+        <button class="send ${kind !== "decision" ? "go" : ""}" ${canSend(a, d) ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>
       </div>
+      ${chipsBox(a.id)}
     </article>`;
   }).join("");
   // Values being pasted are kept in memory only and put back as the input's value, never as markup.
   for (const id of secretDrafts.keys()) if (!S.open.some((a) => a.id === id)) secretDrafts.delete(id);
+  for (const key of imageKeys()) if (/^\d+$/.test(key) && !S.open.some((a) => String(a.id) === key)) clearImages(key);
   const place = keepPlace(hud, "data-ask");
   if (!setHTML(hud, html)) return;
   place();

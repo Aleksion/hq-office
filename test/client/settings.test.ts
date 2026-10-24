@@ -28,11 +28,14 @@ beforeAll(async () => {
   server = await startServer(ROOT);
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-});
+  // The office carries its icon inline; only the plain page below asks for /favicon.ico, whose 404 can be logged at
+  // any time after that page loads. Blocked, it never reaches the errors.
+  await page.s("Network.setBlockedURLs", { urls: ["*/favicon.ico"] });
+}, 30_000);
 
 afterAll(async () => {
   await server?.stop();
-  chrome?.close();
+  await chrome?.close();
 });
 
 test.skipIf(!chromeFound)("settings this browser remembered from before are sent up once", async () => {
@@ -41,7 +44,6 @@ test.skipIf(!chromeFound)("settings this browser remembered from before are sent
   await until(`document.readyState === "complete"`);
   await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ hero: "IVY", season: "winter", hat: "auto" })); localStorage.setItem("hq-sound", "1")`);
   expect(await serverSettings()).toEqual({});
-  errors.length = 0; // that page's missing favicon
   await open();
   for (let i = 0; i < 100 && !Object.keys(await serverSettings()).length; i++) await Bun.sleep(50);
   expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" });

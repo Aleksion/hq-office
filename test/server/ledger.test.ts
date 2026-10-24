@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnServer } from "../../scripts/room-hash.ts";
 import { createBoard } from "../../src/server/board.ts";
 
 const pr = (over: Record<string, any> = {}) => ({ state: "OPEN", isDraft: false, statusCheckRollup: [], mergedAt: null, closedAt: null, updatedAt: null, ...over });
@@ -62,14 +63,11 @@ describe("board.ts: PRs another feature follows", () => {
 // ---- end to end ----
 
 const ROOT = join(import.meta.dir, "..", "..");
-const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-const PORT = probe.port;
-probe.stop(true);
-const BASE = `http://127.0.0.1:${PORT}`;
+let BASE = "";
 const DATA = mkdtempSync(join(tmpdir(), "hq-ledger-test-"));
 const GH_DATA = join(DATA, "gh.json");
 const HERDR_LOG = join(DATA, "herdr.log");
-let server: ReturnType<typeof Bun.spawn>;
+let server: Awaited<ReturnType<typeof spawnServer>>;
 
 const hud = async (...args: string[]) => {
   const p = Bun.spawn([process.execPath, join(ROOT, "hud.ts"), ...args], { env: { ...process.env, HUD_URL: BASE }, stdout: "pipe", stderr: "pipe" });
@@ -86,11 +84,10 @@ const setGh = (prs: Record<number, any>) => writeFileSync(GH_DATA, JSON.stringif
 const HERDR = join(DATA, "herdr");
 
 async function start() {
-  server = Bun.spawn([process.execPath, "server.ts"], {
+  server = await spawnServer({
     cwd: ROOT,
     env: {
       ...process.env,
-      HUD_PORT: String(PORT),
       HUD_HOST: "127.0.0.1",
       HUD_DATA_DIR: DATA,
       HERDR_BIN: HERDR,
@@ -101,19 +98,11 @@ async function start() {
       HUD_GITHUB_REPO: "example/repo",
       FAKE_GH_DATA: GH_DATA,
     },
-    stdout: "ignore",
-    stderr: "ignore",
   });
-  for (const deadline = Date.now() + 8000; Date.now() < deadline; await Bun.sleep(100)) {
-    try {
-      if ((await fetch(`${BASE}/api/state`)).ok) return;
-    } catch {}
-  }
-  throw new Error(`server did not come up on port ${PORT}`);
+  BASE = server.base;
 }
 async function restart() {
-  server.kill();
-  await server.exited;
+  await server.stop();
   await start();
 }
 
@@ -126,8 +115,7 @@ describe("server and hud CLI: the ask ledger", () => {
   });
 
   afterAll(async () => {
-    server?.kill();
-    await server?.exited;
+    await server?.stop();
     rmSync(DATA, { recursive: true, force: true });
   });
 

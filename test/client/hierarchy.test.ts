@@ -27,11 +27,11 @@ beforeAll(async () => {
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.s("Page.navigate", { url: `${server.base}/` });
   await until(`!!document.getElementById("card")?.innerHTML`);
-});
+}, 30_000);
 
 afterAll(async () => {
   await server?.stop();
-  chrome?.close();
+  await chrome?.close();
 });
 
 // Paints one worker in each look of each theme, facing down and up, and returns each painting's pixels as a string.

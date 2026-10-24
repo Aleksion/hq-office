@@ -1,9 +1,10 @@
 // Secret drop. Every server here is a throwaway one on a spare port with a temporary data dir; the CLI is always
 // pointed at it through HUD_URL. Values are obviously fake.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnServer } from "../scripts/room-hash.ts";
 import { createSecretStore, isSecretPath, secretRoute, type Clock } from "../src/server/secrets.ts";
 
 const ROOT = join(import.meta.dir, "..");
@@ -105,45 +106,28 @@ describe("a) set, pipe read, expiry on a fake clock", () => {
 
 // ---- b) to e): the real server.ts, restarted once ----
 
-const PORT = 4900 + Math.floor(Math.random() * 90);
-const BASE = `http://127.0.0.1:${PORT}`;
+let BASE = "";
 const DATA = mkdtempSync(join(tmpdir(), "hq-office-secret-"));
 const LOG = join(DATA, "server.log");
 const PROMPTS = join(DATA, "herdr-prompts.log");
-let server: ReturnType<typeof Bun.spawn> | null = null;
-let logDone: Promise<void> = Promise.resolve();
+let server: Awaited<ReturnType<typeof spawnServer>> | null = null;
 
 // A stand-in herdr: no agents, and every prompt to HQ lands in a file the grep test searches too.
 const HERDR = join(DATA, "fake-herdr");
 writeFileSync(HERDR, `#!/bin/sh\nif [ "$2" = "list" ]; then echo '{"result":{"agents":[]}}'; else printf '%s\\n' "$*" >> '${PROMPTS}'; fi\n`);
 chmodSync(HERDR, 0o755);
 
+// Both of the server's streams go to one log file, as under launchd.
 async function startServer() {
-  const proc = Bun.spawn([process.execPath, "server.ts"], {
+  server = await spawnServer({
     cwd: ROOT,
-    env: { ...process.env, HUD_PORT: String(PORT), HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: HERDR, HUD_LOCAL_MACHINE: "local", HUD_MACHINES: "local" },
-    stdout: "pipe",
-    stderr: "pipe",
+    env: { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: HERDR, HUD_LOCAL_MACHINE: "local", HUD_MACHINES: "local" },
+    out: (chunk) => writeFileSync(LOG, chunk, { flag: "a" }),
   });
-  // Both streams go to one log file, as under launchd.
-  const pump = async (s: ReadableStream<Uint8Array>) => {
-    for await (const chunk of s) writeFileSync(LOG, chunk, { flag: "a" });
-  };
-  logDone = Promise.all([pump(proc.stdout), pump(proc.stderr)]).then(() => {});
-  server = proc;
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(`${BASE}/api/state`)).ok) return;
-    } catch {}
-    await Bun.sleep(100);
-  }
-  throw new Error(`server did not come up on port ${PORT}`);
+  BASE = server.base;
 }
 async function stopServer() {
-  server?.kill();
-  await server?.exited;
-  await logDone;
+  await server?.stop();
   server = null;
 }
 
@@ -200,7 +184,8 @@ test("b) a value appears in no database file, log, prompt, listing or state resp
   await keep(await fetch(`${BASE}/api/machines`));
   await keep(await fetch(`${BASE}/`));
 
-  await Bun.sleep(300);
+  // HQ hears of the answer through the stand-in herdr, a process the server starts and does not wait for.
+  for (const end = Date.now() + 10_000; Date.now() < end && !(existsSync(PROMPTS) && readFileSync(PROMPTS, "utf8").includes("TEST_KEY_ASK")); ) await Bun.sleep(50);
   await stopServer();
   await startServer();
   // A restart clears every secret.
@@ -268,7 +253,7 @@ test("e) a foreign Origin is refused on the secret routes", async () => {
   }
   expect((await hud("/api/secrets/rm", { name: "TEST_KEY_ORIGIN" }, foreign)).status).toBe(403);
   // A rebound DNS name: Origin matches Host, but Host is not this machine.
-  const rebound = await hud("/api/secrets/get", { name: "TEST_KEY_ORIGIN" }, { origin: `http://rebound.example:${PORT}`, host: `rebound.example:${PORT}` });
+  const rebound = await hud("/api/secrets/get", { name: "TEST_KEY_ORIGIN" }, { origin: `http://rebound.example:${server!.port}`, host: `rebound.example:${server!.port}` });
   expect(rebound.status).toBe(403);
   // Without the x-hud header the read is refused too.
   const bare = await fetch(`${BASE}/api/secrets/get`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "TEST_KEY_ORIGIN" }) });

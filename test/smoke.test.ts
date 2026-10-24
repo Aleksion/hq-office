@@ -3,39 +3,20 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnServer } from "../scripts/room-hash.ts";
 
 const ROOT = join(import.meta.dir, "..");
-const PORT = 4800 + Math.floor(Math.random() * 100);
-const BASE = `http://127.0.0.1:${PORT}`;
+let BASE = "";
 const DATA = mkdtempSync(join(tmpdir(), "hq-office-test-"));
-let server: ReturnType<typeof Bun.spawn>;
+let server: Awaited<ReturnType<typeof spawnServer>>;
 
 beforeAll(async () => {
-  server = Bun.spawn([process.execPath, "server.ts"], {
-    cwd: ROOT,
-    env: {
-      ...process.env,
-      HUD_PORT: String(PORT),
-      HUD_HOST: "127.0.0.1",
-      HUD_DATA_DIR: DATA,
-      HERDR_BIN: join(DATA, "no-such-herdr"),
-    },
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(`${BASE}/api/state`)).ok) return;
-    } catch {}
-    await Bun.sleep(100);
-  }
-  throw new Error(`server did not come up on port ${PORT}`);
+  server = await spawnServer({ cwd: ROOT, env: { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: join(DATA, "no-such-herdr") } });
+  BASE = server.base;
 });
 
 afterAll(async () => {
-  server?.kill();
-  await server?.exited;
+  await server?.stop();
   rmSync(DATA, { recursive: true, force: true });
 });
 

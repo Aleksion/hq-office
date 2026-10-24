@@ -6,6 +6,8 @@ import { clipText, linkify, renderBody } from "../core/text.js";
 import { post } from "../core/net.js";
 import { renderBelow } from "../questions/questions.js";
 import { renderWork } from "../work-board/work-board.js";
+import { on } from "../core/bus.js";
+import { attachButton, chipsBox, clearImages, hasImages, notReady, withImages } from "../images/images.js";
 
 // QUESTIONS and MESSAGES share the question column; one shows at a time. The choice is remembered in this browser.
 // MESSAGES is one thread, oldest at the top: HQ's updates and your notes, by time. A reply is an ordinary note
@@ -14,6 +16,8 @@ import { renderWork } from "../work-board/work-board.js";
 const REF = /^re: #([un])(\d+)(?: \("([^"\n]*)"\))?[ \t]*/;
 export let qTab = (() => { try { const t = localStorage.getItem("hq-qtab"); return t === "messages" || t === "work" ? t : "questions"; } catch { return "questions"; } })();
 export let replyTo = null, replyText = "", msgStick = true;
+// The open reply, put back after the page reloads (questions/drafts.js keeps it with the other drafts).
+export function setReply(to, text) { replyTo = to; replyText = text; }
 // Updates marked read by opening the tab keep their tint until you leave it, so you still see what was new.
 const readSent = new Set(), msgFresh = new Set();
 const short = (s, n) => { const t = String(s ?? "").replace(/```[\s\S]*?```/g, "[code]").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
@@ -84,7 +88,8 @@ function msgItem(m, nameParent) {
 function replyBox(m) {
   return `<div class="thread rbox" data-rbox>
       <div class="quote">↩ ${m.who} ${clock(m.at)}: ${esc(short(m.title || m.text, 90))}</div>
-      <div class="reply"><textarea name="reply" rows="2" placeholder="Your reply. ⌘↩ sends, Esc closes.">${esc(replyText)}</textarea><button class="send go" type="button" data-rsend ${replyText.trim() ? "" : "disabled"}>SEND</button></div>
+      <div class="reply"><textarea name="reply" rows="2" placeholder="Your reply. ⌘↩ sends, Esc closes.">${esc(replyText)}</textarea>${attachButton("reply")}<button class="send go" type="button" data-rsend ${replyText.trim() || hasImages("reply") ? "" : "disabled"}>SEND</button></div>
+      ${chipsBox("reply")}
     </div>`;
 }
 // Two levels of indent at most. Under the second level, every deeper reply sits at that level and names its parent.
@@ -141,14 +146,17 @@ function showNewest(box) {
   if (r && (r.bottom < 0 || r.bottom > innerHeight - 12)) scrollBy(0, r.bottom - innerHeight + 12);
 }
 async function sendReply(btn) {
-  const text = replyText.trim();
+  const text = withImages("reply", replyText.trim());
   if (!text || !replyTo) return;
+  const wait = notReady("reply");
+  if (wait) { toast(wait); return; }
   const p = msgModel().byKey.get(replyTo);
   const said = p ? ` ("${short(p.title || p.text, 50).replace(/"/g, "'")}")` : "";
   btn.disabled = true;
   try {
     await post("/api/notes", { text: `re: #${replyTo}${said} ${text}` });
     replyTo = null; replyText = "";
+    clearImages("reply");
     renderMsgs();
     toast("SENT TO HQ.");
   } catch (err) { toast(err.message); btn.disabled = false; }
@@ -158,7 +166,7 @@ $("stall").addEventListener("click", () => setQTab("work"));
 $("msgs").addEventListener("click", (e) => {
   const r = e.target.closest("[data-reply]");
   if (r) {
-    if (replyTo === r.dataset.reply) replyTo = null; else { replyTo = r.dataset.reply; replyText = ""; }
+    if (replyTo === r.dataset.reply) replyTo = null; else { replyTo = r.dataset.reply; replyText = ""; clearImages("reply"); }
     renderMsgs();
     const rb = $("msgs").querySelector("[data-rbox]");
     if (rb) { rb.scrollIntoView({ block: "nearest" }); rb.querySelector("textarea").focus(); }
@@ -169,9 +177,13 @@ $("msgs").addEventListener("click", (e) => {
 });
 $("msgs").addEventListener("scroll", () => showEdges($("msgs")), { passive: true });
 $("msgs").addEventListener("input", (e) => {
-  if (!e.target.closest("[data-rbox]")) return;
+  if (!e.target.closest("[data-rbox]") || e.target.tagName !== "TEXTAREA") return;
   replyText = e.target.value;
-  $("msgs").querySelector("[data-rsend]").disabled = !replyText.trim();
+  $("msgs").querySelector("[data-rsend]").disabled = !replyText.trim() && !hasImages("reply");
+});
+on("attach", (key) => {
+  const btn = key === "reply" && $("msgs").querySelector("[data-rsend]");
+  if (btn) btn.disabled = !replyText.trim() && !hasImages("reply");
 });
 $("msgs").addEventListener("keydown", (e) => {
   if (!e.target.closest("[data-rbox]")) return;

@@ -44,11 +44,11 @@ beforeAll(async () => {
   await page.s("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await page.s("Page.navigate", { url: `${server.base}/` });
   await until(`!!document.querySelector(".ask")`);
-});
+}, 30_000);
 
 afterAll(async () => {
   await server?.stop();
-  chrome?.close();
+  await chrome?.close();
 });
 
 test.skipIf(!chromeFound)("no zoom: the viewport forbids it, and no text field is under 16px", async () => {

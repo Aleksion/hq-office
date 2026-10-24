@@ -1,0 +1,25 @@
+/* Images on a send box: the ATTACH button beside SEND, and the chips under the box. */
+.attach { position: relative; flex: 0 0 40px; display: grid; place-items: center; min-height: 40px; background: var(--box); border: 3px solid var(--edge); border-radius: 8px; color: var(--ink); cursor: pointer; }
+.attach:hover { background: #fff; }
+.attach:focus-within { border-color: var(--blue); }
+.attach input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); font-size: 16px; }
+.attach svg { width: 18px; height: 15px; fill: currentColor; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips:empty { display: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px; border: 2px solid var(--edge-2); border-radius: 6px; background: #fff; max-width: 100%; }
+.chip img, .chip .noimg { display: block; width: 40px; height: 40px; object-fit: cover; border-radius: 3px; background: #e8e8f4; }
+.chip .noimg { display: grid; place-items: center; font: 7px/1 var(--pixel); color: var(--muted); }
+.chip.prep img, .chip.up img { opacity: .45; }
+.chip .cs { font: 7px/1.4 var(--pixel); color: var(--muted); max-width: 140px; }
+.chip.err { border-color: var(--red); }
+.chip.err .cs { color: var(--red); }
+.cbtn { font: 7px/1 var(--pixel); min-height: 26px; padding: 0 7px; border: 2px solid var(--edge); border-radius: 4px; background: var(--box); }
+.cbtn:hover { background: #fff; }
+.cbtn.cx { width: 26px; padding: 0; font: 800 15px/1 var(--text); }
+/* a finger needs bigger targets; the text box gives up a little width so ATTACH and SEND stay on its row */
+@media (pointer: coarse) {
+  .reply textarea { flex-basis: 120px; }
+  .attach { flex-basis: 44px; min-width: 44px; min-height: 44px; }
+  .cbtn { min-height: 40px; padding: 0 10px; }
+  .cbtn.cx { width: 40px; }
+}

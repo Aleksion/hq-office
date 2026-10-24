@@ -4,34 +4,24 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnServer } from "../../scripts/room-hash.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
-const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-const PORT = probe.port;
-probe.stop(true);
-const BASE = `http://127.0.0.1:${PORT}`;
+let BASE = "";
 const PHONE = "https://office.example.ts.net:4747";
 const DATA = mkdtempSync(join(tmpdir(), "hq-office-origins-"));
-let server: ReturnType<typeof Bun.spawn>;
+let server: Awaited<ReturnType<typeof spawnServer>>;
 
 beforeAll(async () => {
-  server = Bun.spawn([process.execPath, "server.ts"], {
+  server = await spawnServer({
     cwd: ROOT,
-    env: { ...process.env, HUD_PORT: String(PORT), HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: join(DATA, "no-such-herdr"), HUD_TRUSTED_ORIGINS: `${PHONE}/` },
-    stdout: "ignore",
-    stderr: "ignore",
+    env: { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: join(DATA, "no-such-herdr"), HUD_TRUSTED_ORIGINS: `${PHONE}/` },
   });
-  for (const deadline = Date.now() + 8000; Date.now() < deadline; await Bun.sleep(100)) {
-    try {
-      if ((await fetch(`${BASE}/api/state`)).ok) return;
-    } catch {}
-  }
-  throw new Error(`server did not come up on port ${PORT}`);
+  BASE = server.base;
 });
 
 afterAll(async () => {
-  server?.kill();
-  await server?.exited;
+  await server?.stop();
   rmSync(DATA, { recursive: true, force: true });
 });
 
