@@ -6,8 +6,8 @@ import { allRequests, answerRequest, fileRequest, nextRequest, openRequests } fr
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
-  { method: "GET", path: "/api/requests", handle: ({ url }) => json(url.searchParams.get("all") ? allRequests() : openRequests()) },
-  { method: "GET", path: "/api/requests/next", handle: () => json(nextRequest()) },
+  { method: "GET", path: "/api/requests", handle: ({ url }) => json(url.searchParams.get("all") ? allRequests(url.searchParams.get("lead") || undefined) : openRequests(url.searchParams.get("lead") || undefined)) },
+  { method: "GET", path: "/api/requests/next", handle: ({ url }) => json(nextRequest(url.searchParams.get("lead") || undefined)) },
   { method: "GET", path: "/api/agents", handle: () => json(db.query("SELECT name, machine, pane, agent, status, since FROM agents ORDER BY machine, pane").all()) },
   { method: "POST", path: "/api/requests", handle: ({ body }) => fileRequest(body) },
   { method: "POST", pattern: /^\/api\/requests\/(\d+)\/answer$/, handle: ({ body, m }) => answerRequest(Number(m[1]), String(body.text ?? "")) },

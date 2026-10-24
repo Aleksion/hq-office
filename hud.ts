@@ -25,11 +25,12 @@
 //   hud secret rm NAME
 //   hud secret list      names, who set them and when they expire; never values
 // requests: what a lane needs from HQ, as a record that closes only when HQ's answer reaches the lane's pane
-//   hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME [--pr N] [--default "what I will do" --by HH:MM|+30m] "verbatim text"
-//                                   a lane files it (NAME is its herdr agent name); --default/--by only on BLOCK or QUESTION,
+//   hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME [--lead NAME] [--pr N] [--default "what I will do" --by HH:MM|+30m] "verbatim text"
+//                                   a lane files it (NAME is its herdr agent name); --lead names who must answer (default: the
+//                                   server resolves it from the orchestration registry, else HQ); --default/--by only on BLOCK or QUESTION,
 //                                   never for a product call: when --by comes the lane goes ahead and the row is marked defaulted
-//   hud req next                    the oldest open request (nothing when the queue is empty)
-//   hud req list [--all] [--json]   open requests, oldest first (--all: closed and defaulted too)
+//   hud req next [--lead NAME]      the oldest open request (nothing when the queue is empty); --lead: only that lead's
+//   hud req list [--lead NAME] [--all] [--json]   open requests, oldest first (--all: closed and defaulted too)
 //   hud req answer ID "text"        types the answer into the lane's pane and closes the row; if it does not
 //                                   reach the pane the row stays open and this exits 1
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
@@ -47,7 +48,8 @@ function parse(argv: string[]) {
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(argv[++i] ?? "");
+    // A flag followed by another flag has no value (hud req list --all --lead HQ).
+    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(argv[i + 1]?.startsWith("--") ? "" : (argv[++i] ?? ""));
     else rest.push(a);
   }
   const one = (k: string) => flags[k]?.at(-1);
@@ -102,7 +104,7 @@ function age(ms: number) {
 }
 
 function showRequest(r: any, full: boolean) {
-  const head = `#${r.id} ${r.kind} ${r.lane}${r.pr ? ` PR #${r.pr}` : ""} ${r.status === "open" ? `open ${age(r.created_at)}` : `${r.status} ${age(r.answered_at ?? r.defaulted_at ?? r.created_at)} ago`}`;
+  const head = `#${r.id} ${r.kind} ${r.lane}${r.pr ? ` PR #${r.pr}` : ""} ${r.status === "open" ? `open ${age(r.created_at)}` : `${r.status} ${age(r.answered_at ?? r.defaulted_at ?? r.created_at)} ago`} lead ${r.lead ?? "HQ"}`;
   if (!full) return `${head}: ${r.text.replace(/\s+/g, " ").slice(0, 100)}`;
   const lines = [head, r.text];
   if (r.default_by) lines.push(`default: ${r.default_action} (${r.status === "open" ? `at ${new Date(r.default_by).toLocaleTimeString()}` : "came due"})`);
@@ -203,25 +205,30 @@ switch (cmd) {
     await secret(argv);
     break;
   case "request": {
-    const out = await call("POST", "/api/requests", { kind: one("kind"), lane: one("lane"), pr: one("pr"), default: one("default"), by: byAt(one("by")), text: rest.join(" ") });
+    const out = await call("POST", "/api/requests", { kind: one("kind"), lane: one("lane"), lead: one("lead"), pr: one("pr"), default: one("default"), by: byAt(one("by")), text: rest.join(" ") });
     if (out.warning) console.error(`warning: ${out.warning}`);
     console.log(`request #${out.id}`);
     break;
   }
   case "req": {
     const [verb, ...more] = rest;
+    const query = (params: Record<string, string> = {}) => {
+      const lead = one("lead")?.trim();
+      const q = new URLSearchParams(lead ? { ...params, lead } : params).toString();
+      return q ? `?${q}` : "";
+    };
     if (verb === "next") {
-      const r = await call("GET", "/api/requests/next");
+      const r = await call("GET", `/api/requests/next${query()}`);
       console.log(r ? showRequest(r, true) : "no open requests");
     } else if (verb === "list") {
-      const list = await call("GET", `/api/requests${"all" in flags ? "?all=1" : ""}`);
+      const list = await call("GET", `/api/requests${query("all" in flags ? { all: "1" } : {})}`);
       if ("json" in flags) console.log(JSON.stringify(list, null, 2));
       else console.log(list.length ? list.map((r: any) => showRequest(r, false)).join("\n") : "no open requests");
     } else if (verb === "answer" && more[0] && more.length > 1) {
       const out = await call("POST", `/api/requests/${more[0]}/answer`, { text: more.slice(1).join(" ") });
       console.log(`request #${out.id} answered: delivered to ${out.lane} and closed`);
     } else {
-      console.error('usage: hud req next | list [--all] [--json] | answer ID "text"');
+      console.error('usage: hud req next [--lead NAME] | list [--lead NAME] [--all] [--json] | answer ID "text"');
       process.exit(2);
     }
     break;

@@ -3,7 +3,8 @@
 // from pane state. Answering delivers and closes in one step: if the pane cannot be reached the row stays open.
 // A BLOCK or QUESTION may carry the lane's own default and a time; when the time comes the row is marked
 // defaulted and drops out of the open queue, because the lane goes ahead on its own.
-import { HERDR, LOCAL } from "./config.ts";
+import { readFileSync } from "node:fs";
+import { HERDR, LOCAL, ORCHESTRATION } from "./config.ts";
 import { db } from "./db.ts";
 import { event } from "./events.ts";
 
@@ -26,10 +27,28 @@ export type RequestRow = {
   answer: string | null;
   answered_at: number | null;
   last_error: string | null;
+  lead: string | null;
 };
 
 // Sends text into a lane's pane. Injected in tests; the real one is herdr.
 export type Deliver = (lane: string, text: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+
+// Who must answer a lane's request, from the orchestration registry: the PM a lane works under, else the orchestrator
+// that lists it, else HQ. A missing or unreadable registry, or an unknown agent, means HQ.
+function resolveLead(lane: string): string {
+  const agent = db.query("SELECT machine, pane FROM agents WHERE name = ?").get(lane) as { machine: string; pane: string } | null;
+  if (!agent || !ORCHESTRATION) return "HQ";
+  try {
+    const reg = JSON.parse(readFileSync(ORCHESTRATION, "utf8"));
+    const key = `${agent.machine} ${agent.pane}`;
+    const pm = reg.under?.[key]?.[0];
+    if (typeof pm === "string" && pm) return pm;
+    for (const [name, o] of Object.entries<any>(reg.orchestrators ?? {})) if (o?.lanes && key in o.lanes) return name;
+  } catch {}
+  return "HQ";
+}
+
+export const leadOf = (r: { lead: string | null }) => r.lead ?? "HQ";
 
 export function fileRequest(body: any, now = Date.now()) {
   const kind = String(body.kind ?? "").toUpperCase();
@@ -46,10 +65,11 @@ export function fileRequest(body: any, now = Date.now()) {
     if (!Number.isFinite(by) || by! <= now) throw new Error("--by must be a time in the future");
   }
   const pr = body.pr === undefined || body.pr === null || body.pr === "" ? null : String(body.pr).replace(/^#/, "");
+  const lead = String(body.lead ?? "").trim() || resolveLead(lane);
   const id = Number(
     db
-      .query("INSERT INTO requests (kind, lane, pr, text, default_action, default_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(kind, lane, pr, text, action, by, now).lastInsertRowid,
+      .query("INSERT INTO requests (kind, lane, pr, text, default_action, default_by, created_at, lead) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(kind, lane, pr, text, action, by, now, lead).lastInsertRowid,
   );
   event(lane, `request #${id} ${kind}${pr ? ` PR #${pr}` : ""}: ${text.slice(0, 120)}`, lane);
   // A lane HQ cannot type into could never be answered; say so while the lane can still fix the name.
@@ -67,19 +87,21 @@ export function expireDefaults(now = Date.now()): boolean {
   return due.length > 0;
 }
 
-// Open requests, oldest first: what HQ still has to answer.
-export function openRequests(now = Date.now()): RequestRow[] {
+// Open requests, oldest first: what HQ still has to answer. With a lead, only that lead's (NULL reads as HQ).
+export function openRequests(lead?: string, now = Date.now()): RequestRow[] {
   expireDefaults(now);
-  return db.query("SELECT * FROM requests WHERE status = 'open' ORDER BY created_at, id").all() as RequestRow[];
+  const rows = db.query("SELECT * FROM requests WHERE status = 'open' ORDER BY created_at, id").all() as RequestRow[];
+  return lead ? rows.filter((r) => leadOf(r) === lead) : rows;
 }
 
-// Everything, newest first, capped: for `hud req list --all`.
-export function allRequests(now = Date.now()): RequestRow[] {
+// Everything, newest first, capped: for `hud req list --all`. With a lead, only that lead's.
+export function allRequests(lead?: string, now = Date.now()): RequestRow[] {
   expireDefaults(now);
-  return db.query("SELECT * FROM requests ORDER BY id DESC LIMIT 200").all() as RequestRow[];
+  const rows = db.query("SELECT * FROM requests ORDER BY id DESC LIMIT 200").all() as RequestRow[];
+  return lead ? rows.filter((r) => leadOf(r) === lead) : rows;
 }
 
-export const nextRequest = (now = Date.now()) => openRequests(now)[0] ?? null;
+export const nextRequest = (lead?: string, now = Date.now()) => openRequests(lead, now)[0] ?? null;
 
 export const herdrDeliver: Deliver = async (lane, text) => {
   const a = db.query("SELECT machine FROM agents WHERE name = ?").get(lane) as { machine: string } | null;
@@ -110,7 +132,7 @@ export async function answerRequest(id: number, answer: string, deliver: Deliver
   if (delivering.has(id)) throw new Error(`request #${id} is being answered right now`);
   delivering.add(id);
   try {
-    const sent = await deliver(r.lane, `HQ answer to your request #${id} (${r.kind}): ${text}`);
+    const sent = await deliver(r.lane, `${leadOf(r)} answer to your request #${id} (${r.kind}): ${text}`);
     if (!sent.ok) {
       db.query("UPDATE requests SET last_error = ? WHERE id = ?").run(sent.error, id);
       throw new Error(`not delivered to ${r.lane}: ${sent.error}. Request #${id} stays open`);

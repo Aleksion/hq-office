@@ -12,4 +12,6 @@ for (const f of readdirSync(SCHEMA).filter((f) => f.endsWith(".sql")).sort()) db
 // What an idle agent still has running in the background (for example "2 shells still running"), from its pane.
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "bg")) db.exec("ALTER TABLE lanes ADD COLUMN bg TEXT");
 // Names of the secrets an ask requests (JSON array). Names only: values never reach the database.
+// Who must answer a request (see requests.ts). Rows filed before the column existed stay NULL and read as HQ.
+if (!(db.query("PRAGMA table_info(requests)").all() as { name: string }[]).some((c) => c.name === "lead")) db.exec("ALTER TABLE requests ADD COLUMN lead TEXT");
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "secrets")) db.exec("ALTER TABLE asks ADD COLUMN secrets TEXT");
