@@ -33,6 +33,7 @@
 //   hud req list [--lead NAME] [--all] [--json]   open requests, oldest first (--all: closed and defaulted too)
 //   hud req answer ID "text"        types the answer into the lane's pane and closes the row; if it does not
 //                                   reach the pane the row stays open and this exits 1
+//   hud req close ID "why"         closes a request whose lane is gone (no live agent), with the reason; refused for a live lane
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
@@ -227,8 +228,11 @@ switch (cmd) {
     } else if (verb === "answer" && more[0] && more.length > 1) {
       const out = await call("POST", `/api/requests/${more[0]}/answer`, { text: more.slice(1).join(" ") });
       console.log(`request #${out.id} answered: delivered to ${out.lane} and closed`);
+    } else if (verb === "close" && more[0] && more.length > 1) {
+      const out = await call("POST", `/api/requests/${more[0]}/close`, { reason: more.slice(1).join(" ") });
+      console.log(`request #${out.id} closed without delivery: ${out.lane} is gone`);
     } else {
-      console.error('usage: hud req next [--lead NAME] | list [--lead NAME] [--all] [--json] | answer ID "text"');
+      console.error('usage: hud req next [--lead NAME] | list [--lead NAME] [--all] [--json] | answer ID "text" | close ID "why"');
       process.exit(2);
     }
     break;

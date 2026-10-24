@@ -109,6 +109,27 @@ test("an answer that does not reach the pane leaves the request open and says so
   expect((await get("/api/requests")).map((r: any) => r.id)).not.toContain(body.id);
 });
 
+test("a request whose lane is gone closes with the reason on the record; a live lane's must still be answered", async () => {
+  const gone = (await file({ kind: "READY", lane: "gone-lane", text: "READY: pushed" })).body;
+  expect((await post(`/api/requests/${gone.id}/answer`, { text: "thanks" })).body.error).toContain("no live herdr agent is named gone-lane");
+  const before = prompts().length;
+  const closed = await post(`/api/requests/${gone.id}/close`, { reason: "the PM took READY from its own review" });
+  expect(closed.status).toBe(200);
+  expect(prompts().length).toBe(before);
+  const row = (await get("/api/requests?all=1")).find((r: any) => r.id === gone.id);
+  expect(row).toMatchObject({ status: "closed", answer: "the PM took READY from its own review", last_error: "not delivered: no live agent named gone-lane" });
+  const live = (await file()).body;
+  const refused = await post(`/api/requests/${live.id}/close`, { reason: "skip it" });
+  expect(refused.status).toBe(400);
+  expect(refused.body.error).toContain(`chat-lane is live: answer it with hud req answer ${live.id}`);
+  expect((await get("/api/requests")).map((r: any) => r.id)).toContain(live.id);
+  expect((await post(`/api/requests/${live.id}/answer`, { text: "done" })).status).toBe(200);
+  const cli = (await file({ lane: "gone-lane" })).body;
+  const out = await hud("req", "close", String(cli.id), "lane", "closed", "after", "its", "push");
+  expect(out).toMatchObject({ code: 0 });
+  expect(out.out).toContain(`request #${cli.id} closed without delivery: gone-lane is gone`);
+});
+
 test("a request with a default is marked defaulted when its time comes, and HQ can still correct the lane", async () => {
   const { body } = await file({ text: "may I use the hub stack?", default: "use the hub stack", by: Date.now() + 700 });
   expect((await get("/api/requests")).map((r: any) => r.id)).toContain(body.id);

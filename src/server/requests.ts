@@ -118,6 +118,23 @@ export const herdrDeliver: Deliver = async (lane, text) => {
   }
 };
 
+// Closes a request whose lane is gone (its pane closed after its push), with the reason on the record. A live lane is
+// refused: its answer must reach its pane, so it is answered, never closed. Why: on 24 Oct 2026 a PM closed a builder's
+// pane after the push and its READY could neither be answered nor closed.
+export function closeRequest(id: number, reason: string, now = Date.now()) {
+  const text = reason.trim();
+  if (!text) throw new Error("the reason is required");
+  const r = db.query("SELECT * FROM requests WHERE id = ?").get(id) as RequestRow | null;
+  if (!r) throw new Error(`no request #${id}`);
+  if (r.status === "closed") throw new Error(`request #${id} is already closed`);
+  if (db.query("SELECT 1 FROM agents WHERE name = ?").get(r.lane)) {
+    throw new Error(`${r.lane} is live: answer it with hud req answer ${id} so the answer reaches its pane`);
+  }
+  db.query("UPDATE requests SET status = 'closed', answer = ?, answered_at = ?, last_error = ? WHERE id = ?").run(text, now, `not delivered: no live agent named ${r.lane}`, id);
+  event("hq", `closed request #${id} from ${r.lane}, which is gone: ${text.slice(0, 120)}`, r.lane);
+  return { id, lane: r.lane };
+}
+
 // Answers can overlap (two HQ turns, a retry): one delivery per request at a time.
 const delivering = new Set<number>();
 

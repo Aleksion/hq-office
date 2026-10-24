@@ -2,7 +2,7 @@
 // folder; see src/server/router.ts.
 import { db } from "../db.ts";
 import { json } from "../json.ts";
-import { allRequests, answerRequest, fileRequest, nextRequest, openRequests } from "../requests.ts";
+import { allRequests, answerRequest, closeRequest, fileRequest, nextRequest, openRequests } from "../requests.ts";
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
@@ -11,5 +11,6 @@ const routes: Route[] = [
   { method: "GET", path: "/api/agents", handle: () => json(db.query("SELECT name, machine, pane, agent, status, since FROM agents ORDER BY machine, pane").all()) },
   { method: "POST", path: "/api/requests", handle: ({ body }) => fileRequest(body) },
   { method: "POST", pattern: /^\/api\/requests\/(\d+)\/answer$/, handle: ({ body, m }) => answerRequest(Number(m[1]), String(body.text ?? "")) },
+  { method: "POST", pattern: /^\/api\/requests\/(\d+)\/close$/, handle: ({ body, m }) => closeRequest(Number(m[1]), String(body.reason ?? "")) },
 ];
 export default routes;
