@@ -4,6 +4,7 @@ import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { bump } from "./push.ts";
 import { event } from "./events.ts";
+import { expireDefaults } from "./requests.ts";
 import { withHint } from "../hq-guide.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
@@ -67,7 +68,7 @@ export async function syncHerdr() {
       bg.set(lane.name, await backgroundWork(hit.machine, hit.agent.pane_id));
     }),
   );
-  let changed = false;
+  let changed = expireDefaults(now);
   // One transaction for the whole sync: one write to disk instead of one per lane, three times a minute.
   db.transaction(() => {
     for (const lane of lanes) {
@@ -95,6 +96,17 @@ export async function syncHerdr() {
       }
       db.query("UPDATE lanes SET herdr_seen = ? WHERE name = ?").run(now, lane.name);
     }
+    // Every named agent, with when its status began: the real stop time of a lane that is in no list.
+    for (const [name, { machine, agent }] of seen) {
+      db.query(
+        `INSERT INTO agents (name, machine, pane, agent, status, since, seen) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(name) DO UPDATE SET machine = excluded.machine, pane = excluded.pane, agent = excluded.agent,
+           since = CASE WHEN agents.status = excluded.status THEN agents.since ELSE excluded.since END,
+           status = excluded.status, seen = excluded.seen`,
+      ).run(name, machine, agent.pane_id, agent.agent, agent.agent_status, now, now);
+    }
+    // An agent that left, on a machine that answered, is no longer a live agent.
+    for (const machine of MACHINES) if (!errors.some((e) => e.startsWith(`${machine}:`))) db.query("DELETE FROM agents WHERE machine = ? AND seen < ?").run(machine, now);
   })();
   untracked = [...seen.entries()]
     .filter(([name]) => !known.has(name))

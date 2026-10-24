@@ -31,7 +31,7 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 - `src/client/room/`: the canvas room: `canvas.js` (pixel grid, px, art cache), `sprites.js`, `palette.js`, `scene.js`, `workers.js`, `spots.js`, `collision.js`, `hero.js`, `breakroom.js`, `loop.js`, `input.js`, `seasons.js`, `weather.js`, `accessory-table.js` (data), `accessories.js`, `art.js` (tools for event art), `events.js` (runs the current event), `room.css`.
 - `src/client/room/events/`: one file per event room.
 - `src/client/topbar/`, `questions/`, `tell/`, `feed/`, `card/`, `messages/`, `images/`, `sound/`, `settings/`: one folder per panel or feature, its module(s) and its stylesheet.
-- `src/server/`: one file per concern: `config.ts`, `db.ts`, `push.ts` (version, bump), `router.ts`, `page.ts` (shell, client files, autoreload stamp), `json.ts`, `http.ts`, `herdr.ts`, `lanes.ts`, `asks.ts`, `updates.ts`, `events.ts`, `inbox.ts`, `score.ts`, `state.ts`, `machines.ts` (+ `machine-stats.sh`), `settings.ts` (the owner's settings), `main.ts`.
+- `src/server/`: one file per concern: `config.ts`, `db.ts`, `push.ts` (version, bump), `router.ts`, `page.ts` (shell, client files, autoreload stamp), `json.ts`, `http.ts`, `herdr.ts`, `lanes.ts`, `asks.ts`, `updates.ts`, `events.ts`, `inbox.ts`, `score.ts`, `state.ts`, `requests.ts` (what a lane asks HQ: file, answer-and-close, defaults), `machines.ts` (+ `machine-stats.sh`), `settings.ts` (the owner's settings), `main.ts`.
 - `src/server/routes/`: one file per resource; the router loads them all.
 - `src/server/schema/`: one `.sql` file per table, applied at startup.
 - `test/`: the original tests; `test/server/` and `test/client/` mirror `src/`.

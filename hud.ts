@@ -24,6 +24,14 @@
 //   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal
 //   hud secret rm NAME
 //   hud secret list      names, who set them and when they expire; never values
+// requests: what a lane needs from HQ, as a record that closes only when HQ's answer reaches the lane's pane
+//   hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME [--pr N] [--default "what I will do" --by HH:MM|+30m] "verbatim text"
+//                                   a lane files it (NAME is its herdr agent name); --default/--by only on BLOCK or QUESTION,
+//                                   never for a product call: when --by comes the lane goes ahead and the row is marked defaulted
+//   hud req next                    the oldest open request (nothing when the queue is empty)
+//   hud req list [--all] [--json]   open requests, oldest first (--all: closed and defaulted too)
+//   hud req answer ID "text"        types the answer into the lane's pane and closes the row; if it does not
+//                                   reach the pane the row stays open and this exits 1
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
@@ -66,6 +74,41 @@ function dueAt(hhmm?: string) {
   const d = new Date();
   d.setHours(h, m ?? 0, 0, 0);
   return d.getTime();
+}
+
+// "HH:MM" is its next occurrence, "+30m" or "+2h" is that long from now, anything else is a date Bun can parse.
+function byAt(raw?: string) {
+  if (!raw) return undefined;
+  const rel = raw.match(/^\+(\d+)([mh])$/);
+  if (rel) return Date.now() + Number(rel[1]) * (rel[2] === "h" ? 3600_000 : 60_000);
+  const clock = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (clock) {
+    const d = new Date();
+    d.setHours(Number(clock[1]), Number(clock[2]), 0, 0);
+    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  const t = Date.parse(raw);
+  if (Number.isNaN(t)) {
+    console.error(`--by: not a time: ${raw} (use HH:MM, +30m or +2h)`);
+    process.exit(2);
+  }
+  return t;
+}
+
+function age(ms: number) {
+  const m = Math.max(0, Math.floor((Date.now() - ms) / 60_000));
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
+}
+
+function showRequest(r: any, full: boolean) {
+  const head = `#${r.id} ${r.kind} ${r.lane}${r.pr ? ` PR #${r.pr}` : ""} ${r.status === "open" ? `open ${age(r.created_at)}` : `${r.status} ${age(r.answered_at ?? r.defaulted_at ?? r.created_at)} ago`}`;
+  if (!full) return `${head}: ${r.text.replace(/\s+/g, " ").slice(0, 100)}`;
+  const lines = [head, r.text];
+  if (r.default_by) lines.push(`default: ${r.default_action} (${r.status === "open" ? `at ${new Date(r.default_by).toLocaleTimeString()}` : "came due"})`);
+  if (r.last_error) lines.push(`last delivery failed: ${r.last_error}`);
+  lines.push(`answer with: hud req answer ${r.id} "<text>"`);
+  return lines.join("\n");
 }
 
 const [cmd, ...argv] = process.argv.slice(2);
@@ -159,6 +202,30 @@ switch (cmd) {
   case "secret":
     await secret(argv);
     break;
+  case "request": {
+    const out = await call("POST", "/api/requests", { kind: one("kind"), lane: one("lane"), pr: one("pr"), default: one("default"), by: byAt(one("by")), text: rest.join(" ") });
+    if (out.warning) console.error(`warning: ${out.warning}`);
+    console.log(`request #${out.id}`);
+    break;
+  }
+  case "req": {
+    const [verb, ...more] = rest;
+    if (verb === "next") {
+      const r = await call("GET", "/api/requests/next");
+      console.log(r ? showRequest(r, true) : "no open requests");
+    } else if (verb === "list") {
+      const list = await call("GET", `/api/requests${"all" in flags ? "?all=1" : ""}`);
+      if ("json" in flags) console.log(JSON.stringify(list, null, 2));
+      else console.log(list.length ? list.map((r: any) => showRequest(r, false)).join("\n") : "no open requests");
+    } else if (verb === "answer" && more[0] && more.length > 1) {
+      const out = await call("POST", `/api/requests/${more[0]}/answer`, { text: more.slice(1).join(" ") });
+      console.log(`request #${out.id} answered: delivered to ${out.lane} and closed`);
+    } else {
+      console.error('usage: hud req next | list [--all] [--json] | answer ID "text"');
+      process.exit(2);
+    }
+    break;
+  }
   // ---- work board ----
   case "track":
     await call("POST", "/api/board/track", { issue: rest[0], lane: one("lane"), prs: flags.pr ?? [] });
@@ -190,7 +257,7 @@ switch (cmd) {
     console.log(GUIDE);
     break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|guide");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|track|done|pause|resume|board|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 

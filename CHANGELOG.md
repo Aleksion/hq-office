@@ -5,6 +5,11 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+### Added
+
+- **Requests: a lane's ask of HQ is a record that closes when the answer arrives.** A lane files `hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME "text"`; HQ runs `hud req next`, `hud req list` and `hud req answer ID "text"`, which types the answer into the lane's pane and closes the request in one step (if the pane is not reached the request stays open). A BLOCK or QUESTION can carry `--default` and `--by`: at that time it is marked defaulted and the lane goes ahead.
+- **`GET /api/agents`** lists every named herdr agent with when its status last changed, from the 20 second sync, so a sweep can tell how long a pane has really been quiet.
+
 ## [0.6.2] - 2026-10-23
 
 ### Fixed

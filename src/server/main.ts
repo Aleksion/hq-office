@@ -12,6 +12,7 @@ import "./score.ts";
 import "./state.ts";
 import "./inbox.ts";
 import "./asks.ts";
+import "./requests.ts";
 import "./machines.ts";
 import "./work-board.ts";
 import "./the-page-stream.ts";
