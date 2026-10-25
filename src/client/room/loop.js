@@ -140,6 +140,9 @@ function drawScene(now, dt) {
       if (!moving && GLYPH[st]) {
         const bounce = st === "needs_you" ? Math.abs(Math.sin(steadyClock(now) / 220)) * 2.5 : 0;
         drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce);
+      } else if (!moving && w.lane.asks) {
+        // Working with a question open: it stays at its desk, and a still "!" says the question is waiting.
+        drawBubble(sx, sy, GLYPH.needs_you[0], GLYPH.needs_you[1], 0);
       }
       drawProp(w, sx, sy);
       if (st === "waiting" && !moving) drawWatchCheck(w, sx, sy, now);

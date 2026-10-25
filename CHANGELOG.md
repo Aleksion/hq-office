@@ -5,6 +5,25 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-25
+
+### Fixed
+
+- **A question no longer makes a working lane look stuck.** A lane can hold a question for you and keep working at
+  the same time. A lane whose agent is working (or still has shells, a monitor or subagents running) now reads as
+  working even with a question open: its worker stays at its desk with a still "!" over its head, and only a lane
+  that has stopped queues at the counter. WAITING ON YOU in the top bar still counts every open question, and the
+  worker card lists the lane's questions.
+- **On the work board, a question holds only the work it is about.** A piece of work waits on you when a question
+  names its issue key or one of its PRs. A question on a lane that names no tracked work holds that lane's work only
+  while the lane is not working. A question that names one issue no longer marks the lane's other issues as waiting
+  on you. Each item still says which question holds it.
+
+### Added
+
+- **`hud update ID --lane L` moves a question to another lane**, and `--lane hq` (or `--lane ""`) takes it off every
+  lane.
+
 ## [0.8.1] - 2026-10-24
 
 ### Changed

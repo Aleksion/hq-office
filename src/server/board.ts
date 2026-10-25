@@ -315,7 +315,16 @@ export function createBoard(opts: {
     const t = now();
     const lanes = new Map((db.query("SELECT * FROM lanes").all() as any[]).map((l) => [l.name, l]));
     const asks = db.query("SELECT id, lane, title, body, status, created_at, answered_at FROM asks WHERE status != 'withdrawn'").all() as any[];
-    const items = rows().map((it) => {
+    const all = rows();
+    // An ask names an item by its issue key or one of its PR numbers, in the title or the body.
+    const prNums = (it: any) => it.prs.map((k: string) => parsePr(k, repo)?.number).filter(Boolean) as number[];
+    const namesItem = (a: any, it: any) => {
+      const text = `${a.title ?? ""}\n${a.body ?? ""}`;
+      if (text.toUpperCase().includes(it.issue)) return true;
+      return prNums(it).some((n) => new RegExp(`(^|[^\\w])#?${n}(?![\\w])`).test(text));
+    };
+    const named = new Map(asks.map((a) => [a.id, new Set(all.filter((it) => namesItem(a, it)).map((it) => it.issue))]));
+    const items = all.map((it) => {
       const prs = it.prs.map((k: string) => {
         const c = cache.get(k);
         return {
@@ -330,16 +339,14 @@ export function createBoard(opts: {
           error: c?.error ?? null,
         };
       });
-      const nums = prs.map((p: any) => p.number).filter(Boolean);
-      const names = (a: any) => {
-        if (it.lane && a.lane === it.lane) return true;
-        const text = `${a.title ?? ""}\n${a.body ?? ""}`;
-        if (text.toUpperCase().includes(it.issue)) return true;
-        return nums.some((n: number) => new RegExp(`(^|[^\\w])#?${n}(?![\\w])`).test(text));
-      };
-      const myAsks = asks.filter(names);
-      const openAsks = myAsks.filter((a) => a.status === "open");
       const lane = it.lane ? lanes.get(it.lane) : null;
+      const working = lane?.herdr === "working" || !!lane?.bg;
+      // An ask is this item's when it names the item, or when it sits on the item's lane and names no tracked item
+      // at all (a question about the lane). One that names another item belongs to that item, even on this lane.
+      const laneAsk = (a: any) => !!it.lane && a.lane === it.lane && !named.get(a.id)!.size;
+      const myAsks = asks.filter((a) => named.get(a.id)!.has(it.issue) || laneAsk(a));
+      // A lane's question holds its work only while the lane is not working: a lane can have both at once.
+      const openAsks = myAsks.filter((a) => a.status === "open" && (named.get(a.id)!.has(it.issue) || !working));
 
       // What last happened: PR update, CI change, lane status change, ask, or a note on the lane.
       const happened: Happened[] = [];
@@ -370,14 +377,15 @@ export function createBoard(opts: {
         why = it.done_at ? "closed by HQ" : "all PRs merged or closed";
       } else if (openAsks.length) {
         state = "owner";
-        why = `ask #${openAsks[0].id}: ${openAsks[0].title}`;
+        const a = openAsks.find((x) => named.get(x.id)!.has(it.issue)) ?? openAsks[0];
+        why = `ask #${a.id}: ${a.title}`;
       } else if (prs.some((p: any) => p.state === "OPEN" && p.ci === "running")) {
         state = "ci";
         why = "a check is running";
       } else if (it.paused_reason) {
         state = "paused";
         why = it.paused_reason;
-      } else if (lane?.herdr === "working" || lane?.bg) {
+      } else if (working) {
         state = "moving";
         why = lane?.bg ? `lane is working (${lane.bg})` : "lane is working";
       } else if (lastMove && t - lastMove.at < STALL_MS) {
