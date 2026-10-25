@@ -12,9 +12,10 @@ const routes: Route[] = [
   // Make a Claude home with no login in it. The owner logs in to it once.
   { method: "POST", path: "/api/accounts/home", handle: async ({ body }) => {
     const name = String(body.name ?? "");
-    makeHome(name);
+    const { mcpNeedsSecret } = makeHome(name);
     await sampleAccounts();
-    return { ok: true, said: `Made the ${name} home. Log in once: CLAUDE_CONFIG_DIR=~/.claude-${name} claude auth login` };
+    const mcp = mcpNeedsSecret.length ? ` ${mcpNeedsSecret.length} MCP server${mcpNeedsSecret.length > 1 ? "s need" : " needs"} their secret set in this home (it is never copied).` : "";
+    return { ok: true, said: `Made the ${name} home. Log in once: CLAUDE_CONFIG_DIR=~/.claude-${name} claude auth login.${mcp}` };
   } },
 ];
 export default routes;

@@ -67,7 +67,7 @@ function laneRow(m, l) {
 function claudeCard(m) {
   const c = m.claude;
   const [label, cls] = c.out ? ["AT ITS LIMIT", "out"] : c.low ? ["LOW", "low"] : c.accounts.filter((a) => a.loggedIn).length > 1 ? ["READY TO MOVE", "ok"] : ["ONE ACCOUNT", "low"];
-  const login = (a) => (a.loggedIn ? "" : `Not logged in. The owner logs in once: <code>CLAUDE_CONFIG_DIR=~/.claude${a.name === "default" ? "" : `-${esc(a.name)}`} claude auth login</code>`);
+  const login = (a) => (a.mcpNeedsSecret?.length ? `${a.mcpNeedsSecret.length} MCP server${a.mcpNeedsSecret.length > 1 ? "s need" : " needs"} their secret in this home: ${a.mcpNeedsSecret.map(esc).join(", ")}. ` : "") + (a.loggedIn ? "" : `Not logged in. The owner logs in once: <code>CLAUDE_CONFIG_DIR=~/.claude${a.name === "default" ? "" : `-${esc(a.name)}`} claude auth login</code>`);
   return `<article class="box acard ${c.out ? "out" : ""}">
     <div class="atop"><h3>CLAUDE · ${esc(m.machine.toUpperCase())}</h3><span class="tag ${cls}">${label}</span></div>
     <p class="aline">Each Claude account is its own home. A moved lane exits and resumes the same conversation on the other account, once it is idle.</p>

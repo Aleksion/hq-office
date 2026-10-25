@@ -1,10 +1,13 @@
 // Accounts: the Claude and Codex accounts on each machine, what each has left, and which lane runs on which. Read once a minute
 // with account-stats.py (names and percentages only, never a credential) and kept in memory: the page shows the
 // latest reading, and nothing here is history.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { DIR, LOCAL, MACHINES } from "./config.ts";
 import { db } from "./db.ts";
 import { SSH_REUSE, sshTarget } from "./machines.ts";
 import { bump } from "./push.ts";
+import { MCP_NOTE, homeDir } from "./claude-home.ts";
 import { addStatePart } from "./state.ts";
 
 export const ACCOUNTS_MS = 60_000;
@@ -71,6 +74,16 @@ function claudeLanes(machine: string) {
   return (db.query("SELECT name, herdr FROM lanes WHERE machine = ? AND agent = 'claude' AND herdr != 'gone' ORDER BY name").all(machine) as { name: string; herdr: string | null }[]).map((l) => ({ name: l.name, status: l.herdr, account: moved.get(l.name) ?? "default" }));
 }
 
+// The names of the MCP servers a home was made without a secret for (written by makeHome; names only).
+function mcpNeedsSecretIn(account: string): string[] {
+  try {
+    const names = JSON.parse(readFileSync(join(homeDir(account), MCP_NOTE), "utf8"));
+    return Array.isArray(names) ? names.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function accountsView(now = Date.now()) {
   return MACHINES.map((machine) => {
     const s = samples.get(machine);
@@ -81,6 +94,7 @@ export function accountsView(now = Date.now()) {
       name: h.name,
       loggedIn: h.logged_in,
       lanes: lanes.filter((l) => l.account === h.name).map((l) => l.name),
+      mcpNeedsSecret: machine === LOCAL ? mcpNeedsSecretIn(h.name) : [],
       ...judge(window(h.windows.session?.left, ms(h.windows.session?.resets_at), now), window(h.windows.weekly?.left, ms(h.windows.weekly?.resets_at), now)),
     }));
     const used = accounts.filter((a) => a.lanes.length);

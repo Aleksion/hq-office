@@ -13,7 +13,7 @@ const ROOT = join(import.meta.dir, "..", "..");
 const TMP = realpathOf(mkdtempSync(join(tmpdir(), "hq-office-accounts-")));
 const HOME = join(TMP, "home");
 const DATA = join(TMP, "data");
-const SECRETS = ["FAKE-EMAIL-1@example.invalid", "FAKE-CLAUDE-KEY-1", "FAKE-CODEX-TOKEN-1", "FAKE-CODEX-TOKEN-2", "FAKE-PLAN-1", "FAKE-LOGIN-FILE-1", "FAKE-USER-ID-1", "FAKE-MCP-TOKEN-1"];
+const SECRETS = ["FAKE-EMAIL-1@example.invalid", "FAKE-CLAUDE-KEY-1", "FAKE-CODEX-TOKEN-1", "FAKE-CODEX-TOKEN-2", "FAKE-PLAN-1", "FAKE-LOGIN-FILE-1", "FAKE-USER-ID-1", "FAKE-MCP-TOKEN-1", "FAKE-MCP-HEADER-1"];
 const hour = 3600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -35,7 +35,7 @@ const CLAUDE_JSON = {
   customApiKeyResponses: { approved: [SECRETS[1]] },
   hasAvailableSubscription: true,
   machineID: "FAKE-MACHINE-1",
-  mcpServers: { files: { command: "files-mcp", env: { TOKEN: SECRETS[7] } } },
+  mcpServers: { files: { command: "files-mcp", env: { TOKEN: SECRETS[7] } }, remote: { type: "http", url: "https://mcp.example.invalid", headers: { Authorization: SECRETS[8] } }, plain: { command: "plain-mcp", args: ["-x"] } },
   hasCompletedOnboarding: true,
   lastOnboardingVersion: "2.1.0",
   theme: "dark",
@@ -57,6 +57,7 @@ beforeAll(() => {
   write(join(HOME, ".claude/settings.json"), "{}");
   write(join(HOME, ".claude/projects/-work-app/sess-1.jsonl"), "{}\n");
   write(join(HOME, ".claude/skills/one/SKILL.md"), "# one\n");
+  write(join(HOME, ".claude/backups/.claude.json.backup.1"), JSON.stringify(CLAUDE_JSON));
   write(join(HOME, ".claude.json"), JSON.stringify(CLAUDE_JSON));
   // Two more homes: work (its login is a keychain item) and spare (never logged in). ~/.claude-code-router is not a home.
   write(join(HOME, ".claude-work/.claude.json"), "{}");
@@ -121,15 +122,18 @@ test("a new home links everything but a login file, and its .claude.json starts 
   const realHome = process.env.HOME;
   process.env.HOME = HOME;
   try {
-    const { homeDir, makeHome, showsDialog, relaunchCommand, SEED_KEYS } = await import("../../src/server/claude-home.ts");
+    const { homeDir, makeHome, dialogKind, relaunchCommand, SEED_KEYS } = await import("../../src/server/claude-home.ts");
     // Never make a home outside the fake one: check the path before anything is written.
     expect(homeDir("fresh")).toBe(join(HOME, ".claude-fresh"));
     expect(() => makeHome("Bad Name")).toThrow();
     expect(() => makeHome("default")).toThrow();
-    const dir = makeHome("fresh");
+    const { dir, mcpNeedsSecret } = makeHome("fresh");
+    expect(mcpNeedsSecret).toEqual(["files", "remote"]);
     expect(dir).toBe(join(HOME, ".claude-fresh"));
     // Settings, skills and session transcripts are shared, so --resume finds the same session from either home.
-    expect(readdirSync(dir).sort()).toEqual([".claude.json", "projects", "settings.json", "skills"]);
+    // The backups folder holds the default account's identity, so it is not shared.
+    expect(readdirSync(dir).sort()).toEqual([".claude.json", ".hq-office-mcp-needs-secret.json", "projects", "settings.json", "skills"]);
+    expect(JSON.parse(readFileSync(join(dir, ".hq-office-mcp-needs-secret.json"), "utf8"))).toEqual(["files", "remote"]);
     for (const entry of ["projects", "settings.json", "skills"]) {
       expect(lstatSync(join(dir, entry)).isSymbolicLink()).toBe(true);
       expect(readlinkSync(join(dir, entry))).toBe(join(HOME, ".claude", entry));
@@ -146,24 +150,33 @@ test("a new home links everything but a login file, and its .claude.json starts 
     for (const key of IDENTITY) expect(seeded).not.toHaveProperty(key);
     // Of a project only its trust and approvals cross, not its last session or cost.
     expect(seeded.projects["/work/app"]).toEqual({ hasTrustDialogAccepted: true, allowedTools: ["Bash(ls)"], enabledMcpjsonServers: ["files"] });
-    expect(seeded.mcpServers.files.command).toBe("files-mcp");
-    for (const s of [SECRETS[0], SECRETS[1], SECRETS[5], SECRETS[6], "FAKE-ACCOUNT-UUID-1", "FAKE-SESSION-1"]) expect(readFileSync(join(dir, ".claude.json"), "utf8")).not.toContain(s);
+    // MCP servers cross without their env or headers: a secret is never duplicated into another home.
+    expect(seeded.mcpServers).toEqual({ files: { command: "files-mcp" }, remote: { type: "http", url: "https://mcp.example.invalid" }, plain: { command: "plain-mcp", args: ["-x"] } });
+    for (const s of [SECRETS[0], SECRETS[1], SECRETS[5], SECRETS[6], SECRETS[7], SECRETS[8], "FAKE-ACCOUNT-UUID-1", "FAKE-SESSION-1"]) expect(readFileSync(join(dir, ".claude.json"), "utf8")).not.toContain(s);
     expect(statSync(join(dir, ".claude.json")).mode & 0o777).toBe(0o600);
     expect(() => makeHome("fresh")).toThrow(/already exists/);
+    // A config that cannot be read gives no home at all, not a home with no trust.
+    writeFileSync(join(HOME, ".claude.json"), "{ half");
+    expect(() => makeHome("broken")).toThrow(/could not read/);
+    expect(existsSync(join(HOME, ".claude-broken"))).toBe(false);
+    writeFileSync(join(HOME, ".claude.json"), JSON.stringify(CLAUDE_JSON));
 
     // The relaunch: the lane's own home through the environment, the same session, and its own status line.
     expect(relaunchCommand("work", "sess-1", "/d/s.json")).toBe(`CLAUDE_CONFIG_DIR='${HOME}/.claude-work' claude --resume 'sess-1' --settings '/d/s.json'`);
     expect(relaunchCommand("default", "sess-1", "/d/s.json")).toBe("env -u CLAUDE_CONFIG_DIR claude --resume 'sess-1' --settings '/d/s.json'");
     expect(relaunchCommand("work", "it's", "/d/s.json")).toContain(`--resume 'it'\\''s'`);
 
-    // A lane at a prompt is not showing a dialog; one at its limit, or at a credits offer, is.
-    expect(showsDialog(PROMPT)).toBe(false);
-    expect(showsDialog(WORKING)).toBe(false);
-    expect(showsDialog(LIMIT)).toBe(true);
-    expect(showsDialog(CREDITS)).toBe(true);
-    expect(showsDialog(EXTRA)).toBe(true);
-    // Only the bottom of the screen counts: an old mention far up the scrollback is not a dialog.
-    expect(showsDialog(`You've hit your session limit\n${"\n.".repeat(60)}\n${PROMPT}`)).toBe(false);
+    // A lane at a prompt is not showing a dialog. A choice menu is, and its wording says which kind.
+    expect(dialogKind(PROMPT)).toBe(null);
+    expect(dialogKind(WORKING)).toBe(null);
+    expect(dialogKind(LIMIT)).toBe("limit");
+    expect(dialogKind(CREDITS)).toBe("limit");
+    expect(dialogKind(BUDGET)).toBe("limit");
+    expect(dialogKind(EXTRA)).toBe("limit");
+    expect(dialogKind(PERMISSION)).toBe("prompt");
+    // A limit message left in the scrollback above an idle prompt is the lane to move, not a dialog.
+    expect(dialogKind(PAST_LIMIT)).toBe(null);
+    expect(dialogKind(`You've hit your limit\n${"\n.".repeat(60)}\n${PROMPT}`)).toBe(null);
   } finally {
     process.env.HOME = realHome;
   }
@@ -172,9 +185,13 @@ test("a new home links everything but a login file, and its .claude.json starts 
 // Screens as the pane shows them (the wording is the one Claude Code 2.1.310 ships).
 const PROMPT = "● Done. The tests pass.\n\n╭────────────────────────────╮\n│ ❯                          │\n╰────────────────────────────╯\n  ? for shortcuts";
 const WORKING = "✻ Thinking… (12s · esc to interrupt)\n\n╭────────────────────────────╮\n│ ❯                          │\n╰────────────────────────────╯";
-const LIMIT = "  You've hit your weekly limit · resets Mon 9:00\n\n  What do you want to do?\n\n  ❯ 1. Stop and wait for limit to reset\n    2. Upgrade your plan\n\n  Enter to confirm · Esc to cancel";
-const CREDITS = "  You've hit your session limit.\n\n  ❯ 1. Add funds to continue with usage credits\n    2. Stop and wait for limit to reset";
+const LIMIT = "  You've hit your limit · resets Mon 9:00\n\n  What do you want to do?\n\n  ❯ 1. Stop and wait for limit to reset\n    2. Upgrade your plan\n\n  Enter to confirm · Esc to cancel";
+const CREDITS = "  Usage limit reached\n\n  ❯ 1. Add funds to continue with usage credits\n    2. Stop and wait for limit to reset";
+const BUDGET = "  You've hit your team's shared budget. Run /usage-credits to raise it\n  ❯ 1. Switch to another model\n    2. Wait\n  Enter to confirm";
 const EXTRA = "  Request extra usage from your admin\n  ❯ 1. /extra-usage\n    2. Wait";
+const PERMISSION = "  Bash command\n    rm -rf build\n  Do you want to proceed?\n  ❯ 1. Yes\n    2. No\n  Esc to cancel";
+const PAST_LIMIT = `● You've hit your limit · resets Mon 9:00\n\n${PROMPT}`;
+const BACKGROUND = `${PROMPT}\n  2 shells still running`;
 
 // ---- the server: a fake herdr and the fake security ----
 
@@ -192,33 +209,60 @@ const api = (path: string, body: object) => fetch(`${server.base}${path}`, { met
 const move = (lane: string, account: string) => api("/api/accounts/move", { lane, account });
 const state = async (): Promise<any> => (await fetch(`${server.base}/api/state`)).json();
 
-test("the server moves an idle lane to a logged-in account, and refuses the rest", async () => {
-  // The fake herdr: lists agents from agents.json, shows screen.txt, and reports the pane's agent gone once it is
-  // told /exit. It logs every call.
+// The fake herdr: lists agents from agents.json, shows screen.txt, and logs every call. Like the real one it clears the
+// agent's name when the agent exits, and a pane run starts an agent again (unnamed) unless a flag file says otherwise.
+// Flag files in TMP: noexit, getfail, runfail, noreturn, othersession (applies once pane run has run).
+function installHerdr() {
   write(HERDR, `#!/bin/sh
 echo "$@" >> "${TMP}/herdr-calls"
 case "$1 $2" in
-  "agent list") cat "${TMP}/agents.json" ;;
+  "agent list")
+    out=$(cat "${TMP}/agents.json")
+    [ -e "${TMP}/unnamed" ] && out=$(echo "$out" | sed 's/"name":"lane-a"/"name":null/')
+    [ -e "${TMP}/othersession" ] && [ -e "${TMP}/ran" ] && out=$(echo "$out" | sed 's/sess-1/sess-other/')
+    echo "$out" ;;
   "pane read") cat "${TMP}/screen.txt" ;;
-  "pane get") if [ -e "${TMP}/exited" ]; then echo '{"result":{"pane":{"pane_id":"w1:p1"}}}'; else echo '{"result":{"pane":{"pane_id":"w1:p1","agent":"claude"}}}'; fi ;;
-  "agent prompt") [ "$4" = "/exit" ] && touch "${TMP}/exited" ;;
+  "pane get")
+    if [ -e "${TMP}/exited" ]; then
+      [ -e "${TMP}/getfail" ] && { echo "pane gone" >&2; exit 1; }
+      echo '{"result":{"pane":{"pane_id":"w1:p1"}}}'
+    else echo '{"result":{"pane":{"pane_id":"w1:p1","agent":"claude"}}}'; fi ;;
+  "agent prompt") if [ "$4" = "/exit" ] && [ ! -e "${TMP}/noexit" ]; then touch "${TMP}/exited" "${TMP}/unnamed"; fi ;;
+  "pane run") [ -e "${TMP}/runfail" ] && { echo "pane run failed" >&2; exit 1; }; touch "${TMP}/ran"; [ -e "${TMP}/noreturn" ] || rm -f "${TMP}/exited" ;;
+  "agent rename") rm -f "${TMP}/unnamed" ;;
 esac
 exit 0
 `);
   chmodSync(HERDR, 0o755);
+}
+const FLAGS = ["exited", "unnamed", "noexit", "getfail", "runfail", "noreturn", "othersession", "ran"];
+const flag = (...names: string[]) => names.forEach((n) => writeFileSync(join(TMP, n), ""));
+const sentToLane = () => calls().filter((c) => /^(agent prompt lane-|pane run|agent rename)/.test(c));
+const startServer = (extra: Record<string, string> = {}) =>
+  spawnServer({ cwd: ROOT, env: { ...process.env, HOME, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: HERDR, HQ_SECURITY_BIN: join(TMP, "bin/security"), HUD_LOCAL_MACHINE: "local", HUD_MACHINES: "local", ...extra } });
+const accountsReady = async () => {
+  for (let i = 0; i < 100; i++) {
+    const s = await state();
+    if (s.lanes.find((l: any) => l.name === "lane-a")?.agent === "claude" && s.accounts[0]?.ok) return;
+    await Bun.sleep(100);
+  }
+};
+
+test("the server moves an idle lane to a logged-in account, and refuses the rest", async () => {
+  installHerdr();
   scene(agent({}));
-  server = await spawnServer({ cwd: ROOT, env: { ...process.env, HOME, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: HERDR, HQ_SECURITY_BIN: join(TMP, "bin/security"), HUD_LOCAL_MACHINE: "local", HUD_MACHINES: "local" } });
+  for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
+  server = await startServer();
   try {
     await api("/api/lanes", { name: "lane-a", machine: "local" });
     await api("/api/lanes", { name: "lane-b", machine: "local" });
     // The lane's herdr sync fills in its agent; the accounts are read once at start.
-    for (let i = 0; i < 100; i++) {
-      const s = await state();
-      if (s.lanes.find((l: any) => l.name === "lane-a")?.agent === "claude" && s.accounts[0]?.ok) break;
-      await Bun.sleep(100);
-    }
+    await accountsReady();
     const view = (await state()).accounts[0].claude;
     expect(view.accounts.map((a: any) => [a.name, a.loggedIn, a.lanes])).toEqual([["default", true, ["lane-a"]], ["fresh", false, []], ["spare", false, []], ["work", true, []]]);
+    // The panel hears which MCP servers a home was made without a secret for (names only).
+    expect(view.accounts.find((a: any) => a.name === "fresh").mcpNeedsSecret).toEqual(["files", "remote"]);
+    expect(view.accounts.find((a: any) => a.name === "work").mcpNeedsSecret).toEqual([]);
     expect(view.accounts.find((a: any) => a.name === "work").weekly.left).toBe(60);
     expect(view.lanes).toEqual([{ name: "lane-a", status: expect.any(String), account: "default" }]);
     const page = JSON.stringify(await state());
@@ -229,7 +273,7 @@ exit 0
     expect((await move("lane-a", "nobody")).error).toMatch(/no Claude home named nobody/);
     expect((await move("nolane", "work")).error).toMatch(/no lane named/);
     expect((await move("lane-a", "default")).error).toMatch(/already runs on default/);
-    expect(calls().filter((c) => c.startsWith("agent prompt") || c.startsWith("pane run"))).toEqual([]);
+    expect(sentToLane()).toEqual([]);
 
     // Refused: the lane is working, or its session id is unknown.
     scene(agent({ agent_status: "working" }));
@@ -238,34 +282,42 @@ exit 0
     expect((await move("lane-a", "work")).error).toMatch(/session id is unknown/);
     scene(agent({ agent_session: { kind: "id", value: "" } }));
     expect((await move("lane-a", "work")).error).toMatch(/session id is unknown/);
-    expect(calls().filter((c) => c.startsWith("agent prompt") || c.startsWith("pane run"))).toEqual([]);
+    // Refused: background work that /exit would end, though herdr calls the lane idle.
+    scene(agent({}), BACKGROUND);
+    expect((await move("lane-a", "work")).error).toMatch(/background work \(2 shells still running\)/);
+    expect(sentToLane()).toEqual([]);
 
-    // Refused: a dialog is showing. Nothing is typed, and a question is filed once, however often it is tapped.
-    for (const [status, screen] of [["idle", LIMIT], ["done", CREDITS], ["blocked", PROMPT]] as const) {
+    // Refused: a choice menu is showing. Nothing is typed, and a question is filed once per kind, however often it is tapped.
+    for (const [status, screen] of [["idle", LIMIT], ["done", CREDITS], ["idle", BUDGET], ["idle", PERMISSION], ["blocked", PROMPT]] as const) {
       scene(agent({ agent_status: status }), screen);
       expect((await move("lane-a", "work")).error).toMatch(/shows a dialog.*question is filed/);
-      expect(calls().filter((c) => c.startsWith("agent prompt") || c.startsWith("pane run"))).toEqual([]);
+      expect(sentToLane()).toEqual([]);
     }
     const open = (await state()).open.filter((a: any) => a.lane === "lane-a");
-    expect(open.map((a: any) => a.title)).toEqual(["lane-a shows a limit or credits dialog"]);
-    expect(open[0].body).toContain("never types into");
+    expect(open.map((a: any) => a.title).sort()).toEqual(["lane-a shows a limit/credits dialog", "lane-a shows a permission prompt"]);
+    expect(open.find((a: any) => /limit/.test(a.title)).body).toContain("never types into a limit/credits dialog");
+    for (const a of open) await api(`/api/asks/${a.id}/answer`, { answer: "Answered in the pane" });
 
-    // Moved: /exit, then the lane's own home, the same session and its status line, through herdr.
-    scene(agent({}));
+    // Moved, from a lane that hit its limit earlier: the message above an idle prompt is no dialog. /exit, then the
+    // lane's own home, the same session and its status line; the lane gets its name back.
+    scene(agent({}), PAST_LIMIT);
+    for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
     const ok = await move("lane-a", "work");
     expect(ok).toMatchObject({ status: 200, said: "lane-a moved to work" });
-    const sent = calls().filter((c) => c.startsWith("agent prompt") || c.startsWith("pane run"));
-    expect(sent).toEqual([
+    expect(sentToLane()).toEqual([
       "agent prompt lane-a /exit",
       `pane run w1:p1 CLAUDE_CONFIG_DIR='${HOME}/.claude-work' claude --resume 'sess-1' --settings '${DATA}/claude-lane-work.settings.json'`,
+      "agent rename w1:p1 lane-a",
     ]);
+    expect(existsSync(join(TMP, "unnamed"))).toBe(false);
     expect(JSON.parse(readFileSync(join(DATA, "claude-lane-work.settings.json"), "utf8")).statusLine.command).toContain("claude-statusline.py' 'work'");
     const after = (await state()).accounts[0].claude;
     expect(after.accounts.map((a: any) => [a.name, a.lanes])).toEqual([["default", []], ["fresh", []], ["spare", []], ["work", ["lane-a"]]]);
     // Moving back is the same act.
     scene(agent({}));
+    for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
     expect((await move("lane-a", "default")).said).toBe("lane-a moved to default");
-    expect(calls().pop()).toBe("pane run w1:p1 env -u CLAUDE_CONFIG_DIR claude --resume 'sess-1' --settings '" + DATA + "/claude-lane-default.settings.json'");
+    expect(sentToLane()[1]).toBe("pane run w1:p1 env -u CLAUDE_CONFIG_DIR claude --resume 'sess-1' --settings '" + DATA + "/claude-lane-default.settings.json'");
     // The default keychain item and the planted login files were never written: the fake keychain is as it was.
     expect(readFileSync(join(TMP, "keychain"), "utf8")).toBe(`${service(join(HOME, ".claude-work"))}\n`);
     for (const c of readFileSync(join(TMP, "security-calls"), "utf8").trim().split("\n")) expect(c.startsWith("find-generic-password -s ")).toBe(true);
@@ -273,25 +325,70 @@ exit 0
     // A home is made through the panel's route: no login in it, and it shows up not logged in.
     const made = await api("/api/accounts/home", { name: "third" });
     expect(made.said).toContain("CLAUDE_CONFIG_DIR=~/.claude-third claude auth login");
+    expect(made.said).toContain("2 MCP servers need their secret set in this home");
     expect(existsSync(join(HOME, ".claude-third/.credentials.json"))).toBe(false);
     expect((await api("/api/accounts/home", { name: "../x" })).error).toBeTruthy();
     expect((await state()).accounts[0].claude.accounts.find((a: any) => a.name === "third").loggedIn).toBe(false);
   } finally {
     await server.stop();
   }
-});
+}, 60_000);
 
-test("a lane that never exits is not relaunched or recorded", async () => {
-  write(HERDR, `#!/bin/sh\necho "$@" >> "${TMP}/herdr-calls"\ncase "$1 $2" in\n  "agent list") cat "${TMP}/agents.json" ;;\n  "pane read") cat "${TMP}/screen.txt" ;;\n  "pane get") echo '{"result":{"pane":{"agent":"claude"}}}' ;;\nesac\nexit 0\n`);
+test("two moves at once: the second is refused before anything is sent twice", async () => {
+  installHerdr();
   scene(agent({}));
-  server = await spawnServer({ cwd: ROOT, env: { ...process.env, HOME, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: DATA, HERDR_BIN: HERDR, HQ_SECURITY_BIN: join(TMP, "bin/security"), HUD_LOCAL_MACHINE: "local", HUD_MACHINES: "local", HUD_MOVE_EXIT_WAIT_MS: "1200" } });
+  for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
+  server = await startServer();
   try {
-    // lane-a is on default from the last test's move back.
-    expect((await move("lane-a", "work")).error).toMatch(/did not exit, so nothing was relaunched/);
-    expect(calls().filter((c) => c.startsWith("agent prompt") || c.startsWith("pane run"))).toEqual(["agent prompt lane-a /exit"]);
-    for (let i = 0; i < 50 && !(await state()).accounts[0]?.ok; i++) await Bun.sleep(100);
-    expect((await state()).accounts[0].claude.lanes.map((l: any) => [l.name, l.account])).toEqual([["lane-a", "default"]]);
+    await accountsReady();
+    const [a, b] = await Promise.all([move("lane-a", "work"), move("lane-a", "work")]);
+    expect([a.said, b.said].filter(Boolean)).toEqual(["lane-a moved to work"]);
+    expect([a.error, b.error].filter(Boolean)).toEqual([expect.stringMatching(/already being moved/)]);
+    expect(sentToLane().filter((c) => c.startsWith("pane run")).length).toBe(1);
+    // Back on default for the next test.
+    scene(agent({}));
+    for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
+    expect((await move("lane-a", "default")).said).toBe("lane-a moved to default");
   } finally {
     await server.stop();
   }
 }, 60_000);
+
+test("a failure after /exit files one question with the command that brings the lane back, and is never recorded", async () => {
+  installHerdr();
+  server = await startServer({ HUD_MOVE_EXIT_WAIT_MS: "1200", HUD_MOVE_BACK_WAIT_MS: "1500" });
+  const back = `env -u CLAUDE_CONFIG_DIR claude --resume 'sess-1' --settings '${DATA}/claude-lane-default.settings.json'`;
+  try {
+    await accountsReady();
+    // lane-a is on default from the last test's move back.
+    const paths: [string, string[], RegExp][] = [
+      ["Claude never exits", ["noexit"], /had not exited/],
+      ["herdr errors while the exit is awaited", ["getfail"], /pane gone/],
+      ["the relaunch command fails", ["runfail"], /pane run failed/],
+      ["the relaunch does not bring an agent back", ["noreturn"], /did not come back/],
+      ["the agent comes back on another conversation", ["othersession"], /different conversation/],
+    ];
+    for (const [name, flags, why] of paths) {
+      scene(agent({}));
+      for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
+      flag(...flags);
+      const res = await move("lane-a", "work");
+      expect(res.error, name).toMatch(why);
+      expect(res.error, name).toMatch(/not recorded/);
+      const open = (await state()).open.filter((a: any) => a.lane === "lane-a");
+      expect(open.map((a: any) => a.title), name).toEqual(["lane-a was exited for a move and is not confirmed back"]);
+      expect(open[0].body, name).toContain(back);
+      expect((await state()).accounts[0].claude.lanes.map((l: any) => [l.name, l.account]), name).toEqual([["lane-a", "default"]]);
+      for (const a of open) await api(`/api/asks/${a.id}/answer`, { answer: "Brought back" });
+    }
+    // A settings file that cannot be written stops the move before /exit: the lane is not touched.
+    scene(agent({}));
+    for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
+    rmSync(join(DATA, "claude-lane-work.settings.json"), { force: true });
+    mkdirSync(join(DATA, "claude-lane-work.settings.json"));
+    expect((await move("lane-a", "work")).error).toBeTruthy();
+    expect(sentToLane()).toEqual([]);
+  } finally {
+    await server.stop();
+  }
+}, 90_000);
