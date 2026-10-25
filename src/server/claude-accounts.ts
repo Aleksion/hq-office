@@ -53,6 +53,16 @@ function fileStrandedQuestion(lane: string, account: string, why: string, comman
   );
 }
 
+// The agent is back on the new account but a later step failed: the lane is recorded there, and only that step is open.
+function fileUnconfirmedQuestion(lane: string, account: string, why: string) {
+  fileQuestion(
+    lane,
+    `${lane} is on ${account} but a step after the move failed`,
+    `The lane came back on ${account} and is recorded there. This step failed: ${why}. Check in the lane's pane, and name the pane again with \`herdr agent rename <pane> ${lane}\` if HQ Office no longer lists the lane.`,
+    ["Checked", "Leave the lane"],
+  );
+}
+
 const exited = async (pane: string) => JSON.parse(await herdr("pane", "get", pane)).result?.pane?.agent == null;
 const agents = async (): Promise<any[]> => JSON.parse(await herdr("agent", "list")).result.agents;
 const moving = new Set<string>();
@@ -109,6 +119,11 @@ async function move(lane: string, account: string, row: { machine: string | null
   const now = (await agents()).find((a: any) => a.name === lane);
   if (!now || now.pane_id !== pane || now.agent_status === "working" || now.agent_session?.value !== session) throw new Error(`${lane} changed while the move was prepared. Nothing was sent`);
 
+  const record = () => {
+    db.query("INSERT INTO lane_accounts (lane, account, moved_at) VALUES (?, ?, ?) ON CONFLICT(lane) DO UPDATE SET account = excluded.account, moved_at = excluded.moved_at").run(lane, account, Date.now());
+    bump();
+  };
+  let recorded = false;
   await herdr("agent", "prompt", lane, "/exit");
   try {
     const deadline = Date.now() + Number(process.env.HUD_MOVE_EXIT_WAIT_MS ?? 30_000);
@@ -128,6 +143,9 @@ async function move(lane: string, account: string, row: { machine: string | null
       if (Date.now() > backBy) throw new Error(`${lane} did not come back on ${account}`);
       await Bun.sleep(500);
     }
+    // The lane runs on the new account from here: record it before any step that can still fail.
+    record();
+    recorded = true;
     await herdr("agent", "rename", pane, lane);
     // The session id may show a moment after the agent does.
     while (resumed.agent_session?.value !== session) {
@@ -138,10 +156,12 @@ async function move(lane: string, account: string, row: { machine: string | null
     }
   } catch (e) {
     const why = (e as Error).message;
+    if (recorded) {
+      fileUnconfirmedQuestion(lane, account, why);
+      throw new Error(`${why}. The lane is recorded on ${account} and a question is filed`);
+    }
     fileStrandedQuestion(lane, account, why, back);
     throw new Error(`${why}. The move was not recorded and a question is filed with the command that brings the lane back`);
   }
-  db.query("INSERT INTO lane_accounts (lane, account, moved_at) VALUES (?, ?, ?) ON CONFLICT(lane) DO UPDATE SET account = excluded.account, moved_at = excluded.moved_at").run(lane, account, Date.now());
-  bump();
   return `${lane} moved to ${account}`;
 }

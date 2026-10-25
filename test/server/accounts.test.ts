@@ -13,7 +13,7 @@ const ROOT = join(import.meta.dir, "..", "..");
 const TMP = realpathOf(mkdtempSync(join(tmpdir(), "hq-office-accounts-")));
 const HOME = join(TMP, "home");
 const DATA = join(TMP, "data");
-const SECRETS = ["FAKE-EMAIL-1@example.invalid", "FAKE-CLAUDE-KEY-1", "FAKE-CODEX-TOKEN-1", "FAKE-CODEX-TOKEN-2", "FAKE-PLAN-1", "FAKE-LOGIN-FILE-1", "FAKE-USER-ID-1", "FAKE-MCP-TOKEN-1", "FAKE-MCP-HEADER-1"];
+const SECRETS = ["FAKE-EMAIL-1@example.invalid", "FAKE-CLAUDE-KEY-1", "FAKE-CODEX-TOKEN-1", "FAKE-CODEX-TOKEN-2", "FAKE-PLAN-1", "FAKE-LOGIN-FILE-1", "FAKE-USER-ID-1", "FAKE-MCP-TOKEN-1", "FAKE-MCP-HEADER-1", "FAKE-MCP-ARG-1", "FAKE-MCP-QUERY-1"];
 const hour = 3600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -35,7 +35,7 @@ const CLAUDE_JSON = {
   customApiKeyResponses: { approved: [SECRETS[1]] },
   hasAvailableSubscription: true,
   machineID: "FAKE-MACHINE-1",
-  mcpServers: { files: { command: "files-mcp", env: { TOKEN: SECRETS[7] } }, remote: { type: "http", url: "https://mcp.example.invalid", headers: { Authorization: SECRETS[8] } }, plain: { command: "plain-mcp", args: ["-x"] } },
+  mcpServers: { files: { command: "files-mcp", env: { TOKEN: SECRETS[7] } }, remote: { type: "http", url: "https://mcp.example.invalid", headers: { Authorization: SECRETS[8] } }, withargs: { command: "args-mcp", args: ["--token", SECRETS[9]] }, withurl: { type: "sse", url: `https://mcp.example.invalid/sse?token=${SECRETS[10]}` }, plain: { command: "plain-mcp" } },
   hasCompletedOnboarding: true,
   lastOnboardingVersion: "2.1.0",
   theme: "dark",
@@ -128,12 +128,12 @@ test("a new home links everything but a login file, and its .claude.json starts 
     expect(() => makeHome("Bad Name")).toThrow();
     expect(() => makeHome("default")).toThrow();
     const { dir, mcpNeedsSecret } = makeHome("fresh");
-    expect(mcpNeedsSecret).toEqual(["files", "remote"]);
+    expect(mcpNeedsSecret).toEqual(["files", "remote", "withargs", "withurl"]);
     expect(dir).toBe(join(HOME, ".claude-fresh"));
     // Settings, skills and session transcripts are shared, so --resume finds the same session from either home.
     // The backups folder holds the default account's identity, so it is not shared.
     expect(readdirSync(dir).sort()).toEqual([".claude.json", ".hq-office-mcp-needs-secret.json", "projects", "settings.json", "skills"]);
-    expect(JSON.parse(readFileSync(join(dir, ".hq-office-mcp-needs-secret.json"), "utf8"))).toEqual(["files", "remote"]);
+    expect(JSON.parse(readFileSync(join(dir, ".hq-office-mcp-needs-secret.json"), "utf8"))).toEqual(["files", "remote", "withargs", "withurl"]);
     for (const entry of ["projects", "settings.json", "skills"]) {
       expect(lstatSync(join(dir, entry)).isSymbolicLink()).toBe(true);
       expect(readlinkSync(join(dir, entry))).toBe(join(HOME, ".claude", entry));
@@ -150,9 +150,9 @@ test("a new home links everything but a login file, and its .claude.json starts 
     for (const key of IDENTITY) expect(seeded).not.toHaveProperty(key);
     // Of a project only its trust and approvals cross, not its last session or cost.
     expect(seeded.projects["/work/app"]).toEqual({ hasTrustDialogAccepted: true, allowedTools: ["Bash(ls)"], enabledMcpjsonServers: ["files"] });
-    // MCP servers cross without their env or headers: a secret is never duplicated into another home.
-    expect(seeded.mcpServers).toEqual({ files: { command: "files-mcp" }, remote: { type: "http", url: "https://mcp.example.invalid" }, plain: { command: "plain-mcp", args: ["-x"] } });
-    for (const s of [SECRETS[0], SECRETS[1], SECRETS[5], SECRETS[6], SECRETS[7], SECRETS[8], "FAKE-ACCOUNT-UUID-1", "FAKE-SESSION-1"]) expect(readFileSync(join(dir, ".claude.json"), "utf8")).not.toContain(s);
+    // MCP servers cross without their env, headers, args or url (a token can sit in any): a secret is never duplicated into another home.
+    expect(seeded.mcpServers).toEqual({ files: { command: "files-mcp" }, remote: { type: "http" }, withargs: { command: "args-mcp" }, withurl: { type: "sse" }, plain: { command: "plain-mcp" } });
+    for (const s of [SECRETS[0], SECRETS[1], SECRETS[5], SECRETS[6], SECRETS[7], SECRETS[8], SECRETS[9], SECRETS[10], "FAKE-ACCOUNT-UUID-1", "FAKE-SESSION-1"]) expect(readFileSync(join(dir, ".claude.json"), "utf8")).not.toContain(s);
     expect(statSync(join(dir, ".claude.json")).mode & 0o777).toBe(0o600);
     expect(() => makeHome("fresh")).toThrow(/already exists/);
     // A config that cannot be read gives no home at all, not a home with no trust.
@@ -174,6 +174,11 @@ test("a new home links everything but a login file, and its .claude.json starts 
     expect(dialogKind(BUDGET)).toBe("limit");
     expect(dialogKind(EXTRA)).toBe("limit");
     expect(dialogKind(PERMISSION)).toBe("prompt");
+    // The cursor can sit on any option, with either arrow, and a menu may show only its cancel hint.
+    expect(dialogKind(PERMISSION.replace("❯ 1. Yes\n    2. No", "  1. Yes\n  ❯ 2. No"))).toBe("prompt");
+    expect(dialogKind(PERMISSION.replace("❯ 1. Yes", "› 1. Yes"))).toBe("prompt");
+    expect(dialogKind(PERMISSION.replace(/❯ 1\. Yes\n    2\. No/, "  1. Yes\n  2. No"))).toBe("prompt");
+    expect(dialogKind(LIMIT.replace("❯ 1. Stop and wait for limit to reset\n    2. Upgrade your plan", "  1. Stop and wait for limit to reset\n  ❯ 2. Upgrade your plan"))).toBe("limit");
     // A limit message left in the scrollback above an idle prompt is the lane to move, not a dialog.
     expect(dialogKind(PAST_LIMIT)).toBe(null);
     expect(dialogKind(`You've hit your limit\n${"\n.".repeat(60)}\n${PROMPT}`)).toBe(null);
@@ -211,7 +216,7 @@ const state = async (): Promise<any> => (await fetch(`${server.base}/api/state`)
 
 // The fake herdr: lists agents from agents.json, shows screen.txt, and logs every call. Like the real one it clears the
 // agent's name when the agent exits, and a pane run starts an agent again (unnamed) unless a flag file says otherwise.
-// Flag files in TMP: noexit, getfail, runfail, noreturn, othersession (applies once pane run has run).
+// Flag files in TMP: noexit, getfail, runfail, noreturn, renamefail, othersession (applies once pane run has run).
 function installHerdr() {
   write(HERDR, `#!/bin/sh
 echo "$@" >> "${TMP}/herdr-calls"
@@ -229,13 +234,13 @@ case "$1 $2" in
     else echo '{"result":{"pane":{"pane_id":"w1:p1","agent":"claude"}}}'; fi ;;
   "agent prompt") if [ "$4" = "/exit" ] && [ ! -e "${TMP}/noexit" ]; then touch "${TMP}/exited" "${TMP}/unnamed"; fi ;;
   "pane run") [ -e "${TMP}/runfail" ] && { echo "pane run failed" >&2; exit 1; }; touch "${TMP}/ran"; [ -e "${TMP}/noreturn" ] || rm -f "${TMP}/exited" ;;
-  "agent rename") rm -f "${TMP}/unnamed" ;;
+  "agent rename") [ -e "${TMP}/renamefail" ] && { echo "rename failed" >&2; exit 1; }; rm -f "${TMP}/unnamed" ;;
 esac
 exit 0
 `);
   chmodSync(HERDR, 0o755);
 }
-const FLAGS = ["exited", "unnamed", "noexit", "getfail", "runfail", "noreturn", "othersession", "ran"];
+const FLAGS = ["exited", "unnamed", "noexit", "getfail", "runfail", "noreturn", "othersession", "renamefail", "ran"];
 const flag = (...names: string[]) => names.forEach((n) => writeFileSync(join(TMP, n), ""));
 const sentToLane = () => calls().filter((c) => /^(agent prompt lane-|pane run|agent rename)/.test(c));
 const startServer = (extra: Record<string, string> = {}) =>
@@ -261,7 +266,7 @@ test("the server moves an idle lane to a logged-in account, and refuses the rest
     const view = (await state()).accounts[0].claude;
     expect(view.accounts.map((a: any) => [a.name, a.loggedIn, a.lanes])).toEqual([["default", true, ["lane-a"]], ["fresh", false, []], ["spare", false, []], ["work", true, []]]);
     // The panel hears which MCP servers a home was made without a secret for (names only).
-    expect(view.accounts.find((a: any) => a.name === "fresh").mcpNeedsSecret).toEqual(["files", "remote"]);
+    expect(view.accounts.find((a: any) => a.name === "fresh").mcpNeedsSecret).toEqual(["files", "remote", "withargs", "withurl"]);
     expect(view.accounts.find((a: any) => a.name === "work").mcpNeedsSecret).toEqual([]);
     expect(view.accounts.find((a: any) => a.name === "work").weekly.left).toBe(60);
     expect(view.lanes).toEqual([{ name: "lane-a", status: expect.any(String), account: "default" }]);
@@ -325,7 +330,7 @@ test("the server moves an idle lane to a logged-in account, and refuses the rest
     // A home is made through the panel's route: no login in it, and it shows up not logged in.
     const made = await api("/api/accounts/home", { name: "third" });
     expect(made.said).toContain("CLAUDE_CONFIG_DIR=~/.claude-third claude auth login");
-    expect(made.said).toContain("2 MCP servers need their secret set in this home");
+    expect(made.said).toContain("4 MCP servers need their secret set in this home");
     expect(existsSync(join(HOME, ".claude-third/.credentials.json"))).toBe(false);
     expect((await api("/api/accounts/home", { name: "../x" })).error).toBeTruthy();
     expect((await state()).accounts[0].claude.accounts.find((a: any) => a.name === "third").loggedIn).toBe(false);
@@ -366,7 +371,6 @@ test("a failure after /exit files one question with the command that brings the 
       ["herdr errors while the exit is awaited", ["getfail"], /pane gone/],
       ["the relaunch command fails", ["runfail"], /pane run failed/],
       ["the relaunch does not bring an agent back", ["noreturn"], /did not come back/],
-      ["the agent comes back on another conversation", ["othersession"], /different conversation/],
     ];
     for (const [name, flags, why] of paths) {
       scene(agent({}));
@@ -380,6 +384,29 @@ test("a failure after /exit files one question with the command that brings the 
       expect(open[0].body, name).toContain(back);
       expect((await state()).accounts[0].claude.lanes.map((l: any) => [l.name, l.account]), name).toEqual([["lane-a", "default"]]);
       for (const a of open) await api(`/api/asks/${a.id}/answer`, { answer: "Brought back" });
+    }
+    // Once the agent is back on the new account the lane is recorded there; a later failure files a question about that step only.
+    const after: [string, string[], RegExp][] = [
+      ["the agent cannot be renamed", ["renamefail"], /rename failed/],
+      ["the agent comes back on another conversation", ["othersession"], /different conversation/],
+    ];
+    for (const [name, flags, why] of after) {
+      scene(agent({}));
+      for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
+      flag(...flags);
+      const res = await move("lane-a", "work");
+      expect(res.error, name).toMatch(why);
+      expect(res.error, name).toMatch(/recorded on work/);
+      const open = (await state()).open.filter((a: any) => a.lane === "lane-a");
+      expect(open.map((a: any) => a.title), name).toEqual(["lane-a is on work but a step after the move failed"]);
+      expect(open[0].body, name).not.toContain("claude --resume");
+      expect((await state()).accounts[0].claude.lanes.map((l: any) => [l.name, l.account]), name).toEqual([["lane-a", "work"]]);
+      for (const a of open) await api(`/api/asks/${a.id}/answer`, { answer: "Checked" });
+      {
+        for (const f of FLAGS) rmSync(join(TMP, f), { force: true });
+        scene(agent({}));
+        expect((await move("lane-a", "default")).error, name).toBeUndefined();
+      }
     }
     // A settings file that cannot be written stops the move before /exit: the lane is not touched.
     scene(agent({}));

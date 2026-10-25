@@ -16,7 +16,7 @@ export const homeDir = (account: string) => (account === DEFAULT ? join(home(), 
 const LOGIN_FILE = /^(\.credentials[^/]*|\.claude\.json.*)$/;
 // Folders that hold a copy of the default account's identity (backups of .claude.json): each home keeps its own.
 const NOT_SHARED = new Set([".DS_Store", "backups"]);
-// Beside .claude.json in a new home: the names (only) of the MCP servers whose env or headers were left out.
+// Beside .claude.json in a new home: the names (only) of the MCP servers whose env, headers, args or url were left out.
 export const MCP_NOTE = ".hq-office-mcp-needs-secret.json";
 
 // The keys of ~/.claude.json a new home starts with: MCP servers, trust and onboarding. An allow-list, so a key
@@ -28,9 +28,11 @@ export const PROJECT_KEYS = ["allowedTools", "disabledMcpServers", "disabledMcpj
 
 const pick = (from: Record<string, unknown>, keys: string[]) => Object.fromEntries(keys.filter((k) => k in from).map((k) => [k, from[k]]));
 
-// A secret is never duplicated into another home: an MCP server's env and headers stay in the home they were set in.
+// A secret is never duplicated into another home: an MCP server's env, headers, args and url (a token can sit in any of
+// them) stay in the home they were set in.
+const MCP_SECRET_KEYS = ["env", "headers", "args", "url"];
 export function mcpNeedingSecret(source: Record<string, any>): string[] {
-  return Object.entries(source.mcpServers ?? {}).filter(([, server]: [string, any]) => server && ("env" in server || "headers" in server)).map(([name]) => name).sort();
+  return Object.entries(source.mcpServers ?? {}).filter(([, server]: [string, any]) => server && MCP_SECRET_KEYS.some((k) => k in server)).map(([name]) => name).sort();
 }
 
 export function seedFor(source: Record<string, any>): Record<string, unknown> {
@@ -38,8 +40,7 @@ export function seedFor(source: Record<string, any>): Record<string, unknown> {
   if (out.mcpServers && typeof out.mcpServers === "object") {
     out.mcpServers = Object.fromEntries(Object.entries(out.mcpServers as Record<string, any>).map(([name, server]) => {
       if (!server || typeof server !== "object") return [name, server];
-      const { env, headers, ...rest } = server;
-      return [name, rest];
+      return [name, Object.fromEntries(Object.entries(server).filter(([k]) => !MCP_SECRET_KEYS.includes(k)))];
     }));
   }
   if (out.projects && typeof out.projects === "object") {
@@ -84,7 +85,7 @@ export function relaunchCommand(account: string, session: string, settings: stri
 // calls these panes idle or blocked without saying which dialog. A dialog is a choice menu at the bottom of the
 // screen; a limit message left in the scrollback above an idle prompt is not one (a lane that hit its limit is the
 // main case for a move). Wording is the one Claude Code 2.1.310 ships.
-const MENU = /Enter to (?:confirm|select)|^\s*[❯>]\s*1\.\s/m;
+const MENU = /Enter to (?:confirm|select)|Esc to cancel|^\s*[❯›>]\s*\d+\.\s/m;
 const LIMIT = [
   /you(?:'|’)ve hit your .{0,40}(?:limit|budget)/i,
   /(?:usage|budget|\w+) limit reached/i,
