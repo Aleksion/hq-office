@@ -38,10 +38,9 @@ export function mcpNeedingSecret(source: Record<string, any>): string[] {
 export function seedFor(source: Record<string, any>): Record<string, unknown> {
   const out = pick(source, SEED_KEYS) as Record<string, any>;
   if (out.mcpServers && typeof out.mcpServers === "object") {
-    out.mcpServers = Object.fromEntries(Object.entries(out.mcpServers as Record<string, any>).map(([name, server]) => {
-      if (!server || typeof server !== "object") return [name, server];
-      return [name, Object.fromEntries(Object.entries(server).filter(([k]) => !MCP_SECRET_KEYS.includes(k)))];
-    }));
+    // A server that had any of those keys is left out whole: without its args or url it would start broken.
+    const needing = new Set(mcpNeedingSecret(source));
+    out.mcpServers = Object.fromEntries(Object.entries(out.mcpServers as Record<string, any>).filter(([name]) => !needing.has(name)));
   }
   if (out.projects && typeof out.projects === "object") {
     out.projects = Object.fromEntries(Object.entries(out.projects as Record<string, any>).map(([path, entry]) => [path, pick(entry ?? {}, PROJECT_KEYS)]));

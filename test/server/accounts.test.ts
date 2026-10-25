@@ -150,8 +150,9 @@ test("a new home links everything but a login file, and its .claude.json starts 
     for (const key of IDENTITY) expect(seeded).not.toHaveProperty(key);
     // Of a project only its trust and approvals cross, not its last session or cost.
     expect(seeded.projects["/work/app"]).toEqual({ hasTrustDialogAccepted: true, allowedTools: ["Bash(ls)"], enabledMcpjsonServers: ["files"] });
-    // MCP servers cross without their env, headers, args or url (a token can sit in any): a secret is never duplicated into another home.
-    expect(seeded.mcpServers).toEqual({ files: { command: "files-mcp" }, remote: { type: "http" }, withargs: { command: "args-mcp" }, withurl: { type: "sse" }, plain: { command: "plain-mcp" } });
+    // A server with env, headers, args or url (a token can sit in any) stays out whole: a secret is never duplicated
+    // into another home, and a server stripped of its args would start broken.
+    expect(seeded.mcpServers).toEqual({ plain: { command: "plain-mcp" } });
     for (const s of [SECRETS[0], SECRETS[1], SECRETS[5], SECRETS[6], SECRETS[7], SECRETS[8], SECRETS[9], SECRETS[10], "FAKE-ACCOUNT-UUID-1", "FAKE-SESSION-1"]) expect(readFileSync(join(dir, ".claude.json"), "utf8")).not.toContain(s);
     expect(statSync(join(dir, ".claude.json")).mode & 0o777).toBe(0o600);
     expect(() => makeHome("fresh")).toThrow(/already exists/);
