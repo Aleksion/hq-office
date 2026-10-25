@@ -45,3 +45,11 @@
 .aact { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .aact .btn { min-height: 44px; }
 .aact .btn:disabled { opacity: .45; cursor: default; }
+.alanes { display: grid; gap: 6px; }
+.alanes .k { font: 7px/1.6 var(--pixel); }
+.alane { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 10px; align-items: center; }
+.alane .anote { grid-column: 1 / -1; grid-row: 2; }
+.alane select, .aact input { min-height: 44px; font-size: 14px; }
+.alane .btn { min-height: 44px; }
+.alane .btn:disabled { opacity: .45; cursor: default; }
+.acct code { font: 12px/1.4 var(--mono); background: #e4e4ec; padding: 3px 6px; border-radius: 4px; overflow-wrap: anywhere; }
