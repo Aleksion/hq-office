@@ -25,21 +25,18 @@ beforeAll(async () => {
   if (!chromeFound) return;
   // No real GitHub: the server gets the fake gh, which knows no PRs.
   writeFileSync(join(GH, "gh.json"), "{}");
-  process.env.HUD_GH_BIN = join(ROOT, "test", "fake-gh.ts");
-  process.env.FAKE_GH_DATA = join(GH, "gh.json");
-  process.env.HUD_GITHUB_REPO = "example/repo";
   chrome = await startChrome();
-  server = await startServer(ROOT);
+  server = await startServer(ROOT, { HUD_GH_BIN: join(ROOT, "test", "fake-gh.ts"), FAKE_GH_DATA: join(GH, "gh.json"), HUD_GITHUB_REPO: "example/repo" });
   askId = await seed(server.post);
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.s("Page.navigate", { url: `${server.base}/` });
   await until(`!!${card()}`);
-});
+}, 30_000);
 
 afterAll(async () => {
   await server?.stop();
-  chrome?.close();
+  await chrome?.close();
   rmSync(GH, { recursive: true, force: true });
 });
 

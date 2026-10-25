@@ -4,6 +4,7 @@ import { afterAll, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnServer } from "../../scripts/room-hash.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const data = mkdtempSync(join(tmpdir(), "hq-bg-test-"));
@@ -29,27 +30,18 @@ esac
 exit 0
 `);
 chmodSync(herdr, 0o755);
-const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-const port = probe.port;
-probe.stop(true);
-const base = `http://127.0.0.1:${port}`;
-const server = Bun.spawn([process.execPath, "server.ts"], {
+const server = await spawnServer({
   cwd: ROOT,
-  env: { ...process.env, HUD_PORT: String(port), HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local" },
-  stdout: "ignore",
-  stderr: "ignore",
+  env: { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local" },
 });
+const { base } = server;
 afterAll(async () => {
-  server.kill();
-  await server.exited;
+  await server.stop();
   rmSync(data, { recursive: true, force: true });
 });
 const post = (path: string, body: unknown) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) });
 
 test("idle with shells or a monitor still running reads as moving; idle without reads as HQ's turn", async () => {
-  for (const deadline = Date.now() + 8000; Date.now() < deadline; await Bun.sleep(100)) {
-    try { if ((await fetch(`${base}/api/state`)).ok) break; } catch {}
-  }
   for (const name of ["shells-lane", "monitor-lane", "quiet-lane", "agent-lane", "subagent-lane"]) await post("/api/lanes", { name, machine: "local" });
   await post("/api/lanes", { name: "paused-lane", machine: "local", phase: "paused" }); // a phase HQ set that the status does not know
   await post("/api/sync", {});

@@ -6,6 +6,7 @@ If `AGENTS.local.md` exists next to this file, read it too: it holds the rules o
 
 - `server.ts`, `public/`, `src/`: the server and the page, one file per concern (see the map below).
 - `hud.ts`: HQ's CLI (`hud` when linked onto PATH, or `bun hud.ts`).
+- `src/lane-tree.ts`: the lane tree's depth, path, level names and `hud tree` text (shared by the server and the CLI).
 - `src/hq-guide.ts`: the HQ guide (how HQ reaches the owner: through the HUD) and its one-line reminder. The one copy: `hud guide`, the plugin's greet and the server's messages to HQ all use it.
 - `src/server/secrets.ts`: the secret drop. Values in server memory only; see the README.
 - `bin/hud-plugin.ts`, `herdr-plugin.toml`: the herdr plugin (actions, the status pane, and `greet` on `pane.agent_detected`); `bin/service.ts` (service mode: launchd, systemd), `bin/hud-command.ts` (installs `hud`). Their tests (`test/plugin/`) use a fake home and `test/fake-service.ts` for launchctl and systemctl: never run the real ones from a test.
@@ -28,7 +29,7 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 - `public/index.html`: the page shell (head, markup). The server adds every stylesheet and every feature folder when it serves it.
 - `src/client/main.js`: loads the built-in areas in their original order.
 - `src/client/core/`: shared by every area: `state.js` (S, CONFIG), `net.js` (post), `bus.js` (events), `boot.js` (load, stream, autoreload), `format.js`, `text.js`, `dom.js`, `clicks.js`, `status.js`; `base.css`, `controls.css`, `layout.css`.
-- `src/client/room/`: the canvas room: `canvas.js` (pixel grid, px, art cache), `sprites.js`, `palette.js`, `scene.js`, `workers.js`, `spots.js`, `collision.js`, `hero.js`, `breakroom.js`, `loop.js`, `input.js`, `seasons.js`, `weather.js`, `accessory-table.js` (data), `accessories.js`, `art.js` (tools for event art), `events.js` (runs the current event), `room.css`.
+- `src/client/room/`: the canvas room: `canvas.js` (pixel grid, px, art cache), `sprites.js`, `palette.js`, `scene.js`, `workers.js`, `spots.js`, `collision.js`, `hero.js`, `breakroom.js`, `loop.js`, `input.js`, `seasons.js`, `weather.js`, `accessory-table.js` (data), `accessories.js`, `themes.js` (data: the looks per level of the lane tree), `looks.js` (who wears which look), `art.js` (tools for event art), `events.js` (runs the current event), `room.css`.
 - `src/client/room/events/`: one file per event room.
 - `src/client/topbar/`, `questions/`, `tell/`, `feed/`, `card/`, `messages/`, `images/`, `sound/`, `settings/`: one folder per panel or feature, its module(s) and its stylesheet.
 - `src/server/`: one file per concern: `config.ts`, `db.ts`, `push.ts` (version, bump), `router.ts`, `page.ts` (shell, client files, autoreload stamp), `json.ts`, `http.ts`, `herdr.ts`, `lanes.ts`, `asks.ts`, `updates.ts`, `events.ts`, `inbox.ts`, `score.ts`, `state.ts`, `requests.ts` (what a lane asks HQ: file, answer-and-close, defaults), `machines.ts` (+ `machine-stats.sh`), `settings.ts` (the owner's settings), `main.ts`.

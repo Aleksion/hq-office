@@ -15,3 +15,5 @@ if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c)
 // Who must answer a request (see requests.ts). Rows filed before the column existed stay NULL and read as HQ.
 if (!(db.query("PRAGMA table_info(requests)").all() as { name: string }[]).some((c) => c.name === "lead")) db.exec("ALTER TABLE requests ADD COLUMN lead TEXT");
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "secrets")) db.exec("ALTER TABLE asks ADD COLUMN secrets TEXT");
+// The lane a lane reports to; empty means straight under HQ. Depth is computed from the chain, never stored.
+if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "parent")) db.exec("ALTER TABLE lanes ADD COLUMN parent TEXT");

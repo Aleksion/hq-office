@@ -5,14 +5,17 @@
 import { spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import { platform, pluginId, serviceFor, servicePath, type ServiceSpec } from "./service.ts";
 import { installHud } from "./hud-command.ts";
 import { GUIDE } from "../src/hq-guide.ts";
+import { herdrConfigDir, resolveDirs } from "./dirs.ts";
 
 const ROOT = dirname(import.meta.dir);
-const STATE = process.env.HERDR_PLUGIN_STATE_DIR || join(ROOT, ".data");
-const CONFIG_DIR = process.env.HERDR_PLUGIN_CONFIG_DIR || ROOT;
+const PLUGIN_ID = pluginId(ROOT);
+const DIRS = resolveDirs({ root: ROOT, id: PLUGIN_ID, env: process.env, configDirFromHerdr: () => herdrConfigDir(process.env.HERDR_BIN || "herdr", PLUGIN_ID) });
+const STATE = DIRS.state;
+const CONFIG_DIR = DIRS.config;
 const CONFIG_FILE = join(CONFIG_DIR, "config.env");
 const PID_FILE = join(STATE, "hud.pid");
 const LOG_FILE = join(STATE, "server.log");
@@ -20,8 +23,9 @@ const HEALTH_TIMEOUT_MS = 8_000;
 const COMMANDS = ["start", "stop", "reload", "open", "status", "install-service", "remove-service", "install-hud", "greet"];
 const command = process.argv[2] ?? "";
 const FORCE = process.argv.includes("--force");
-const PLUGIN_ID = pluginId(ROOT);
 const service = serviceFor(PLUGIN_ID);
+// The exact command for the restart action, for messages: herdr takes the action as <plugin id>.<action>.
+const RESTART = `herdr plugin action invoke ${PLUGIN_ID}.reload`;
 
 if (!COMMANDS.includes(command)) {
   console.error(`usage: bun bin/hud-plugin.ts ${COMMANDS.join("|")}`);
@@ -251,6 +255,12 @@ async function installService() {
   if (!before.running && (await fetchState())) {
     fail(`something else is answering at ${URL_BASE}, not this plugin's service. Stop it first (or give HQ Office another HUD_PORT in ${CONFIG_FILE}), then run this action again.`);
   }
+  // Never point an installed service at a different data folder by accident (for example this script run by hand
+  // from another copy, or without herdr's folders): that would show an empty board. --force moves it on purpose.
+  const installedData = before.installed ? service.installedDataDir() : null;
+  if (installedData && resolvePath(installedData) !== resolvePath(DATA_DIR) && !FORCE) {
+    fail(`the installed service uses the data in ${installedData}, but this run would point it at ${DATA_DIR}. Nothing was changed. If you ran this by hand, run it through herdr instead: ${RESTART}. To move the service to the new folder on purpose, run this again with --force.`);
+  }
   mkdirSync(DATA_DIR, { recursive: true });
   try {
     service.install(serviceSpec());
@@ -262,7 +272,7 @@ async function installService() {
   console.log(`File: ${service.file}`);
   console.log(`Data: ${DATA_DIR}`);
   console.log(`Log:  ${LOG_FILE}`);
-  console.log(`It starts at login and restarts when it stops. After a config.env change or a plugin update, run the restart action (or this one) again.`);
+  console.log(`It starts at login and restarts when it stops. After a config.env change or a plugin update, restart it: ${RESTART}`);
   if (service.kind === "systemd") console.log(`To keep it running while you are logged out, and to start it at boot: loginctl enable-linger "$USER"`);
 }
 

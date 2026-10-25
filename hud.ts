@@ -10,7 +10,9 @@
 //   hud item ID N done|undo      tick or untick item N (from 1) by hand
 //   hud item ID add TEXT         add an item to an open question
 //   hud lane NAME [--title T] [--machine M] [--pane P] [--issue OPE-1] [--pr 123] [--phase running|waiting|parked|done] [--note N]
-//   hud rm-lane NAME
+//           [--parent OTHER]      the lane it reports to; --parent hq (or "") puts it straight under HQ
+//   hud rm-lane NAME     its reports move up to the lane it reported to (or HQ)
+//   hud tree [--json]    the lanes under HQ, each with its level name and status
 //   hud withdraw ID [--reason R]
 //   hud event [--lane L] TEXT
 //   hud tell --title T [--lane L] [--body B]   an update for the owner: information, no reply asked for
@@ -41,6 +43,7 @@
 //   hud board [--json]                            stalled first; refreshes GitHub if the cache is over a minute old
 //   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
 import { GUIDE } from "./src/hq-guide.ts";
+import { treeText } from "./src/lane-tree.ts";
 
 const BASE = process.env.HUD_URL ?? "http://127.0.0.1:4747";
 
@@ -166,9 +169,16 @@ switch (cmd) {
       pr: flags.pr?.join(","),
       phase: one("phase"),
       note: one("note"),
+      parent: one("parent"),
     });
     console.log(`lane ${rest[0]}`);
     break;
+  case "tree": {
+    const { lanes } = await call("GET", "/api/state");
+    const view = lanes.map((l: any) => ({ name: l.name, parent: l.parent, depth: l.depth, level: l.level, status: l.status, path: l.path }));
+    console.log("json" in flags ? JSON.stringify(view, null, 2) : treeText(view));
+    break;
+  }
   case "rm-lane":
     await call("POST", "/api/lanes/delete", { name: rest[0] });
     break;
@@ -275,7 +285,7 @@ switch (cmd) {
     console.log(GUIDE);
     break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|track|done|pause|resume|board|guide");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|track|done|pause|resume|board|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 

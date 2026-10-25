@@ -18,6 +18,7 @@ export type Service = {
   name: string; // the launchd label or the systemd unit
   file: string; // the plist or the unit file
   render(spec: ServiceSpec): string;
+  installedDataDir(): string | null; // HUD_DATA_DIR in the installed file, or null
   state(): ServiceState;
   install(spec: ServiceSpec): void; // write the file, then load and (re)start it
   remove(): void;
@@ -89,6 +90,7 @@ export function launchd(pluginId: string): Service {
     kind: "launchd",
     name: label,
     file,
+    installedDataDir: () => dataDirIn(file, "launchd"),
     render(spec) {
       const env = Object.entries(spec.env).map(([k, v]) => `      <key>${xml(k)}</key>\n      <string>${xml(v)}</string>`).join("\n");
       return `<?xml version="1.0" encoding="UTF-8"?>
@@ -147,6 +149,18 @@ ${env}
 
 // ---- Linux: a systemd user unit ----
 
+// HUD_DATA_DIR as written in an installed plist or unit file, decoded; null when there is no file or no such line.
+function dataDirIn(file: string, kind: "launchd" | "systemd"): string | null {
+  if (!existsSync(file)) return null;
+  const text = readFileSync(file, "utf8");
+  if (kind === "launchd") {
+    const v = text.match(/<key>HUD_DATA_DIR<\/key>\s*<string>([^<]*)<\/string>/)?.[1];
+    return v == null ? null : v.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  }
+  const v = text.match(/^Environment="HUD_DATA_DIR=((?:[^"\\]|\\.)*)"$/m)?.[1];
+  return v == null ? null : v.replace(/%%/g, "%").replace(/\\(.)/g, "$1");
+}
+
 // A value inside Environment="..." or ExecStart: quotes and backslashes escaped, % doubled (systemd specifiers).
 const unitQuote = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "%%")}"`;
 
@@ -169,6 +183,7 @@ export function systemd(pluginId: string): Service {
     kind: "systemd",
     name: unit,
     file,
+    installedDataDir: () => dataDirIn(file, "systemd"),
     render(spec) {
       const env = Object.entries(spec.env).map(([k, v]) => `Environment=${unitQuote(`${k}=${v}`)}`).join("\n");
       return `# HQ Office's server, written by the ${pluginId} herdr plugin ("install service"). Run that action again to

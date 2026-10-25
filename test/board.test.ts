@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnServer } from "../scripts/room-hash.ts";
 import { boardText, createBoard, GH_REFRESH_MS, STALL_MS } from "../src/server/board.ts";
 
 const MIN = 60_000;
@@ -179,11 +180,10 @@ describe("board.ts with a fake gh and a fake clock", () => {
 // ---- end to end: server.ts + hud.ts, fake gh ----
 
 const ROOT = join(import.meta.dir, "..");
-const PORT = 4900 + Math.floor(Math.random() * 100);
-const BASE = `http://127.0.0.1:${PORT}`;
+let BASE = "";
 const DATA = mkdtempSync(join(tmpdir(), "hq-board-test-"));
 const GH_DATA = join(DATA, "gh.json");
-let server: ReturnType<typeof Bun.spawn>;
+let server: Awaited<ReturnType<typeof spawnServer>>;
 
 const hud = async (...args: string[]) => {
   const p = Bun.spawn([process.execPath, join(ROOT, "hud.ts"), ...args], { env: { ...process.env, HUD_URL: BASE }, stdout: "pipe", stderr: "pipe" });
@@ -205,11 +205,10 @@ describe("server and hud CLI, with a fake gh binary", () => {
         105: pr({ updatedAt: long }),
       }),
     );
-    server = Bun.spawn([process.execPath, "server.ts"], {
+    server = await spawnServer({
       cwd: ROOT,
       env: {
         ...process.env,
-        HUD_PORT: String(PORT),
         HUD_HOST: "127.0.0.1",
         HUD_DATA_DIR: DATA,
         HERDR_BIN: join(DATA, "no-such-herdr"),
@@ -217,22 +216,12 @@ describe("server and hud CLI, with a fake gh binary", () => {
         HUD_GITHUB_REPO: "example/repo",
         FAKE_GH_DATA: GH_DATA,
       },
-      stdout: "ignore",
-      stderr: "ignore",
     });
-    const deadline = Date.now() + 8000;
-    while (Date.now() < deadline) {
-      try {
-        if ((await fetch(`${BASE}/api/state`)).ok) return;
-      } catch {}
-      await Bun.sleep(100);
-    }
-    throw new Error(`server did not come up on port ${PORT}`);
+    BASE = server.base;
   });
 
   afterAll(async () => {
-    server?.kill();
-    await server?.exited;
+    await server?.stop();
     rmSync(DATA, { recursive: true, force: true });
   });
 

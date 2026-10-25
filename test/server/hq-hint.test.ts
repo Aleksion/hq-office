@@ -4,6 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnServer } from "../../scripts/room-hash.ts";
 import { HINT } from "../../src/hq-guide.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -13,30 +14,21 @@ afterAll(async () => {
 });
 
 async function office(hint: string | undefined) {
-  const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-  const port = probe.port;
-  probe.stop(true);
   const data = mkdtempSync(join(tmpdir(), "hq-hint-test-"));
   const herdr = join(data, "herdr");
   const log = join(data, "prompts.log");
   // One record per prompt: the text argument, then a separator line (a prompt may span lines).
   writeFileSync(herdr, `#!/bin/sh\ncase "$1 $2" in\n  "agent list") echo '{"result":{"agents":[]}}' ;;\n  "agent prompt") printf '%s\\n<<END>>\\n' "$4" >> "${log}" ;;\nesac\nexit 0\n`);
   chmodSync(herdr, 0o755);
-  const env: Record<string, string | undefined> = { ...process.env, HUD_PORT: String(port), HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", HUD_HQ_HINT: hint };
+  const env: Record<string, string | undefined> = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", HUD_HQ_HINT: hint };
   if (hint === undefined) delete env.HUD_HQ_HINT;
   delete env.HUD_OWNER;
-  const server = Bun.spawn([process.execPath, "server.ts"], { cwd: ROOT, env, stdout: "ignore", stderr: "ignore" });
+  const server = await spawnServer({ cwd: ROOT, env });
   stops.push(async () => {
-    server.kill();
-    await server.exited;
+    await server.stop();
     rmSync(data, { recursive: true, force: true });
   });
-  const base = `http://127.0.0.1:${port}`;
-  for (const deadline = Date.now() + 8000; Date.now() < deadline; await Bun.sleep(100)) {
-    try {
-      if ((await fetch(`${base}/api/state`)).ok) break;
-    } catch {}
-  }
+  const { base } = server;
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) });
     expect(res.status).toBe(200);

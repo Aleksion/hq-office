@@ -48,7 +48,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await server?.stop();
-  chrome?.close();
+  await chrome?.close();
 });
 
 test.skipIf(!chromeFound)("POWER SAVER presents no frames in an idle room", async () => {

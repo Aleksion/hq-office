@@ -10,6 +10,133 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 - **Requests: a lane's ask of HQ is a record that closes when the answer arrives.** A lane files `hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME "text"`; HQ runs `hud req next`, `hud req list` and `hud req answer ID "text"`, which types the answer into the lane's pane and closes the request in one step (if the pane is not reached the request stays open). A BLOCK or QUESTION can carry `--default` and `--by`: at that time it is marked defaulted and the lane goes ahead.
 - **`GET /api/agents`** lists every named herdr agent with when its status last changed, from the 20 second sync, so a sweep can tell how long a pane has really been quiet.
 
+## [0.8.1] - 2026-10-24
+
+### Changed
+
+- **Every send box is one composer, like a chat app.** Tell HQ, each question's answer box and a reply in MESSAGES
+  are now a single rounded box: your images on top, the text field at full width (no more short lines wrapping
+  beside the buttons), and a slim row under it with the photo button on the left and SEND, DONE or OK on the right.
+  The field grows with what you type, up to five lines, then scrolls. On a computer the box stays compact: about
+  22 px taller than before for a question's answer, 16 px for Tell HQ, and about the same for a reply.
+- **Images are thumbnails in the box.** Each attached image is a rounded thumbnail with a small round × on its corner
+  (an easy target on a phone). While it uploads it is dimmed under a spinner; a failed upload gets a red ring and a
+  retry icon (tap it to try again); an image that is too big or that the browser cannot read stays in the box with
+  one line saying why. Tap a thumbnail to see it full screen; tap outside it or the close button to go back.
+
+## [0.8.0] - 2026-10-24
+
+### Added
+
+- **Attach images from a phone.** Every send box (Tell HQ, each question's answer, a reply in MESSAGES) has an
+  ATTACH button beside SEND. On a phone it opens the phone's own menu (photo library, camera, files); on a computer,
+  a file picker. Pick several at once. Each image is shrunk in the browser to at most 2048 px on its longest side,
+  as JPEG (or WebP where that is smaller), so uploads are quick on a phone connection and iPhone HEIC photos, which
+  the server does not take, arrive as JPEG. GIFs and images already small are sent as they are.
+
+### Changed
+
+- **Images show as chips under the box, not as paths in your text.** Picked, dropped or pasted images appear as
+  thumbnails with a × to remove them, and the text box stays clean. On send the `[image: /path]` tokens are added at
+  the end of the message, so HQ receives the same as before. A failed upload shows on its chip with RETRY; an image
+  that is too big or that the browser cannot read says why. Images are part of the draft: they stay through live
+  updates and a reload, and clear once sent.
+- **Drafts survive any reload.** Unsent text, an open reply and attached images used to be kept only when the page
+  reloaded itself after an update; now they are kept on every reload, and when a phone drops the page while its
+  camera is open.
+
+### Fixed
+
+- On a phone, any tap inside MESSAGES or FROM HQ rebuilt the question list, the thread and the log. Only MORE does now.
+
+## [0.7.2] - 2026-10-24
+
+### Fixed
+
+- **ARENA now visibly dresses the whole room.** With ARENA picked and no lane tree, every worker was already given
+  the player look, but that look was a teal shirt and a tiny number on the worker's everyday sprite, with the
+  season's hat still on top, so at real size nobody looked in costume. The hero and HQ were never dressed at all.
+
+### Changed
+
+- **A theme dresses every figure in the room, whatever the levels.** In ARENA:
+  - **Players** (the deepest level, and everyone when lanes have no tree) wear one matching numbered tracksuit:
+    top and trousers alike, white piping, a white zip, white trainers and a white number on the chest and back.
+    Each player keeps its own hair and face. Seasonal hats and coats are left off; seasonal things in the hand stay.
+  - **Guards** (levels 1 and 2 in a tree) are as before (a square or a triangle on the mask), now with nothing
+    seasonal over the mask.
+  - **Your hero** behind the counter is the game master: a long black coat with gold buttons, black gloves and a
+    black mask with gold eyes. The mask covers only the face, so the HERO you picked keeps its hair (and glasses).
+    It stays in costume while it stands, dances and moonwalks, and asleep in bed at night. No hat is drawn on the
+    mask, so HERO HAT has no effect in ARENA.
+  - **HQ** at its terminal is the senior guard: the hooded suit with a gold crown on the back of the hood.
+
+  OFFICE looks exactly as before: its everyday clothes are its costume, and a tree adds the suit and the cardigan.
+
+## [0.7.1] - 2026-10-24
+
+### Changed
+
+- **MESSAGES and FROM HQ take a bounded height on a phone, each with its own scroll.** With a busy day they used to
+  stretch the page to about 13,000 pixels, so Tell HQ, the room and the worker card were thousands of pixels away.
+  Now the page is about 1,800 pixels tall on an iPhone: MESSAGES fits on one screen with its tabs and Tell HQ, and
+  FROM HQ (with SENT & ANSWERED and SECRETS) fits on one screen with the room. Swiping inside a list scrolls that
+  list, with momentum, and reaching its end does not drag the page; a fade at an edge shows there is more that way.
+  MESSAGES still opens at the newest message and stays there while you are at the bottom; reading older messages or
+  older updates, a live update or a reply no longer moves what you read (FROM HQ used to jump by one update). At the
+  top of FROM HQ a new update shows first. The desktop is unchanged.
+
+## [0.7.0] - 2026-10-24
+
+### Added
+
+- **Lanes in levels.** Lanes can now form a tree under HQ: a lane reports to HQ (level 1), or to another lane, which
+  puts it one level deeper. HQ or a lane sets it with `hud lane NAME --parent OTHER`; `--parent hq` puts a lane
+  straight back under HQ. A lane that starts lanes of its own registers them with itself as their parent. A parent
+  that would make a loop is refused with an error that shows the chain, and when you remove a lane, the lanes that
+  reported to it move up one level instead of being lost. Nothing changes until a lane gets a parent.
+- **Name your levels.** SETTINGS has LEVEL NAMES: one name per level from the top, comma-separated. The default is
+  `Manager, Lead, Engineer`; `PM, Senior, Junior` or `L1, L2, L3` work just as well. Lanes deeper than your list take
+  the last name.
+- **See the levels in the room.** Once there is a tree, each level dresses differently, and every worker keeps its own
+  hair, skin and colours. Pick the look in SETTINGS under LEVEL THEME:
+  - **Office** (the default): level 1 wears a dark suit and a tie in its own colour (all suit from behind), level 2 a light cardigan over
+    its own shirt, level 3 and deeper the everyday look. A room without a tree looks exactly as before.
+  - **Arena**: levels 1 and 2 are masked guards in a magenta hooded suit, with a white square (level 1, who also
+    wears a black belt) or a triangle (level 2) on the black mask and on the back of the hood; level 3 and deeper are
+    players in a teal tracksuit with a white number. In a room without a tree, everyone is a player. Our own art, not
+    any show's.
+- **A level mark on every name label**, so the level reads from any side, even from behind at a desk: three pips
+  for level 1, two for level 2, one for level 3 and deeper, in a colour that matches the theme's look (Office: gold,
+  cream, blue; Arena: pink for guards, teal for players). Only in a room with a tree.
+- **The worker card** shows the lane's level and its chain up to HQ, for example `HQ > web-pm > api-lead > api-auth`;
+  click a step to open that lane.
+- **`hud tree`** prints the tree with each lane's level name and status (`--json` for JSON). On the WORK tab and in
+  `hud board`, the work in each state is grouped under the lane its lane reports to; stalled work still comes first.
+
+## [0.6.4] - 2026-10-23
+
+### Fixed
+
+- **Messages scroll like a chat on a phone.** MESSAGES opens at the newest message instead of eight screens above
+  it; at the newest message, a new one stays in view; reading older ones, a live update or a reply landing above no
+  longer moves what you are reading (the same holds for the questions). The QUESTIONS / MESSAGES / WORK tabs stay at
+  the top of the screen while their list scrolls, and switching tabs starts the list at its top. The sent log under
+  the room no longer scrolls inside the page. The desktop layout is unchanged.
+- **No zoom on a phone.** The page no longer zooms on a pinch, a double tap or a tap into a text field (every text
+  field is 16px on a phone).
+
+## [0.6.3] - 2026-10-23
+
+### Fixed
+
+- **Running the plugin's script by hand could point the service at an empty board.** Outside herdr, the script fell
+  back to folders inside the plugin, so a restart rewrote the service to a new, empty database and dropped your
+  config.env settings (nothing was lost; the real data stayed put). The installed plugin now finds herdr's own
+  config and data folders when run by hand, and restart refuses to point an installed service at a different data
+  folder than the one it uses (`--force` moves it on purpose).
+- The plugin's messages give the exact restart command, `herdr plugin action invoke hq-office.reload`.
+
 ## [0.6.2] - 2026-10-23
 
 ### Fixed

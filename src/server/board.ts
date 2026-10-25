@@ -326,7 +326,7 @@ export function createBoard(opts: {
 
   function view() {
     const t = now();
-    const lanes = new Map((db.query("SELECT name, herdr, herdr_since FROM lanes").all() as any[]).map((l) => [l.name, l]));
+    const lanes = new Map((db.query("SELECT * FROM lanes").all() as any[]).map((l) => [l.name, l]));
     const asks = db.query("SELECT id, lane, title, body, status, created_at, answered_at FROM asks WHERE status != 'withdrawn'").all() as any[];
     const items = rows().map((it) => {
       const prs = it.prs.map((k: string) => {
@@ -404,6 +404,8 @@ export function createBoard(opts: {
       return {
         issue: it.issue,
         lane: it.lane,
+        // The lane its lane reports to (null: HQ), so the board can group work under its managers.
+        manager: lane?.parent && lanes.has(lane.parent) ? (lane.parent as string) : null,
         laneStatus: lane?.herdr ?? null,
         prs,
         state,
@@ -446,10 +448,22 @@ export function boardText(v: ReturnType<ReturnType<typeof createBoard>["view"]>,
     const its = v.items.filter((i) => i.state === s);
     if (!its.length) continue;
     out.push("", `${label(s)}${s === "stalled" ? " (push these)" : ""}`);
+    // With lanes in a tree, the work in each state is grouped under the lane its lane reports to (in the order
+    // of its oldest item), so a manager sees its reports' work together.
+    const grouped = v.items.some((i) => i.manager);
+    const groups = new Map<string, typeof its>();
     for (const i of its) {
-      const prs = i.prs.map((p) => `#${p.number}${p.draft ? " draft" : ""}${p.state && p.state !== "OPEN" ? ` ${p.state.toLowerCase()}` : ""}${p.ci && p.ci !== "none" && p.state === "OPEN" ? ` ci ${p.ci}` : ""}${p.error ? ` (gh: ${p.error})` : ""}`).join(", ");
-      const last = i.last ? `last: ${i.last.what} (${ago(i.last.age)})` : "last: nothing yet";
-      out.push(`  ${i.issue}  lane ${i.lane ?? "-"}${i.laneStatus ? ` (${i.laneStatus})` : ""}  PR ${prs || "-"}  ${s === "paused" || s === "owner" ? `${i.why}  ` : ""}${last}`);
+      const key = i.manager ?? "HQ";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(i);
+    }
+    for (const [manager, list] of grouped ? groups : new Map([["", its]])) {
+      if (grouped) out.push(`  under ${manager}`);
+      for (const i of list) {
+        const prs = i.prs.map((p) => `#${p.number}${p.draft ? " draft" : ""}${p.state && p.state !== "OPEN" ? ` ${p.state.toLowerCase()}` : ""}${p.ci && p.ci !== "none" && p.state === "OPEN" ? ` ci ${p.ci}` : ""}${p.error ? ` (gh: ${p.error})` : ""}`).join(", ");
+        const last = i.last ? `last: ${i.last.what} (${ago(i.last.age)})` : "last: nothing yet";
+        out.push(`${grouped ? "    " : "  "}${i.issue}  lane ${i.lane ?? "-"}${i.laneStatus ? ` (${i.laneStatus})` : ""}  PR ${prs || "-"}  ${s === "paused" || s === "owner" ? `${i.why}  ` : ""}${last}`);
+      }
     }
   }
   return out.join("\n");

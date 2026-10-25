@@ -12,8 +12,9 @@ const fits = (a, s) => a.seasons === "any" || a.seasons.includes(s);
 // What each name wears this season, from its name: about half the workers wear something, one item per slot at
 // most. The hero always wears the season's head item and hand item. Kept per name and season.
 export const wornCache = new Map();
-export function wornBy(name, isHero = false) {
-  const key = `${isHero ? "hero:" : ""}${name}|${season}|${isHero ? settings.hat : ""}`;
+// hides: slots a level's look keeps clear (room/themes.js), so a seasonal coat or hat never covers the level.
+export function wornBy(name, isHero = false, hides = null) {
+  const key = `${isHero ? "hero:" : ""}${name}|${season}|${isHero ? settings.hat : ""}${hides ? `|${hides.join(",")}` : ""}`;
   let out = wornCache.get(key);
   if (out) return out;
   out = [];
@@ -38,6 +39,7 @@ export function wornBy(name, isHero = false) {
     if (!out.length) { const first = ["head", "body", "hand"].map(options).find((o) => o.length); if (first) out.push(first[(h >>> 21) % first.length]); }
     out = out.map((a) => a.id === "jacket" ? { ...a, pal: { J: COATS[(h >>> 27) % COATS.length], j: shade(COATS[(h >>> 27) % COATS.length], 0.7) } } : a);
   }
+  if (hides) out = out.filter((a) => !hides.includes(a.slot));
   wornCache.set(key, out);
   return out;
 }

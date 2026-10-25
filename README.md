@@ -58,7 +58,7 @@ herdr plugin action invoke hq-office.install-service
 
 The service runs Bun on the plugin's `server.ts` with the values from `config.env`, `HUD_DATA_DIR` set to the plugin's state directory (the same data the start action uses), and a PATH that includes `~/.bun/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. Its log is `server.log` in the state directory. If something else is already answering on the port, the action stops and says so instead of installing a service that cannot start.
 
-With the service installed, start, stop and restart use it. The settings are written into the service, so after editing `config.env`, or after updating the plugin, run the restart action (or install service again): it writes the service again and restarts it. Stop unloads the service until the next login or the next start; remove service takes it away for good:
+With the service installed, start, stop and restart use it. The settings are written into the service, so after editing `config.env`, or after updating the plugin, run the restart action, `herdr plugin action invoke hq-office.reload` (herdr takes the action as `hq-office.<action>`; options go before it), or install service again: it writes the service again and restarts it. Restart refuses to point the service at a different data folder than the one it uses, so running the plugin's script by hand cannot swap in an empty board; `--force` moves it on purpose. Stop unloads the service until the next login or the next start; remove service takes it away for good:
 
 ```sh
 herdr plugin action invoke hq-office.remove-service
@@ -108,6 +108,25 @@ hud secret list                          # names, who set them, when they expire
 
 Values live in the server's memory only: never in the database, the log, `/api/state` or any listing, and a restart clears them all. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
 
+## Lanes in levels
+
+Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name) and LEVEL THEME picks how the room dresses them. The worker card shows a lane's level and its chain up to HQ.
+
+A theme dresses every figure in the room, whatever the levels:
+
+| | Office (default) | Arena |
+| --- | --- | --- |
+| Level 1 | dark suit, tie in its own colour | masked guard, square mark, black belt |
+| Level 2 | light cardigan | masked guard, triangle mark |
+| Level 3 and deeper | everyday clothes | numbered player in a matching tracksuit |
+| No tree (every lane under HQ) | everyday clothes | numbered players |
+| Your hero | as picked in HERO | the game master: black coat, black mask with gold eyes, your hero's own hair (standing, dancing and asleep) |
+| HQ | its usual look | the senior guard, a gold crown on the hood |
+
+In Arena nothing seasonal is drawn over a mask (guards, the hero, HQ; so HERO HAT has no effect there), and players
+leave off seasonal hats and coats but keep what they hold. Office with no tree looks as it always did. The art is
+our own, not any show's.
+
 ## The work board
 
 The WORK tab lists every piece of work in flight: an issue key, its pull requests and the lane that owns it. HQ adds one with `hud track ISSUE --lane L --pr N`, and `hud lane NAME --issue X --pr N` links a lane's work too. Each item's state is worked out from facts, in this order: done (all PRs merged or closed, or `hud done ISSUE`), waiting on you (an open question names its lane, issue or PR), waiting on CI (a check is running), paused (`hud pause ISSUE REASON`, undone with `hud resume ISSUE`), moving (the lane is working, or something changed in the last 45 minutes), and otherwise stalled. Stalled work shows red at the top of the question column and at the top of `hud board` (`--json` for JSON).
@@ -136,7 +155,11 @@ SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND ne
 
 ## Images
 
-Drop or paste an image into any text box on the page. It is saved in the data directory and its path is put into the text, so HQ can open it.
+Every send box (Tell HQ, each question's answer, a reply in MESSAGES) is one composer: attached images on top, the text field, then the photo button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone it opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker, and dropping or pasting an image into a text box works too.
+
+Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the data directory (10 MB at most).
+
+Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. The text you type stays clean. An image is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and an image that is too big or that the browser cannot read says why in one line. When you send, each image's path is added to the end of your text as `[image: /path]`, which is how HQ opens it. Images are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never the pictures), and are cleared once the message is sent.
 
 ## Configuration
 

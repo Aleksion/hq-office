@@ -28,11 +28,14 @@ beforeAll(async () => {
   server = await startServer(ROOT);
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-});
+  // The office carries its icon inline; only the plain page below asks for /favicon.ico, whose 404 can be logged at
+  // any time after that page loads. Blocked, it never reaches the errors.
+  await page.s("Network.setBlockedURLs", { urls: ["*/favicon.ico"] });
+}, 30_000);
 
 afterAll(async () => {
   await server?.stop();
-  chrome?.close();
+  await chrome?.close();
 });
 
 test.skipIf(!chromeFound)("settings this browser remembered from before are sent up once", async () => {
@@ -41,10 +44,9 @@ test.skipIf(!chromeFound)("settings this browser remembered from before are sent
   await until(`document.readyState === "complete"`);
   await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ hero: "IVY", season: "winter", hat: "auto" })); localStorage.setItem("hq-sound", "1")`);
   expect(await serverSettings()).toEqual({});
-  errors.length = 0; // that page's missing favicon
   await open();
   for (let i = 0; i < 100 && !Object.keys(await serverSettings()).length; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth" });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" });
   expect(await page.evaluate(`document.getElementById("alerts").textContent`)).toBe("SOUND ON");
   await until(`localStorage.getItem("hq-sound") === null`);
   expect(await shownHero()).toBe("IVY");
@@ -56,7 +58,7 @@ test.skipIf(!chromeFound)("after the browser's data is cleared, the server's set
   await until(`document.getElementById("alerts").textContent === "SOUND ON"`);
   expect(await shownHero()).toBe("IVY");
   expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).season`)).toBe("winter");
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth" });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" });
 });
 
 test.skipIf(!chromeFound)("the server's settings win over a different copy in the browser", async () => {
@@ -78,6 +80,6 @@ test.skipIf(!chromeFound)("a change on the page reaches the server, and one on t
   await until(`document.querySelector('[data-set="hero"].on')?.dataset.val === "MARA" && document.getElementById("alerts").textContent === "SOUND ON"`);
   await page.evaluate(`document.querySelector("[data-reset]").click()`);
   for (let i = 0; i < 100 && (await serverSettings()).hero !== "YOU"; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "YOU", season: "auto", hat: "auto", sound: false, performance: "smooth" });
+  expect(await serverSettings()).toEqual({ hero: "YOU", season: "auto", hat: "auto", sound: false, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" });
   expect(errors).toEqual([]);
 });

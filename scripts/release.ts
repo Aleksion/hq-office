@@ -56,6 +56,22 @@ if (!version || args.length) fail("usage: bun scripts/release.ts X.Y.Z [--ref RE
 if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) fail(`"${version}" is not a version like 0.2.0`);
 const tag = `v${version}`;
 
+// Everyone who wrote or co-wrote a commit since the previous release (this repo's previous v* tag), except the
+// owner and AI co-author lines: the public repo gets one commit per release, so they are credited on it.
+function contributors(): string[] {
+  const prev = run(["git", "describe", "--tags", "--abbrev=0", "--match", "v*", `${commit}^`], { cwd: ROOT, soft: true });
+  if (!prev.ok) return [];
+  const owner = run(["git", "config", "user.email"], { cwd: ROOT, soft: true }).out.trim().toLowerCase();
+  const log = run(["git", "log", "--format=%an <%ae>%n%(trailers:key=Co-Authored-By,valueonly)", `${prev.out.trim()}..${commit}`], { cwd: ROOT }).out;
+  const seen = new Map<string, string>();
+  for (const line of log.split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const email = line.match(/<([^>]+)>/)?.[1]?.toLowerCase();
+    if (!email || email === owner || email.endsWith("@anthropic.com") || email.includes("noreply")) continue;
+    if (!seen.has(email)) seen.set(email, line);
+  }
+  return [...seen.values()];
+}
+
 const ROOT = run(["git", "rev-parse", "--show-toplevel"], { cwd: import.meta.dir }).out;
 // The main working tree: where this installation's own files live when the release runs from another worktree.
 const MAIN = run(["git", "worktree", "list", "--porcelain"], { cwd: ROOT }).out.split("\n")[0].replace(/^worktree /, "");
@@ -222,7 +238,9 @@ if (tagged.ok) {
   pg("add", "-A");
   if (pg("write-tree") !== tree) fail(`${PUBLIC}: the staged tree is not the export (an ignored file in the way?)`);
   const message = join(TMP, "message");
-  writeFileSync(message, `release: ${tag}\n\n${notes}\n`);
+  const credits = contributors();
+  writeFileSync(message, `release: ${tag}\n\n${notes}\n${credits.length ? "\n" + credits.map((c) => `Co-Authored-By: ${c}`).join("\n") + "\n" : ""}`);
+  if (credits.length) console.log(`credited: ${credits.join(", ")}`);
   pg("commit", "-q", "-F", message);
   pg("tag", "-a", tag, "-F", message);
   console.log(`committed and tagged ${tag} in ${PUBLIC}`);
@@ -247,4 +265,6 @@ if (!push) {
 }
 if (!ghRepo) fail(`cannot tell the GitHub repo from ${remote}; pass --remote https://github.com/OWNER/REPO.git`);
 for (const step of steps) run(step, { inherit: true });
+// The released commit gets the same tag here, so the next release knows where this one started.
+run(["git", "tag", "-a", tag, "-m", `release ${tag}`, commit], { cwd: ROOT, soft: true });
 console.log(`released ${tag}: https://github.com/${ghRepo}/releases/tag/${tag}`);

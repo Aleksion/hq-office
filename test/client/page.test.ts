@@ -16,6 +16,8 @@ const until = async (expr: string, ms = 8000) => {
   throw new Error(`timed out waiting for ${expr}`);
 };
 const state = async () => (await fetch(`${server.base}/api/state`)).json();
+// Sampled alpha of the room's canvas: how many of its sampled pixels are drawn.
+const ROOM_DRAWN = `(() => { const d = document.getElementById("room").getContext("2d").getImageData(0, 0, 1152, 768).data; let n = 0; for (let i = 3; i < d.length; i += 4000) if (d[i]) n++; return n; })()`;
 
 beforeAll(async () => {
   if (!chromeFound) return;
@@ -26,18 +28,20 @@ beforeAll(async () => {
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.s("Page.navigate", { url: `${server.base}/` });
   await until(`!!document.querySelector(".ask")`);
-});
+  // The questions render as the state arrives; the room draws on its next animation frame, often after them.
+  await until(`${ROOM_DRAWN} > 0`);
+}, 30_000);
 
 afterAll(async () => {
   await server?.stop();
-  chrome?.close();
+  await chrome?.close();
 });
 
 test.skipIf(!chromeFound)("loads with no errors and no page scroll, the room drawing", async () => {
   expect(await page.evaluate(`document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
   expect(await page.evaluate(`document.getElementById("room").width`)).toBe(24 * 16 * 3);
   // the room has drawn something besides the clear colour
-  expect(await page.evaluate(`(() => { const d = document.getElementById("room").getContext("2d").getImageData(0, 0, 1152, 768).data; let n = 0; for (let i = 3; i < d.length; i += 4000) if (d[i]) n++; return n; })()`)).toBeGreaterThan(100);
+  expect(await page.evaluate(ROOM_DRAWN)).toBeGreaterThan(100);
   expect(await page.evaluate(`document.querySelector("#sWait .count").textContent`)).toBe("2");
   expect(errors).toEqual([]);
 });

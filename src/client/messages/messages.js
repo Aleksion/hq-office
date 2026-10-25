@@ -1,11 +1,13 @@
 // The MESSAGES tab: one thread of HQ's updates and your notes, with replies.
-import { $, toast } from "../core/dom.js";
+import { $, keepPlace, keepScroll, pageScrolls, phone, showEdges, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
 import { post } from "../core/net.js";
 import { renderBelow } from "../questions/questions.js";
 import { renderWork } from "../work-board/work-board.js";
+import { on } from "../core/bus.js";
+import { clearImages, composer, hasImages, notReady, withImages } from "../images/images.js";
 
 // QUESTIONS and MESSAGES share the question column; one shows at a time. The choice is remembered in this browser.
 // MESSAGES is one thread, oldest at the top: HQ's updates and your notes, by time. A reply is an ordinary note
@@ -14,19 +16,30 @@ import { renderWork } from "../work-board/work-board.js";
 const REF = /^re: #([un])(\d+)(?: \("([^"\n]*)"\))?[ \t]*/;
 export let qTab = (() => { try { const t = localStorage.getItem("hq-qtab"); return t === "messages" || t === "work" ? t : "questions"; } catch { return "questions"; } })();
 export let replyTo = null, replyText = "", msgStick = true;
+// The open reply, put back after the page reloads (questions/drafts.js keeps it with the other drafts).
+export function setReply(to, text) { replyTo = to; replyText = text; }
 // Updates marked read by opening the tab keep their tint until you leave it, so you still see what was new.
 const readSent = new Set(), msgFresh = new Set();
 const short = (s, n) => { const t = String(s ?? "").replace(/```[\s\S]*?```/g, "[code]").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
 
 export function setQTab(t) {
   if (t === qTab) return;
+  // Where the page scrolls: a list you were in starts at its tabs, MESSAGES at its newest message; with the list
+  // above the screen, what is on screen stays where it is. On a phone the thread scrolls itself: it opens at its
+  // newest message, and the page scrolls (no further than the tabs) until the thread and Tell HQ under it show.
+  const wrap = $("qtabs").parentElement, was = pageScrolls() ? wrap.getBoundingClientRect() : null;
   if (qTab === "messages") msgFresh.clear();
   qTab = t;
   try { localStorage.setItem("hq-qtab", t); } catch {}
-  msgStick = true;
+  msgStick = !was || was.bottom > 0 || phone();
   renderQTabs();
   if (t === "messages") renderMsgs(); else renderBelow();
   renderWork();
+  if (!was) return;
+  const now = wrap.getBoundingClientRect();
+  if (was.bottom <= 0) scrollBy(0, now.bottom - was.bottom);
+  else if (t === "messages" && phone()) scrollBy(0, Math.min(now.top, Math.max(0, wrap.parentElement.getBoundingClientRect().bottom - innerHeight + 8)));
+  else if (t !== "messages" && now.top < 0) scrollBy(0, now.top);
 }
 export function renderQTabs() {
   for (const b of $("qtabs").querySelectorAll("[data-qtab]")) {
@@ -75,7 +88,7 @@ function msgItem(m, nameParent) {
 function replyBox(m) {
   return `<div class="thread rbox" data-rbox>
       <div class="quote">↩ ${m.who} ${clock(m.at)}: ${esc(short(m.title || m.text, 90))}</div>
-      <div class="reply"><textarea name="reply" rows="2" placeholder="Your reply. ⌘↩ sends, Esc closes.">${esc(replyText)}</textarea><button class="send go" type="button" data-rsend ${replyText.trim() ? "" : "disabled"}>SEND</button></div>
+      ${composer("reply", `<textarea name="reply" rows="1" placeholder="Your reply. ⌘↩ sends, Esc closes.">${esc(replyText)}</textarea>`, `<button class="send go" type="button" data-rsend ${replyText.trim() || hasImages("reply") ? "" : "disabled"}>SEND</button>`)}
     </div>`;
 }
 // Two levels of indent at most. Under the second level, every deeper reply sits at that level and names its parent.
@@ -98,22 +111,51 @@ export function renderMsgs() {
     post(`/api/updates/${u.id}/read`, {}).catch(() => readSent.delete(u.id));
   }
   const caret = document.activeElement?.closest?.("[data-rbox]") ? document.activeElement.selectionStart : null;
-  const atBottom = msgStick || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  const top = box.scrollTop;
-  const replaced = setHTML(box, msgModel().roots.map((m) => msgNode(m, 0)).join("") || `<div class="empty">No messages yet. HQ's updates and your notes land here.</div>`);
-  if (replaced || msgStick) box.scrollTop = atBottom ? box.scrollHeight : top;
+  const html = msgModel().roots.map((m) => msgNode(m, 0)).join("") || `<div class="empty">No messages yet. HQ's updates and your notes land here.</div>`;
+  if (phone()) {
+    // The thread scrolls itself (core/layout.css): at the newest message (just opened, or within 40px of it), stay
+    // on it; reading older ones, what you read stays where it is, whatever lands above or below.
+    const pinned = msgStick || box.scrollHeight - box.scrollTop - box.clientHeight < 40, place = pinned ? null : keepScroll(box, "data-msg");
+    setHTML(box, html);
+    if (pinned) box.scrollTop = box.scrollHeight; else place();
+    showEdges(box);
+  } else if (pageScrolls()) {
+    // The page scrolls, not the thread: on the newest message (just opened, or already there), stay on it;
+    // reading older ones, what you read stays where it is.
+    const pinned = msgStick || atNewest(box), place = pinned ? null : keepPlace(box, "data-msg");
+    setHTML(box, html);
+    if (pinned) showNewest(box); else place();
+  } else {
+    const atBottom = msgStick || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const top = box.scrollTop;
+    if (setHTML(box, html) || msgStick) box.scrollTop = atBottom ? box.scrollHeight : top;
+  }
   msgStick = false;
   if (caret != null) { const ta = box.querySelector("[data-rbox] textarea"); if (ta) { ta.focus(); ta.setSelectionRange(caret, caret); } }
 }
+const lastMsg = (box) => { const all = box.querySelectorAll("[data-msg]"); return all[all.length - 1]; };
+// The newest message is on screen, or its bottom is just under the edge.
+function atNewest(box) {
+  const r = lastMsg(box)?.getBoundingClientRect();
+  return !r || (r.bottom > 0 && r.bottom <= innerHeight + 40);
+}
+// Scroll the page only as far as it takes to show the newest message at the bottom of the screen.
+function showNewest(box) {
+  const r = lastMsg(box)?.getBoundingClientRect();
+  if (r && (r.bottom < 0 || r.bottom > innerHeight - 12)) scrollBy(0, r.bottom - innerHeight + 12);
+}
 async function sendReply(btn) {
-  const text = replyText.trim();
+  const text = withImages("reply", replyText.trim());
   if (!text || !replyTo) return;
+  const wait = notReady("reply");
+  if (wait) { toast(wait); return; }
   const p = msgModel().byKey.get(replyTo);
   const said = p ? ` ("${short(p.title || p.text, 50).replace(/"/g, "'")}")` : "";
   btn.disabled = true;
   try {
     await post("/api/notes", { text: `re: #${replyTo}${said} ${text}` });
     replyTo = null; replyText = "";
+    clearImages("reply");
     renderMsgs();
     toast("SENT TO HQ.");
   } catch (err) { toast(err.message); btn.disabled = false; }
@@ -123,7 +165,7 @@ $("stall").addEventListener("click", () => setQTab("work"));
 $("msgs").addEventListener("click", (e) => {
   const r = e.target.closest("[data-reply]");
   if (r) {
-    if (replyTo === r.dataset.reply) replyTo = null; else { replyTo = r.dataset.reply; replyText = ""; }
+    if (replyTo === r.dataset.reply) replyTo = null; else { replyTo = r.dataset.reply; replyText = ""; clearImages("reply"); }
     renderMsgs();
     const rb = $("msgs").querySelector("[data-rbox]");
     if (rb) { rb.scrollIntoView({ block: "nearest" }); rb.querySelector("textarea").focus(); }
@@ -132,10 +174,15 @@ $("msgs").addEventListener("click", (e) => {
   const send = e.target.closest("[data-rsend]");
   if (send) sendReply(send);
 });
+$("msgs").addEventListener("scroll", () => showEdges($("msgs")), { passive: true });
 $("msgs").addEventListener("input", (e) => {
-  if (!e.target.closest("[data-rbox]")) return;
+  if (!e.target.closest("[data-rbox]") || e.target.tagName !== "TEXTAREA") return;
   replyText = e.target.value;
-  $("msgs").querySelector("[data-rsend]").disabled = !replyText.trim();
+  $("msgs").querySelector("[data-rsend]").disabled = !replyText.trim() && !hasImages("reply");
+});
+on("attach", (key) => {
+  const btn = key === "reply" && $("msgs").querySelector("[data-rsend]");
+  if (btn) btn.disabled = !replyText.trim() && !hasImages("reply");
 });
 $("msgs").addEventListener("keydown", (e) => {
   if (!e.target.closest("[data-rbox]")) return;

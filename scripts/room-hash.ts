@@ -177,7 +177,8 @@ export async function startChrome() {
   if (!port) throw new Error("Chrome did not start");
   const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
   const cdp = await Cdp.open(version.webSocketDebuggerUrl);
-  return { cdp, close: () => { cdp.ws.close(); proc.kill(); rmSync(profile, { recursive: true, force: true }); } };
+  // The profile is removed once Chrome has exited: removed while it still runs, Chrome writes parts of it back.
+  return { cdp, close: async () => { cdp.ws.close(); proc.kill(); await proc.exited; rmSync(profile, { recursive: true, force: true }); } };
 }
 
 // A port nothing is listening on right now.
@@ -188,23 +189,50 @@ export function freePort() {
   return port;
 }
 
-export async function startServer(dir: string) {
+// server.ts on a port of its own. A port that was free when freePort probed it can be taken before the server binds
+// it (by another test run on this machine); the server then exits, and a readiness check on that port would reach
+// the other run's server. So the server's own word is the signal: it prints its address only once it listens, and a
+// server that exits first is started again on another port.
+export async function spawnServer(opts: { cwd: string; env: Record<string, string | undefined>; out?: (chunk: Uint8Array) => void }) {
+  for (let attempt = 1; ; attempt++) {
+    const port = freePort();
+    const proc = Bun.spawn([process.execPath, "server.ts"], { cwd: opts.cwd, env: { ...opts.env, HUD_PORT: String(port) }, stdout: "pipe", stderr: "pipe" });
+    let said = "";
+    let listening!: (ok: boolean) => void;
+    const up = new Promise<boolean>((ok) => (listening = ok));
+    const pump = async (s: ReadableStream<Uint8Array>, watch: boolean) => {
+      for await (const chunk of s) {
+        opts.out?.(chunk);
+        if (watch && !said.includes("HQ command centre on")) {
+          said += new TextDecoder().decode(chunk);
+          if (said.includes("HQ command centre on")) listening(true);
+        }
+      }
+    };
+    const drained = Promise.all([pump(proc.stdout, true), pump(proc.stderr, false)]).then(() => {});
+    proc.exited.then(() => listening(false));
+    const timer = setTimeout(() => listening(false), 15_000);
+    const ok = await up;
+    clearTimeout(timer);
+    const stop = async () => { proc.kill(); await proc.exited; await drained; };
+    if (ok) return { proc, port, base: `http://127.0.0.1:${port}`, stop };
+    await stop();
+    if (attempt === 5) throw new Error(`server.ts did not start (last port ${port}): ${said.trim() || "no output"}`);
+  }
+}
+
+export async function startServer(dir: string, extraEnv: Record<string, string> = {}) {
   const data = mkdtempSync(join(tmpdir(), "hq-office-pixels-"));
   const herdr = join(data, "herdr");
   // A herdr that knows two agents: one working, one idle. Everything else it is asked succeeds quietly.
   writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[{"name":"golf","agent_status":"working","pane_id":"p1","agent":"claude"},{"name":"alpha","agent_status":"idle","pane_id":"p2","agent":"claude"}]}}' ;;\n  *) exit 0 ;;\nesac\n`);
   chmodSync(herdr, 0o755);
-  const port = freePort();
   // PIXEL_OWNER names the owner on both sides, for a base whose default hero carried a fixed name instead of HUD_OWNER.
-  const env = { ...process.env, HUD_PORT: String(port), HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_OWNER: process.env.PIXEL_OWNER || "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq" };
-  const proc = Bun.spawn([process.execPath, "server.ts"], { cwd: dir, env, stdout: "ignore", stderr: "ignore" });
-  const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(`${base}/api/state`)).ok) break; } catch {}
-    await Bun.sleep(100);
-  }
+  const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_OWNER: process.env.PIXEL_OWNER || "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", ...extraEnv };
+  const server = await spawnServer({ cwd: dir, env });
+  const { base } = server;
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
-  return { base, post, stop: async () => { proc.kill(); await proc.exited; rmSync(data, { recursive: true, force: true }); } };
+  return { base, post, stop: async () => { await server.stop(); rmSync(data, { recursive: true, force: true }); } };
 }
 
 export async function seed(post: (p: string, b: object) => Promise<any>) {
@@ -283,6 +311,8 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     await evaluate(`document.getElementById("settingsBtn").click()`);
     // The PERFORMANCE row is new in 0.6; leave it out so the rest of the panel compares with a tree from before.
     await evaluate(`document.querySelector('[data-set="performance"]')?.closest(".srow").remove()`);
+    // The LEVEL NAMES and LEVEL THEME rows are new in the lane tree's release; left out the same way.
+    await evaluate(`document.querySelector("[data-levels]")?.remove(); document.querySelector('[data-set="theme"]')?.closest(".srow").remove()`);
     styles["1440x900 settings open"] = await evaluate(STYLE_HASH);
     await evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
     styles["1440x900 messages tab"] = await evaluate(STYLE_HASH);
@@ -331,7 +361,7 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     log("captured");
     await server.stop();
     log("server stopped");
-    chrome.close();
+    await chrome.close();
     log("chrome closed");
   }
 }

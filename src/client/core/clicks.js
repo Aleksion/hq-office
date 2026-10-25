@@ -16,7 +16,7 @@ document.addEventListener("click", (e) => {
     if (tabBtn.id === "sFrom") { const f = $("feed"); f.classList.remove("flash"); void f.offsetWidth; f.classList.add("flash"); }
     return;
   }
-  const more = e.target.closest("[data-more]");
+  const more = e.target.closest(".more[data-more]");
   if (more) {
     const key = more.dataset.more;
     if (expanded.has(key)) expanded.delete(key); else expanded.add(key);
