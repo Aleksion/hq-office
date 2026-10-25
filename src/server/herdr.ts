@@ -22,8 +22,8 @@ async function herdrList(machine: string): Promise<any[]> {
 
 // An idle agent can still be working. Its pane's tail says so: "· 2 shells still running", "monitor still running",
 // a status bar with "← 1 agent" or "1 shell, 1 monitor", or a running subagent listed as "◯ general-purpose  <task>  34m 0s".
-const BG = /(←\s*\d+\s+agents?|\d+\s+shells?(?:,\s*\d+\s+monitors?)?(?:\s+still running)?|\d+\s+monitors?|monitors?\s+still running)/i;
-const SUBAGENT = /^\s*◯\s+([\w.-]+)\s/m;
+export const BG = /(←\s*\d+\s+agents?|\d+\s+shells?(?:,\s*\d+\s+monitors?)?(?:\s+still running)?|\d+\s+monitors?|monitors?\s+still running)/i;
+export const SUBAGENT = /^\s*◯\s+([\w.-]+)\s/m;
 async function backgroundWork(machine: string, pane: string): Promise<string | null> {
   const args = machine === LOCAL ? [HERDR, "pane", "read", pane, "--lines", "10"] : [HERDR, "--machine", machine, "pane", "read", pane, "--lines", "10"];
   try {

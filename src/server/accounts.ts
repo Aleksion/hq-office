@@ -1,19 +1,22 @@
-// Accounts: the Claude and Codex accounts on each machine, what each has left, and grazr's swap. Read once a minute
+// Accounts: the Claude and Codex accounts on each machine, what each has left, and which lane runs on which. Read once a minute
 // with account-stats.py (names and percentages only, never a credential) and kept in memory: the page shows the
 // latest reading, and nothing here is history.
-import { DIR, HERDR, LOCAL, MACHINES } from "./config.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { DIR, LOCAL, MACHINES } from "./config.ts";
+import { db } from "./db.ts";
 import { SSH_REUSE, sshTarget } from "./machines.ts";
 import { bump } from "./push.ts";
+import { MCP_NOTE, homeDir } from "./claude-home.ts";
 import { addStatePart } from "./state.ts";
 
 export const ACCOUNTS_MS = 60_000;
 const SCRIPT = `${DIR}/src/server/account-stats.py`;
-// grazr's defaults; Codex has no rotation tool, so its accounts are judged against the same two lines.
-const DEFAULT_SESSION = 15;
-const DEFAULT_WEEKLY = 10;
+// An account is judged low under these percentages of its 5-hour window or its week.
+const LIMITS = { session: 15, weekly: 10 };
 
 type Raw = {
-  claude: { grazr: boolean; logged_in: boolean; active_enrolled: boolean; status_line: boolean; log: string[]; config: Record<string, string>; accounts: { name: string; active: boolean; windows: Record<string, { left: number; resets_at: string | null }> }[] };
+  claude: { homes: { name: string; logged_in: boolean; windows: Record<string, { left: number; resets_at: string | number | null }> }[] };
   codex: { name: string; logged_in: boolean; shares_sessions_with: string[]; reading: { at: string; windows: { minutes: number; used: number; resets_at: number | null }[] } | null }[];
 };
 type Sample = { at: number; raw?: Raw; error?: string };
@@ -34,25 +37,20 @@ async function onMachine(machine: string, local: string[], remote: string, stdin
   return out;
 }
 
+// One fresh reading of a machine's accounts.
+export async function readMachine(machine: string): Promise<Raw> {
+  return JSON.parse(await onMachine(machine, ["python3", "-I", SCRIPT], "python3 -I -", SCRIPT));
+}
+
 export async function sampleAccounts() {
   for (const machine of MACHINES) {
     try {
-      const out = await onMachine(machine, ["python3", "-I", SCRIPT], "python3 -I -", SCRIPT);
-      samples.set(machine, { at: Date.now(), raw: JSON.parse(out) });
+      samples.set(machine, { at: Date.now(), raw: await readMachine(machine) });
     } catch (e) {
       samples.set(machine, { at: Date.now(), error: (e as Error).message.slice(0, 200) });
     }
   }
   bump();
-}
-
-// grazr's swap: to the first account in its ACCOUNTS with room, with its own lock, log and toast. herdr is not on a
-// plain ssh PATH on every machine, so the remote command adds the usual install places.
-export async function swapClaude(machine: string): Promise<string> {
-  if (!MACHINES.includes(machine)) throw new Error(`no machine named ${machine}`);
-  const out = await onMachine(machine, [HERDR, "plugin", "action", "invoke", "wazum.grazr.swap"], `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" herdr plugin action invoke wazum.grazr.swap`);
-  await sampleAccounts();
-  return out.trim().split("\n").filter(Boolean).pop() ?? "";
 }
 
 // A reading taken before its window reset says nothing about now: the window is full again.
@@ -64,10 +62,26 @@ function window(left: number | undefined, resetsAt: number | null, now: number):
 const ms = (t: string | number | null | undefined) => (t == null ? null : typeof t === "number" ? t * 1000 : Date.parse(t) || null);
 
 // What one Claude or Codex account looks like on the page: its two windows and whether it can still be spent.
-function judge(session: Window | null, weekly: Window | null, limits: { session: number; weekly: number }) {
+function judge(session: Window | null, weekly: Window | null) {
   const out = [session, weekly].some((w) => w && w.left <= 0);
-  const low = !out && ((session && session.left < limits.session) || (weekly && weekly.left < limits.weekly));
+  const low = !out && ((session && session.left < LIMITS.session) || (weekly && weekly.left < LIMITS.weekly));
   return { session, weekly, out, low: !!low };
+}
+
+// The Claude lanes on a machine and the account each runs on: the one it was last moved to, else the default home.
+function claudeLanes(machine: string) {
+  const moved = new Map((db.query("SELECT lane, account FROM lane_accounts").all() as { lane: string; account: string }[]).map((r) => [r.lane, r.account]));
+  return (db.query("SELECT name, herdr FROM lanes WHERE machine = ? AND agent = 'claude' AND herdr != 'gone' ORDER BY name").all(machine) as { name: string; herdr: string | null }[]).map((l) => ({ name: l.name, status: l.herdr, account: moved.get(l.name) ?? "default" }));
+}
+
+// The names of the MCP servers a home was made without a secret for (written by makeHome; names only).
+function mcpNeedsSecretIn(account: string): string[] {
+  try {
+    const names = JSON.parse(readFileSync(join(homeDir(account), MCP_NOTE), "utf8"));
+    return Array.isArray(names) ? names.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function accountsView(now = Date.now()) {
@@ -75,34 +89,26 @@ export function accountsView(now = Date.now()) {
     const s = samples.get(machine);
     if (!s?.raw) return { machine, ok: false, error: s?.error ?? "not read yet", age: s ? now - s.at : null, claude: null, codex: [] };
     const { claude: c, codex } = s.raw;
-    const limits = { session: Number(c.config.REMAINING_SESSION ?? DEFAULT_SESSION), weekly: Number(c.config.REMAINING_WEEKLY ?? DEFAULT_WEEKLY) };
-    const order = (c.config.ACCOUNTS ?? "").split(/\s+/).filter(Boolean);
-    const accounts = c.accounts
-      .map((a) => ({
-        name: a.name,
-        active: a.active,
-        listed: order.includes(a.name),
-        ...judge(window(a.windows.session?.left, ms(a.windows.session?.resets_at), now), window(a.windows.weekly?.left, ms(a.windows.weekly?.resets_at), now), limits),
-      }))
-      .sort((a, b) => Number(b.active) - Number(a.active) || (order.indexOf(a.name) + 1 || 99) - (order.indexOf(b.name) + 1 || 99));
-    const rotating = accounts.filter((a) => a.listed).length >= 2;
-    const state = !c.grazr ? "no_grazr" : !accounts.length ? "none" : c.config.ENABLED === "0" ? "off" : !rotating ? "one" : c.config.DRY_RUN === "1" ? "dry_run" : "rotating";
-    const active = accounts.find((a) => a.active);
+    const lanes = claudeLanes(machine);
+    const accounts = c.homes.map((h) => ({
+      name: h.name,
+      loggedIn: h.logged_in,
+      lanes: lanes.filter((l) => l.account === h.name).map((l) => l.name),
+      mcpNeedsSecret: machine === LOCAL ? mcpNeedsSecretIn(h.name) : [],
+      ...judge(window(h.windows.session?.left, ms(h.windows.session?.resets_at), now), window(h.windows.weekly?.left, ms(h.windows.weekly?.resets_at), now)),
+    }));
+    const used = accounts.filter((a) => a.lanes.length);
     return {
       machine,
       ok: true,
       age: now - s.at,
       claude: {
-        state,
-        loggedIn: c.logged_in,
-        activeEnrolled: c.active_enrolled,
-        statusLine: c.status_line,
-        limits,
+        // Moving is the laptop's so far: the move runs herdr and the relaunch on this machine.
+        canMove: machine === LOCAL,
         accounts,
-        out: !!active?.out,
-        low: !!active?.low,
-        canSwap: c.grazr && accounts.some((a) => !a.active && !a.out && !a.low),
-        log: c.log,
+        lanes,
+        out: used.some((a) => a.out),
+        low: used.some((a) => a.low),
       },
       codex: codex.map((h) => {
         const by = (minutes: number) => h.reading?.windows.find((w) => w.minutes === minutes);
@@ -112,7 +118,7 @@ export function accountsView(now = Date.now()) {
           loggedIn: h.logged_in,
           readingAt: ms(h.reading?.at),
           sharesSessionsWith: h.shares_sessions_with,
-          ...judge(window(five && 100 - five.used, ms(five?.resets_at), now), window(week && 100 - week.used, ms(week?.resets_at), now), { session: DEFAULT_SESSION, weekly: DEFAULT_WEEKLY }),
+          ...judge(window(five && 100 - five.used, ms(five?.resets_at), now), window(week && 100 - week.used, ms(week?.resets_at), now)),
         };
       }),
     };

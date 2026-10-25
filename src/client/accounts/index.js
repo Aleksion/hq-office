@@ -1,4 +1,4 @@
-// The accounts panel: each machine's Claude and Codex accounts, what each has left, and grazr's swap. The ACCOUNTS
+// The accounts panel: each machine's Claude and Codex accounts, what each has left, and a MOVE for each Claude lane. The ACCOUNTS
 // box in the top bar opens it over the room; it never covers the questions.
 import { on } from "../core/bus.js";
 import { $, toast } from "../core/dom.js";
@@ -46,50 +46,34 @@ function bar(label, w, line) {
 
 function account(a, limits, extra) {
   const bars = bar("5 HOURS", a.session, limits.session) + bar("WEEK", a.weekly, limits.weekly);
-  return `<div class="acct${a.active ? " active" : ""}">
-    <div class="ahead"><b>${esc(a.name)}</b>${a.active ? `<span class="tag on">ACTIVE</span>` : ""}${a.out ? `<span class="tag out">OUT</span>` : a.low ? `<span class="tag low">LOW</span>` : ""}</div>
+  return `<div class="acct">
+    <div class="ahead"><b>${esc(a.name)}</b>${a.lanes?.length ? `<span class="tag on">${a.lanes.length} LANE${a.lanes.length > 1 ? "S" : ""}</span>` : ""}${a.out ? `<span class="tag out">OUT</span>` : a.low ? `<span class="tag low">LOW</span>` : ""}</div>
     ${bars || `<div class="anote">No reading yet.</div>`}
     ${extra ? `<div class="anote">${extra}</div>` : ""}
   </div>`;
 }
 
-const CLAUDE_STATE = {
-  rotating: ["ROTATING", "ok"],
-  dry_run: ["DRY RUN", "low"],
-  off: ["ROTATION OFF", "low"],
-  one: ["ONE ACCOUNT", "low"],
-  none: ["NOTHING ENROLLED", "low"],
-  no_grazr: ["NO GRAZR", "low"],
-};
-const ENROL = "herdr plugin pane open --plugin wazum.grazr --entrypoint enrol";
+const LIMITS = { session: 15, weekly: 10 };
+
+// One Claude lane: where it runs, and a move to another account that is logged in.
+function laneRow(m, l) {
+  const targets = m.claude.accounts.filter((a) => a.loggedIn && a.name !== l.account);
+  const busy = l.status === "working";
+  return `<div class="alane"><b>${esc(l.name)}</b><span class="anote">on ${esc(l.account)}${busy ? " · working: move it when it is idle" : ""}</span>
+    <select data-move-to="${esc(l.name)}" aria-label="Move ${esc(l.name)} to" ${targets.length ? "" : "disabled"}>${targets.map((a) => `<option>${esc(a.name)}</option>`).join("")}</select>
+    <button class="btn" type="button" data-move="${esc(l.name)}" ${targets.length && !busy ? "" : "disabled"}>MOVE</button></div>`;
+}
 
 function claudeCard(m) {
   const c = m.claude;
-  const [label, cls] = c.out ? ["AT ITS LIMIT", "out"] : CLAUDE_STATE[c.state];
-  const line = {
-    rotating: `grazr moves to the next account below ${c.limits.session}% of the 5-hour window or ${c.limits.weekly}% of the week. Running panes switch on their next message, with no restart.`,
-    dry_run: "grazr logs what it would do (DRY_RUN=1) and switches nothing.",
-    off: "grazr's rotation is off (ENABLED=0). Swap now still works.",
-    one: "One account is enrolled, so there is nothing to rotate to.",
-    none: "grazr is installed, but no account is enrolled, so it has never rotated.",
-    no_grazr: "grazr is not installed here. When this machine's Claude account runs out, its Claude lanes stop until the reset.",
-  }[c.state];
-  const warn = [
-    c.accounts.length && !c.statusLine ? "grazr is not on Claude's status line, so it sees no usage. Run its action “grazr: connect to Claude's status line”." : "",
-    c.accounts.length && c.loggedIn && !c.activeEnrolled ? "The login this machine uses now is not enrolled, so grazr can move off it only by hand." : "",
-  ].filter(Boolean);
-  const steps = c.state === "no_grazr"
-    ? ["herdr plugin install wazum/herdr-grazr", ENROL]
-    : ["none", "one"].includes(c.state) ? [ENROL] : [];
-  const swapNote = c.canSwap ? "to the next account in ACCOUNTS with room" : c.accounts.length > 1 ? "no other account has room" : "nothing to swap to";
+  const [label, cls] = c.out ? ["AT ITS LIMIT", "out"] : c.low ? ["LOW", "low"] : c.accounts.filter((a) => a.loggedIn).length > 1 ? ["READY TO MOVE", "ok"] : ["ONE ACCOUNT", "low"];
+  const login = (a) => (a.mcpNeedsSecret?.length ? `${a.mcpNeedsSecret.length} MCP server${a.mcpNeedsSecret.length > 1 ? "s need" : " needs"} their secret in this home: ${a.mcpNeedsSecret.map(esc).join(", ")}. ` : "") + (a.loggedIn ? "" : `Not logged in. The owner logs in once: <code>CLAUDE_CONFIG_DIR=~/.claude${a.name === "default" ? "" : `-${esc(a.name)}`} claude auth login</code>`);
   return `<article class="box acard ${c.out ? "out" : ""}">
     <div class="atop"><h3>CLAUDE · ${esc(m.machine.toUpperCase())}</h3><span class="tag ${cls}">${label}</span></div>
-    <p class="aline">${esc(line)}</p>
-    ${warn.map((w) => `<p class="awarn">${esc(w)}</p>`).join("")}
-    ${c.accounts.map((a) => account(a, c.limits, a.listed ? "" : "Not in ACCOUNTS, so grazr never rotates onto it.")).join("")}
-    ${steps.length ? `<div class="asteps"><span class="k">TO ROTATE (THE OWNER'S: IT LOGS IN TO AN ACCOUNT)</span>${steps.map((s) => `<code>${esc(s)}</code>`).join("")}<span class="anote">Enrol at least two accounts: S saves this machine's login, L logs in to another.</span></div>` : ""}
-    ${c.log.length ? `<div class="alog">${c.log.map((l) => `<div>${esc(l)}</div>`).join("")}</div>` : ""}
-    ${c.state === "no_grazr" ? "" : `<div class="aact"><button class="btn" type="button" data-swap="${esc(m.machine)}" ${c.canSwap ? "" : "disabled"}>SWAP NOW</button><span class="anote">${swapNote}</span></div>`}
+    <p class="aline">Each Claude account is its own home. A moved lane exits and resumes the same conversation on the other account, once it is idle.</p>
+    ${c.accounts.map((a) => account(a, LIMITS, login(a))).join("")}
+    ${c.lanes.length ? `<div class="alanes"><span class="k">LANES</span>${c.lanes.map((l) => laneRow(m, l)).join("")}</div>` : ""}
+    ${c.canMove ? `<form class="aact" data-make-home><input name="name" placeholder="new account name" aria-label="New account name" pattern="[a-z0-9][a-z0-9\\-]*" maxlength="31" required><button class="btn" type="submit">MAKE A HOME</button><span class="anote">An empty home; the owner logs in to it once.</span></form>` : ""}
   </article>`;
 }
 
@@ -98,7 +82,7 @@ function codexCard(m) {
   const out = homes.some((h) => h.out);
   const usable = homes.filter((h) => h.loggedIn).length;
   const [label, cls] = !homes.length ? ["NOT HERE", ""] : out ? ["AT ITS LIMIT", "out"] : usable > 1 ? [`${usable} ACCOUNTS`, "ok"] : ["ONE ACCOUNT", "low"];
-  const limits = { session: 15, weekly: 10 };
+  const limits = LIMITS;
   const note = (h) => [
     h.loggedIn ? "" : "Not logged in. The owner logs it in with codex login.",
     h.sharesSessionsWith.length && !h.readingAt ? `Shares its sessions with ${h.sharesSessionsWith.map(esc).join(", ")}; its own usage shows once a pane runs on it.` : "",
@@ -118,14 +102,13 @@ function machineCards(m) {
 
 // The box's word: the worst thing on any machine.
 function summary(list) {
-  let out = 0, low = 0, off = 0, setup = 0;
+  let out = 0, low = 0, off = 0;
   for (const m of list) {
     if (!m.ok) { off++; continue; }
     if (m.claude.out || m.codex.some((h) => h.out)) out++;
     else if (m.claude.low || m.codex.some((h) => h.low)) low++;
-    else if (!["rotating", "dry_run", "off"].includes(m.claude.state)) setup++;
   }
-  return out ? [`${out} OUT`, "bad"] : low ? [`${low} LOW`, "off"] : off ? [`${off} NOT READ`, "off"] : setup ? ["SET UP", "off"] : [list.length ? "OK" : "-", ""];
+  return out ? [`${out} OUT`, "bad"] : low ? [`${low} LOW`, "off"] : off ? [`${off} NOT READ`, "off"] : [list.length ? "OK" : "-", ""];
 }
 
 function render() {
@@ -138,20 +121,32 @@ function render() {
   if (!open) return setHTML(panel, "");
   setHTML(panel, `<div class="ahdr"><h2>ACCOUNTS</h2><button class="btn" type="button" data-accounts-close>BACK TO THE ROOM</button></div>
     ${list.map((m) => `<div class="amach">${machineCards(m)}</div>`).join("")}
-    <p class="afoot">Names and percentages only: never a token, an email or a credential file. Logging in to, adding or paying for an account is the owner's; HQ Office only moves between accounts already logged in.</p>`);
+    <p class="afoot">Names and percentages only: never a token, an email or a credential file. Logging in to, adding or paying for an account is the owner's; HQ Office only moves a lane between accounts already logged in, and never answers a limit or credits dialog.</p>`);
 }
 
 panel.addEventListener("click", async (e) => {
   if (e.target.closest("[data-accounts-close]")) return setOpen(false);
-  const swap = e.target.closest("[data-swap]");
-  if (!swap) return;
-  swap.disabled = true;
+  const move = e.target.closest("[data-move]");
+  if (!move) return;
+  const lane = move.dataset.move;
+  const account = panel.querySelector(`select[data-move-to="${CSS.escape(lane)}"]`)?.value;
+  move.disabled = true;
   try {
-    const r = await post("/api/accounts/swap", { machine: swap.dataset.swap });
-    toast(r.said || "Swapped");
+    toast((await post("/api/accounts/move", { lane, account })).said || "Moved");
   } catch (err) {
-    toast(`Swap failed: ${err.message}`);
-    swap.disabled = false;
+    toast(`Not moved: ${err.message}`);
+  }
+  move.disabled = false;
+});
+
+panel.addEventListener("submit", async (e) => {
+  const form = e.target.closest("[data-make-home]");
+  if (!form) return;
+  e.preventDefault();
+  try {
+    toast((await post("/api/accounts/home", { name: form.elements.name.value.trim() })).said || "Made");
+  } catch (err) {
+    toast(`No home made: ${err.message}`);
   }
 });
 

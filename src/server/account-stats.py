@@ -1,18 +1,19 @@
 # Accounts on this machine: what each Claude and Codex account has left, as names and percentages only.
 # Run here, or over ssh as `python3 -I -` (accounts.ts). It prints one JSON object.
 #
-# It never opens a credential. Claude's side is grazr's (a herdr plugin that rotates Claude accounts): its account
-# files hold a name and the last usage reading, and the active login is the one account id in ~/.claude.json, read
-# by that key alone and never printed. Codex's side is one Codex home per account (~/.codex, ~/.codex-<name>): a
-# home is logged in when its auth.json exists (never read), and usage comes from the rate limits each session
+# It never opens a credential. Claude's side is one home per account (~/.claude, ~/.claude-<name>): a home is logged
+# in when its credentials file or its keychain item exists (asked by name and exit code, never read), and usage is
+# what the lane status line recorded for it. Codex's side is one Codex home per account (~/.codex, ~/.codex-<name>):
+# a home is logged in when its auth.json exists (never read), and usage comes from the rate limits each session
 # records in its own log.
 import glob
+import hashlib
 import json
 import os
-import shlex
+import subprocess
 
 HOME = os.path.expanduser("~")
-GRAZR_KEYS = ("ACCOUNTS", "REMAINING_SESSION", "REMAINING_WEEKLY", "ENABLED", "DRY_RUN")
+SECURITY = os.environ.get("HQ_SECURITY_BIN", "security")
 
 
 def read_json(path):
@@ -23,64 +24,43 @@ def read_json(path):
         return None
 
 
-def grazr_config(path):
-    config = {}
+def home_login(directory, name):
+    """Whether a Claude home holds a login, by name only: its credentials file exists, or its keychain item does
+    (asked by exit code; the item's attributes and secret go nowhere)."""
+    if os.path.exists(os.path.join(directory, ".credentials.json")):
+        return True
+    # The default home's item is plain; another home's carries the first 8 hex digits of the sha256 of its path.
+    service = "Claude Code-credentials" if name == "default" else "Claude Code-credentials-" + hashlib.sha256(directory.encode()).hexdigest()[:8]
     try:
-        with open(path) as handle:
-            for line in handle:
-                parts = shlex.split(line, comments=True)
-                if parts and "=" in parts[0]:
-                    key, _, value = parts[0].partition("=")
-                    if key in GRAZR_KEYS:
-                        config[key] = value
-    except (OSError, ValueError):
-        pass
-    return config
+        return subprocess.run([SECURITY, "find-generic-password", "-s", service], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
-def windows(snapshot):
-    """The lowest reading per window ('session' is five hours, 'weekly' the week), with when it resets."""
-    best = {}
-    for entry in snapshot if isinstance(snapshot, list) else []:
-        if not isinstance(entry, dict) or not isinstance(entry.get("remaining"), (int, float)):
-            continue
-        group = entry.get("group")
-        if group not in best or entry["remaining"] < best[group]["left"]:
-            best[group] = {"left": entry["remaining"], "resets_at": entry.get("resets_at")}
-    return best
+def usage(name):
+    """What the lane status line (claude-statusline.py) last recorded for this account: each window's percent left."""
+    state = os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state")
+    stored = read_json(os.path.join(state, "hq-office", "claude-usage", name + ".json"))
+    limits = (stored or {}).get("rate_limits") if isinstance(stored, dict) else None
+    found = {}
+    for group, key in (("session", "five_hour"), ("weekly", "seven_day")):
+        w = (limits or {}).get(key) if isinstance(limits, dict) else None
+        used = (w or {}).get("used_percentage") if isinstance(w, dict) else None
+        if isinstance(used, (int, float)):
+            found[group] = {"left": max(0, 100 - used), "resets_at": w.get("resets_at")}
+    return found
 
 
 def claude():
-    state = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"), "herdr", "plugins", "wazum.grazr")
-    installed = bool(glob.glob(os.path.join(HOME, ".config", "herdr", "plugins", "github", "wazum.grazr-*")))
-    active = ((read_json(os.path.join(HOME, ".claude.json")) or {}).get("oauthAccount") or {}).get("accountUuid")
-    accounts = []
-    for path in sorted(glob.glob(os.path.join(state, "accounts", "*.json"))):
-        stored = read_json(path)
-        if not isinstance(stored, dict):
+    """One Claude home per account: ~/.claude is `default`, ~/.claude-<name> is <name>."""
+    homes = []
+    for path in [os.path.join(HOME, ".claude")] + sorted(glob.glob(os.path.join(HOME, ".claude-*"))):
+        name = "default" if os.path.basename(path) == ".claude" else os.path.basename(path)[len(".claude-"):]
+        # The default home is always one. Another is a folder with a login or a config file; other ~/.claude-* are not.
+        if name != "default" and (os.path.islink(path) or not any(os.path.exists(os.path.join(path, f)) for f in (".credentials.json", ".claude.json"))):
             continue
-        identifier = os.path.basename(path)[: -len(".json")]
-        accounts.append({
-            "name": str(stored.get("name") or "unnamed"),
-            "active": bool(active) and identifier.lower() == str(active).lower(),
-            "windows": windows(stored.get("snapshot")),
-        })
-    status_line = (read_json(os.path.join(HOME, ".claude", "settings.json")) or {}).get("statusLine")
-    log = []
-    try:
-        with open(os.path.join(state, "grazr.log")) as handle:
-            log = [line.rstrip("\n") for line in handle.readlines()[-6:]]
-    except OSError:
-        pass
-    return {
-        "grazr": installed,
-        "logged_in": bool(active),
-        "active_enrolled": any(a["active"] for a in accounts),
-        "accounts": accounts,
-        "config": grazr_config(os.path.join(HOME, ".config", "herdr", "plugins", "config", "wazum.grazr", "config.env")),
-        "status_line": "grazr" in json.dumps(status_line) if status_line else False,
-        "log": log,
-    }
+        homes.append({"name": name, "logged_in": home_login(path, name), "windows": usage(name)})
+    return {"homes": homes}
 
 
 def last_rate_limits(path):
