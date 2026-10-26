@@ -1,5 +1,6 @@
 // Asks: HQ's questions, and answering them.
 import { checkMinutes, checkName, checkValue } from "./secrets.ts";
+import { expiresText } from "../client/secrets/expiry.js";
 import { OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import type { Ask } from "./types.ts";
@@ -53,7 +54,7 @@ export function answerWithSecrets(id: number, body: any) {
       throw new Error(`${name}: ${(e as Error).message}`);
     }
   });
-  wanted.forEach((name, i) => secrets.set(name, values[i], minutes, "owner"));
+  const set = wanted.map((name, i) => secrets.set(name, values[i], minutes, "owner"));
   const note = String(body.note ?? "").trim();
-  answerAsk(id, `secrets set: ${wanted.join(", ")}, readable for ${minutes} min with: hud secret get NAME | <command>${note ? `. ${note}` : ""}`);
+  answerAsk(id, `secrets set: ${wanted.join(", ")}, ${expiresText(set[0].expiresAt)}; read with: hud secret get NAME | <command>${note ? `. ${note}` : ""}`);
 }

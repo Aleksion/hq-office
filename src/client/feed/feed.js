@@ -5,7 +5,7 @@ import { messageChime } from "../sound/sound.js";
 import { clock, esc, setHTML } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
 import { scheduleTick } from "../questions/questions.js";
-import { liveSecrets, renderSecrets } from "../secrets/secrets.js";
+import { liveSecrets, lostSecrets, renderSecrets } from "../secrets/secrets.js";
 
 let seenUpdates = null, shownTab = null;
 
@@ -23,12 +23,12 @@ function updateRows() {
 // The SECRETS pane is built once and only its list is redrawn, so a value being pasted survives every refresh.
 export function renderFeed() {
   const unread = S.updatesUnread ?? 0;
-  const live = liveSecrets().length;
+  const live = liveSecrets().length, lost = lostSecrets().length;
   const tab = (id, label, extra = "") => `<button class="tab ${feedTab === id ? "on" : ""}" type="button" data-tab="${id}">${label}${extra}</button>`;
   setHTML($("feedTabs"), `
       ${tab("updates", "FROM HQ", unread ? ` <span class="tag new">${unread} NEW</span>` : "")}
       ${tab("log", "SENT &amp; ANSWERED")}
-      ${tab("secrets", "SECRETS", live ? ` <span class="tag secret">${live}</span>` : "")}
+      ${tab("secrets", "SECRETS", (live ? ` <span class="tag secret">${live}</span>` : "") + (lost ? ` <span class="tag secret lost">${lost} LOST</span>` : ""))}
       <span class="spacer"></span>
       ${feedTab === "updates" ? `<button class="btn-s" type="button" data-readall ${unread ? "" : "disabled"}>MARK ALL READ</button>` : ""}`);
   const secretsOn = feedTab === "secrets";

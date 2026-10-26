@@ -24,9 +24,9 @@
 //   hud state            the board as JSON
 //   hud sync             refresh herdr status now
 //   hud secret set NAME --minutes N [--by WHO]   the value comes from stdin, never from an argument
-//   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal
+//   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal; says if it was lost
 //   hud secret rm NAME
-//   hud secret list      names, who set them and when they expire; never values
+//   hud secret list      names, who set them and when they expire, and LOST ones (lost in a restart); never values
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
@@ -37,6 +37,8 @@
 //   hud room create|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";
+import { atText, expiresText } from "./src/client/secrets/expiry.js";
+import { restartTime } from "./src/server/secrets.ts";
 
 const BASE = process.env.HUD_URL ?? "http://127.0.0.1:4747";
 
@@ -245,7 +247,7 @@ async function secret(args: string[]) {
       if (!(minutes > 0)) usage();
       const value = await readValue();
       const m = await call("POST", "/api/secrets", { name, value, minutes, by: one("by") ?? "hq" });
-      console.error(`secret ${m.name} set, expires ${new Date(m.expiresAt).toLocaleTimeString()}`);
+      console.error(`secret ${m.name} set, ${expiresText(m.expiresAt)}`);
       break;
     }
     case "get": {
@@ -266,9 +268,11 @@ async function secret(args: string[]) {
     case "list": {
       const list = await call("GET", "/api/secrets");
       if (!list.length) console.log("no secrets");
+      // A lost one is a name the server knew but lost its value in a restart: it has to be set again.
       for (const s of list) {
-        const left = Math.max(0, Math.round((s.expiresAt - Date.now()) / 1000));
-        console.log(`${s.name}\tset by ${s.by} at ${new Date(s.setAt).toLocaleTimeString()}\texpires in ${Math.floor(left / 60)}m${String(left % 60).padStart(2, "0")}s`);
+        const set = `set by ${s.by} ${atText(s.setAt)}`;
+        if (s.lostAt) console.log(`${s.name}\tLOST (lost in a restart at ${restartTime(s.lostAt)}, set it again)\t${set}`);
+        else console.log(`${s.name}\t${set}\t${expiresText(s.expiresAt)}`);
       }
       break;
     }

@@ -10,6 +10,7 @@ import { platform, pluginId, serviceFor, servicePath, type ServiceSpec } from ".
 import { installHud } from "./hud-command.ts";
 import { GUIDE } from "../src/hq-guide.ts";
 import { herdrConfigDir, resolveDirs } from "./dirs.ts";
+import { giveSecrets, takeSecrets, type Held } from "../src/secret-handover.ts";
 
 const ROOT = dirname(import.meta.dir);
 const PLUGIN_ID = pluginId(ROOT);
@@ -247,9 +248,24 @@ async function stop() {
   console.log(`the remove service action removes it for good.`);
 }
 
+// ---- the secret handover: secrets live in the server's memory only, so a planned restart carries them across ----
+// Taken from the running server before it stops, held in this process's memory only, given to the new server once
+// it answers (each with its own deadline), then dropped. If that fails, the restart still happens; the new server
+// lists the names as lost and tells HQ.
+async function takeHeldSecrets(): Promise<Held | null> {
+  const { held, note } = await takeSecrets(URL_BASE, DATA_DIR);
+  if (note) console.log(`Secrets: ${note}`);
+  return held;
+}
+async function giveHeldSecrets(held: Held | null) {
+  const line = await giveSecrets(URL_BASE, DATA_DIR, held);
+  if (line) console.log(`Secrets: ${line}`);
+}
+
 // Writes the service with the current config.env and plugin folder, and (re)starts it.
 async function installService() {
   if (!service) fail(`service mode needs macOS (launchd) or Linux (systemd); this is ${platform()}.`);
+  const held = await takeHeldSecrets();
   const before = service.state();
   await stopProcess(true);
   if (!before.running && (await fetchState())) {
@@ -268,6 +284,7 @@ async function installService() {
     fail((e as Error).message);
   }
   if (!(await waitUp())) fail(`the service is installed (${service.file}) but did not answer at ${URL_BASE} within ${HEALTH_TIMEOUT_MS / 1000}s. Last log lines from ${LOG_FILE}:\n${logTail()}`);
+  await giveHeldSecrets(held);
   console.log(`${before.installed ? "Updated" : "Installed"} the HQ Office service ${service.name} (${service.kind}), running at ${URL_BASE}`);
   console.log(`File: ${service.file}`);
   console.log(`Data: ${DATA_DIR}`);
@@ -407,8 +424,10 @@ switch (command) {
     // A service is written again, so it picks up config.env and a moved plugin folder.
     if (serviceInstalled()) await installService();
     else {
+      const held = await takeHeldSecrets();
       await stop();
       await start();
+      await giveHeldSecrets(held);
     }
     break;
   case "open":

@@ -3,6 +3,21 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.10.1] - 2026-10-26
+
+### Fixed
+
+- **Secrets survive a plugin update.** Restarting HQ Office (the reload or install service action, which every plugin
+  update needs) used to clear every secret silently, even ones set for a week. Now the plugin hands them from the old
+  server to the new one, memory to memory, with their original deadlines. Values are still never written to disk.
+- **A secret lost in a crash is never lost quietly.** If the server stops without a handover (a crash, a kill), the
+  SECRETS tab lists each lost name in red with when it was lost, `hud secret list` marks it LOST, `hud secret get`
+  says it was lost and to ask you to set it again instead of "not found", and HQ gets a one-line note. Set the secret
+  again, or dismiss the name.
+- **Expiry times say the day.** "expires 1:45:01 PM" read like now even when it was tomorrow. Every expiry (the
+  SECRETS tab, `hud secret set` and `list`, answers to secret questions, notes to HQ) now reads like
+  "expires in 6d 23h (Mon 2 Nov, 13:45)" or "expires in 23h (tomorrow 13:45)".
+
 ## [0.10.0] - 2026-10-26
 
 ### Changed

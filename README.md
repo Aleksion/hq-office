@@ -103,10 +103,16 @@ hud secret get NAME | <command>          # the raw value, to a pipe only; refuse
 hud secret get NAME --once | <command>   # and delete it on read
 <command> | hud secret set NAME --minutes 30   # the value comes from stdin, never an argument
 hud secret rm NAME
-hud secret list                          # names, who set them, when they expire
+hud secret list                          # names, who set them, when they expire, and any LOST ones
 ```
 
-Values live in the server's memory only: never in the database, the log, `/api/state` or any listing, and a restart clears them all. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
+Every expiry is said both ways, in local time: `expires in 6d 23h (Mon 2 Nov, 13:45)`, or `expires in 23h (tomorrow 13:45)`.
+
+Values live in the server's memory only: never in the database, the log, `/api/state` or any listing. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
+
+**Restarts.** A planned restart (the plugin's reload or install service action, which a plugin update needs) hands the secrets over: the plugin takes them from the running server over loopback, holds them in its own memory while the new server starts, and gives them back with their original deadlines. Nothing is written to disk on the way. The handover routes also need a token that each server start writes to `secret-handover.token` in the data folder (readable by you only; it is not a secret value), and the new server takes a handover only while it holds no secrets, within 2 minutes of its start.
+
+A crash, a kill or a stop and start loses the values. The server keeps each secret's name, setter and deadline (never its value) in the database, so after such a restart it knows what it lost: the SECRETS tab lists those names as LOST in red, `hud secret list` marks them, `hud secret get NAME` fails with `NAME was lost when the server restarted at 13:45; ask the owner to set it again`, and HQ gets a one-line note. Setting the secret again clears it, and DISMISS (or `hud secret rm NAME`) removes the name.
 
 ## Lanes in levels
 
