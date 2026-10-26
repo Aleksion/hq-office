@@ -5,7 +5,8 @@
 //           [--item TEXT ...]     a checklist; an item naming a PR (#123) ticks itself when it merges, and the
 //                                 question closes itself ("all done") when every item is done
 // ask ledger: change an open question instead of withdrawing and reposting it
-//   hud update ID [--title T] [--body B] [--opt A --opt B] [--rec A] [--link URL]   only the fields given
+//   hud update ID [--title T] [--body B] [--opt A --opt B] [--rec A] [--link URL] [--lane L]   only the fields given;
+//                                --lane L moves it to lane L, --lane hq (or "") takes it off every lane
 //   hud comment ID TEXT          a timestamped line under the question; information, not in the inbox
 //   hud item ID N done|undo      tick or untick item N (from 1) by hand
 //   hud item ID add TEXT         add an item to an open question
@@ -23,9 +24,9 @@
 //   hud state            the board as JSON
 //   hud sync             refresh herdr status now
 //   hud secret set NAME --minutes N [--by WHO]   the value comes from stdin, never from an argument
-//   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal
+//   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal; says if it was lost
 //   hud secret rm NAME
-//   hud secret list      names, who set them and when they expire; never values
+//   hud secret list      names, who set them and when they expire, and LOST ones (lost in a restart); never values
 // requests: what a lane needs from HQ, as a record that closes only when HQ's answer reaches the lane's pane
 //   hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME [--lead NAME] [--pr N] [--default "what I will do" --by HH:MM|+30m] "verbatim text"
 //                                   a lane files it (NAME is its herdr agent name); --lead names who must answer (default: the
@@ -40,10 +41,14 @@
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
 //   hud pause ISSUE REASON...  /  hud resume ISSUE deliberately on hold, so it is not called stalled
-//   hud board [--json]                            stalled first; refreshes GitHub if the cache is over a minute old
+//   hud board [--json]                            blocked on a prompt, then stalled, first; refreshes GitHub if the cache is over a minute old
 //   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
+// conference rooms: one per piece of work, where the owner talks straight to the lane that owns it (see roomCmd below)
+//   hud room create|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";
+import { atText, expiresText } from "./src/client/secrets/expiry.js";
+import { restartTime } from "./src/server/secrets.ts";
 
 const BASE = process.env.HUD_URL ?? "http://127.0.0.1:4747";
 
@@ -143,7 +148,7 @@ switch (cmd) {
     break;
   }
   case "update":
-    await call("POST", `/api/asks/${rest[0]}/update`, { title: one("title"), body: one("body"), options: flags.opt, recommended: one("rec"), link: one("link") });
+    await call("POST", `/api/asks/${rest[0]}/update`, { title: one("title"), body: one("body"), options: flags.opt, recommended: one("rec"), link: one("link"), lane: one("lane") });
     console.log(`ask #${rest[0]} updated`);
     break;
   case "comment":
@@ -284,8 +289,11 @@ switch (cmd) {
   case "guide":
     console.log(GUIDE);
     break;
+  case "room":
+    await roomCmd(argv);
+    break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|track|done|pause|resume|board|guide");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|track|done|pause|resume|board|room|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 
@@ -324,7 +332,7 @@ async function secret(args: string[]) {
       if (!(minutes > 0)) usage();
       const value = await readValue();
       const m = await call("POST", "/api/secrets", { name, value, minutes, by: one("by") ?? "hq" });
-      console.error(`secret ${m.name} set, expires ${new Date(m.expiresAt).toLocaleTimeString()}`);
+      console.error(`secret ${m.name} set, ${expiresText(m.expiresAt)}`);
       break;
     }
     case "get": {
@@ -345,12 +353,132 @@ async function secret(args: string[]) {
     case "list": {
       const list = await call("GET", "/api/secrets");
       if (!list.length) console.log("no secrets");
+      // A lost one is a name the server knew but lost its value in a restart: it has to be set again.
       for (const s of list) {
-        const left = Math.max(0, Math.round((s.expiresAt - Date.now()) / 1000));
-        console.log(`${s.name}\tset by ${s.by} at ${new Date(s.setAt).toLocaleTimeString()}\texpires in ${Math.floor(left / 60)}m${String(left % 60).padStart(2, "0")}s`);
+        const set = `set by ${s.by} ${atText(s.setAt)}`;
+        if (s.lostAt) console.log(`${s.name}\tLOST (lost in a restart at ${restartTime(s.lostAt)}, set it again)\t${set}`);
+        else console.log(`${s.name}\t${set}\t${expiresText(s.expiresAt)}`);
       }
       break;
     }
+    default:
+      usage();
+  }
+}
+
+// ---- conference rooms (hud room ...): the brief, the shelf and the thread of one piece of work ----
+
+// (Function declarations, not constants: the switch above runs before any constant down here exists.)
+function roomUsage() {
+  return `usage:
+  hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   (again: change or reopen it)
+  hud room brief SLUG --body B [--as LANE]           the pinned brief, replaced as a whole (or from stdin)
+  hud room artifact SLUG --title T (--url U | --file PATH) [--kind claude-artifact|link|image|file] [--as LANE]
+  hud room say SLUG TEXT [--as LANE] [--reply ID]    write in the thread (as the owning lane unless --as)
+  hud room read SLUG [--since ID] [--wait] [--json]  the owner's messages; --wait blocks until a new one
+  hud room list [--all] [--json]
+  hud room archive SLUG`;
+}
+
+// Text from an argument, else from stdin when it is piped.
+async function textArg(given: string | undefined) {
+  if (given !== undefined) return given;
+  return process.stdin.isTTY ? "" : (await Bun.stdin.text()).replace(/\r?\n$/, "");
+}
+
+function ago(t: number) {
+  const m = Math.floor((Date.now() - t) / 60_000);
+  return m < 1 ? "now" : m < 60 ? `${m}m ago` : m < 2880 ? `${Math.floor(m / 60)}h ${m % 60}m ago` : `${Math.floor(m / 1440)}d ago`;
+}
+
+async function roomCmd(args: string[]) {
+  const bools = new Set(args.filter((a) => ["--json", "--wait", "--all"].includes(a)));
+  const { flags: f, rest: r, one: o } = parse(args.filter((a) => !bools.has(a)));
+  const [verb, slugRaw, ...words] = r;
+  const slug = (slugRaw ?? "").toLowerCase();
+  const path = `/api/rooms/${encodeURIComponent(slug)}`;
+  const usage = () => {
+    console.error(roomUsage());
+    process.exit(2);
+  };
+  if (verb !== "list" && !slug) usage();
+  switch (verb) {
+    case "create": {
+      const out = await call("POST", "/api/rooms", { slug, title: o("title"), owner: o("owner"), members: f.member ?? [], issues: f.issue ?? [], prs: f.pr ?? [] });
+      console.log(`room ${out.slug} ${out.created ? "created" : "updated"}`);
+      break;
+    }
+    case "brief": {
+      const body = await textArg(o("body"));
+      await call("POST", `${path}/brief`, { body, as: o("as") });
+      console.log(body.trim() ? `brief of ${slug} set` : `brief of ${slug} cleared`);
+      break;
+    }
+    case "artifact": {
+      const file = o("file");
+      if (!!file === !!o("url")) usage();
+      if (file) {
+        const blob = Bun.file(file);
+        if (!(await blob.exists())) {
+          console.error(`no file ${file}`);
+          process.exit(1);
+        }
+        const name = file.split("/").pop()!;
+        const q = new URLSearchParams({ name, title: o("title") ?? name, ...(o("kind") ? { kind: o("kind")! } : {}), ...(o("as") ? { as: o("as")! } : {}) });
+        const res = await fetch(`${BASE}${path}/files?${q}`, { method: "POST", headers: { "content-type": blob.type || "application/octet-stream", "x-hud": "1" }, body: blob });
+        const out = await res.json();
+        if (!res.ok) {
+          console.error(out.error ?? res.statusText);
+          process.exit(1);
+        }
+        console.log(`artifact #${out.id} (${out.kind}) on ${slug}: ${BASE}${out.url}`);
+      } else {
+        const out = await call("POST", `${path}/artifacts`, { title: o("title"), url: o("url"), kind: o("kind"), as: o("as") });
+        console.log(`artifact #${out.id} on ${slug}`);
+      }
+      break;
+    }
+    case "say": {
+      const out = await call("POST", `${path}/say`, { text: await textArg(words.length ? words.join(" ") : undefined), as: o("as"), reply: o("reply") });
+      console.log(`message #${out.id} in ${slug}`);
+      break;
+    }
+    case "read": {
+      let since = o("since");
+      for (;;) {
+        const q = new URLSearchParams({ ...(since ? { since } : {}), ...(bools.has("--wait") ? { wait: "240" } : {}) });
+        const out = await call("GET", `${path}/read?${q}`);
+        if (bools.has("--wait") && !out.messages.length) {
+          since = String(out.since);
+          continue;
+        }
+        if (bools.has("--json")) console.log(JSON.stringify(out, null, 2));
+        else {
+          if (!out.messages.length) console.log(`no messages from the owner in ${slug} after #${out.since}`);
+          for (const m of out.messages) console.log(`#${m.id} ${new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} owner -> ${m.to}${m.reply ? ` (re #${m.reply})` : ""}: ${m.text}`);
+          console.log(`next: hud room read ${slug} --since ${out.last}${bools.has("--wait") ? " --wait" : ""}`);
+        }
+        break;
+      }
+      break;
+    }
+    case "list": {
+      const rooms = await call("GET", `/api/rooms${bools.has("--all") ? "?all=1" : ""}`);
+      if (bools.has("--json")) {
+        console.log(JSON.stringify(rooms, null, 2));
+        break;
+      }
+      if (!rooms.length) console.log("no rooms yet: hud room create SLUG --title T --owner LANE");
+      for (const x of rooms) {
+        const work = [...x.issues, ...x.prs.map((p: string) => `#${p.split("#").pop()}`)].join(" ");
+        console.log(`${x.slug}${x.archivedAt ? " (archived)" : ""}  "${x.title}"  owner ${x.owner}${x.members.length ? `  members ${x.members.join(", ")}` : ""}${work ? `  work ${work}` : ""}  ${x.artifacts} artifacts  last ${ago(x.lastAt)}${x.unread ? `  ${x.unread} unread by the owner` : ""}`);
+      }
+      break;
+    }
+    case "archive":
+      await call("POST", `${path}/archive`, {});
+      console.log(`room ${slug} archived`);
+      break;
     default:
       usage();
   }

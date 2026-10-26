@@ -4,9 +4,11 @@ import { HOST, LEGACY_OWNER_WHO, OWNER, PORT, TRUSTED_ORIGINS } from "./config.t
 import { handle } from "./router.ts";
 import { json } from "./json.ts";
 import { bump, secrets } from "./push.ts";
-import { notifyHq } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
 import { answerWithSecrets } from "./asks.ts";
 import { isSecretPath, originAllowed, secretGuard, secretRoute } from "./secrets.ts";
+import { handover, lostBook } from "./secret-ledger.ts";
+import { expiresText } from "../client/secrets/expiry.js";
 
 Bun.serve({
   port: PORT,
@@ -20,8 +22,10 @@ Bun.serve({
     if (isSecretPath(path)) {
       return secretRoute(req, path, ip, secrets, {
         host: HOST,
+        lost: lostBook,
+        handover,
         onSet: (m) => {
-          if (m.by === "owner" || m.by === LEGACY_OWNER_WHO) notifyHq(`HUD secret from ${OWNER}: ${m.name}, readable for ${Math.round((m.expiresAt - m.setAt) / 60_000)} min with: hud secret get ${m.name} | <command>`);
+          if (m.by === "owner" || m.by === LEGACY_OWNER_WHO) notifyHq(`HUD secret from ${OWNER}: ${m.name}, ${expiresText(m.expiresAt)}; read it with: hud secret get ${m.name} | <command>`);
         },
       });
     }

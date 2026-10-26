@@ -38,11 +38,11 @@ restoreDrafts();
 // The stream's first message is the whole state; after that each message holds only the parts of the state that
 // changed, and only the panels showing one of those parts are built again.
 export const PANELS = [
-  [["open", "lanes", "score", "updatesUnread"], () => renderStats()],
+  [["open", "lanes", "score", "updatesUnread", "hq"], () => renderStats()],
   [["machines"], () => renderMachines()],
   [["open"], () => renderHud()],
   [["lanes", "open", "config"], () => renderCard()],
-  [["notes", "answered", "updates", "updatesUnread", "secrets"], () => renderLog()],
+  [["notes", "answered", "updates", "updatesUnread", "secrets", "secretsLost", "hq"], () => renderLog()],
   [["open", "updatesUnread", "board"], () => renderQTabs()],
   [["board", "open"], () => renderWork()],
   [["updates", "notes"], () => renderMsgs()],

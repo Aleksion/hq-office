@@ -188,15 +188,20 @@ test("b) a value appears in no database file, log, prompt, listing or state resp
   for (const end = Date.now() + 10_000; Date.now() < end && !(existsSync(PROMPTS) && readFileSync(PROMPTS, "utf8").includes("TEST_KEY_ASK")); ) await Bun.sleep(50);
   await stopServer();
   await startServer();
-  // A restart clears every secret.
-  expect(await (await fetch(`${BASE}/api/secrets`)).json()).toEqual([]);
+  // A restart without the plugin's handover loses every value; the names stay, listed as lost.
+  const after = await (await fetch(`${BASE}/api/secrets`)).json();
+  expect(after.map((x: any) => [x.name, !!x.lostAt]).sort()).toEqual([["TEST_KEY_ASK", true], ["TEST_KEY_GREP", true]]);
   expect((await cli(BASE, ["secret", "get", "TEST_KEY_GREP"])).code).not.toBe(0);
   await keep(await fetch(`${BASE}/api/state`));
   await keep(await fetch(`${BASE}/api/inbox`));
+  seen.push((await cli(BASE, ["secret", "list"])).out);
 
   const files = filesUnder(DATA);
   expect(files.some((f) => f.endsWith("hud.db"))).toBe(true);
   expect(files).toContain(LOG);
+  // The ledger's table and the handover token are searched like everything else.
+  expect(files).toContain(join(DATA, "secret-handover.token"));
+  expect(files.filter((f) => f.includes("hud.db")).some((f) => readFileSync(f).toString("latin1").includes("TEST_KEY_GREP"))).toBe(true);
   expect(readFileSync(PROMPTS, "utf8")).toContain("TEST_KEY_ASK");
   for (const f of files) {
     const bytes = readFileSync(f).toString("latin1");

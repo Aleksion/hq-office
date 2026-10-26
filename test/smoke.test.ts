@@ -97,13 +97,19 @@ test("the page stream starts with the whole state, then sends only the parts tha
   ctrl.abort();
 });
 
-test("an answer still succeeds when herdr cannot be started, and the failure is logged", async () => {
+test("an answer still succeeds when herdr cannot be started, and is held for HQ", async () => {
   const post = (path: string, body: unknown) =>
     fetch(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) });
   const { id } = await (await post("/api/asks", { title: "answer without herdr", kind: "info" })).json();
   const res = await post(`/api/asks/${id}/answer`, { answer: "seen" });
   expect(res.status).toBe(200);
-  const state = await (await fetch(`${BASE}/api/state`)).json();
+  let state = await (await fetch(`${BASE}/api/state`)).json();
   expect(state.open.some((a: any) => a.id === id)).toBe(false);
-  expect(state.events.some((e: any) => e.text.startsWith("could not reach HQ"))).toBe(true);
+  for (let i = 0; i < 40 && !state.hq.held.some((h: any) => h.ref === `ask:${id}`); i++) {
+    await Bun.sleep(25);
+    state = await (await fetch(`${BASE}/api/state`)).json();
+  }
+  expect(state.hq.ok).toBe(false);
+  expect(state.hq.held.some((h: any) => h.ref === `ask:${id}`)).toBe(true);
+  expect(state.events.some((e: any) => e.text.startsWith("HQ isn't receiving"))).toBe(true);
 });

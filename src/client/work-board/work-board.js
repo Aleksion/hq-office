@@ -7,8 +7,8 @@ import { qTab } from "../messages/messages.js";
 // Read-only. Every item's state comes from the server (GitHub, the lane, open asks); this only draws it.
 // It is rebuilt when the state changes, never on a timer. STALLED work also shows as a red strip on the
 // other two tabs, so it is seen without leaving the questions.
-const WORK_STATE = { stalled: "STALLED", owner: "WAITING ON YOU", ci: "WAITING ON CI", moving: "MOVING", paused: "PAUSED", done: "DONE" };
-const WORK_ORDER = ["stalled", "owner", "ci", "moving", "paused", "done"];
+const WORK_STATE = { blocked: "BLOCKED ON A PROMPT", stalled: "STALLED", owner: "WAITING ON YOU", ci: "WAITING ON CI", moving: "MOVING", paused: "PAUSED", done: "DONE" };
+const WORK_ORDER = ["blocked", "stalled", "owner", "ci", "moving", "paused", "done"];
 // Minutes, not seconds: these are redrawn when the state changes (at least once a minute), not every second.
 function workAge(ms) { const m = Math.floor(ms / 60000), h = Math.floor(m / 60); return m < 1 ? "NOW" : h < 1 ? `${m}M AGO` : h < 48 ? `${h}H ${m % 60}M AGO` : `${Math.floor(h / 24)}D AGO`; }
 function workIssue(i) {
@@ -26,7 +26,7 @@ function workPr(p) {
 }
 function workRow(i) {
   const now = Date.now();
-  const what = i.state === "paused" || i.state === "owner" ? i.why : i.last ? `last: ${i.last.what}` : "nothing has happened yet";
+  const what = i.state === "paused" || i.state === "owner" || i.state === "blocked" ? i.why : i.last ? `last: ${i.last.what}` : "nothing has happened yet";
   const age = i.state === "paused" && i.pausedAt ? now - i.pausedAt : i.last ? now - i.last.at : now - i.createdAt;
   return `<article class="wi ${i.state}">
       <div class="meta"><span class="tag ws ${i.state}">${WORK_STATE[i.state]}</span>${workIssue(i)}${i.lane ? `<button class="tag lane" data-select="${esc(i.lane)}">${esc(i.lane)}</button>` : ""}${i.prs.map(workPr).join("")}<span class="age">${workAge(age)}</span></div>

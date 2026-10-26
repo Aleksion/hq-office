@@ -22,7 +22,9 @@ let frameTimer = null;
 let frameQueued = 0;
 let frameNext = 0;
 let walked = false;
-const roomVisible = () => document.visibilityState === "visible";
+// The office rests while something covers it: a conference room opened on the stage (rooms/) says so on the bus.
+let covered = false;
+const roomVisible = () => document.visibilityState === "visible" && !covered;
 function scheduleFrame() {
   if (!roomVisible()) {
     clearTimeout(frameTimer);
@@ -58,6 +60,7 @@ function wake() {
   scheduleFrame();
 }
 on("state", wake);
+on("stage", (shown) => { covered = shown !== "office"; wake(); });
 on("settings", wake); // PERFORMANCE switches at once
 window.addEventListener("focus", wake);
 window.addEventListener("blur", wake);
@@ -138,13 +141,16 @@ function drawScene(now, dt) {
       const busyHand = !!(w.brain?.acting && (w.brain.act.kind === "coffee" || w.brain.act.kind === "snack"));
       drawAccessories(w.pal, wornBy(w.lane.name, false, w.pal.look?.hides), sx, sy, w.dir, step, ghost ? 0.4 : 1, busyHand);
       if (!moving && GLYPH[st]) {
-        const bounce = st === "needs_you" ? Math.abs(Math.sin(steadyClock(now) / 220)) * 2.5 : 0;
-        drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce);
+        const bounce = st === "needs_you" || st === "blocked" ? Math.abs(Math.sin(steadyClock(now) / 220)) * 2.5 : 0;
+        drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce, GLYPH[st][2]);
+      } else if (!moving && w.lane.asks) {
+        // Working with a question open: it stays at its desk, and a still "!" says the question is waiting.
+        drawBubble(sx, sy, GLYPH.needs_you[0], GLYPH.needs_you[1], 0);
       }
       drawProp(w, sx, sy);
       if (st === "waiting" && !moving) drawWatchCheck(w, sx, sy, now);
       const name = w.lane.name.length > 14 ? w.lane.name.slice(0, 13) + "…" : w.lane.name;
-      drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you", w.mark);
+      drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you" || st === "blocked", w.mark);
     }
   }
   drawnHover = hovered;

@@ -35,6 +35,7 @@ export function laneTree(lanes: { name: string; parent?: string | null }[]) {
 }
 
 const STATUS_WORDS: Record<string, string> = {
+  blocked: "blocked on a prompt",
   needs_you: "waiting on the owner",
   hq_turn: "waiting on HQ",
   stale: "waiting on HQ 15+ min",

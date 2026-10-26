@@ -13,5 +13,6 @@ CREATE TABLE IF NOT EXISTS lanes (
   phase TEXT NOT NULL DEFAULT 'running',
   note TEXT,
   bg TEXT,
+  prompt TEXT,
   updated_at INTEGER
 );

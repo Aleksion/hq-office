@@ -31,3 +31,8 @@
 .stall .row b { font: 8px/1 var(--pixel); margin-right: 6px; }
 /* the manager a group of work reports to, when lanes form a tree */
 .work .under { font: 7px/1 var(--pixel); color: var(--muted); margin: 8px 0 4px; display: flex; align-items: center; gap: 6px; }
+/* blocked on a prompt: on top, the excerpt as its why */
+.work h4.blocked { color: var(--red); }
+.wi.blocked { border-color: var(--red); background: #fff0f0; }
+.wi.blocked .what { white-space: normal; }
+.tag.ws.blocked { background: #b01e1e; }

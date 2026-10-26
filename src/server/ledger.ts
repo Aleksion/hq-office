@@ -11,6 +11,7 @@ import { board } from "./work-board.ts";
 import { parsePr } from "./board.ts";
 import { createAsk } from "./asks.ts";
 import type { Ask } from "./types.ts";
+import { underHq } from "../lane-tree.ts";
 
 type Item = { ask_id: number; n: number; text: string; pr: string | null; done_at: number | null; done_by: string | null };
 
@@ -48,10 +49,19 @@ export function updateAsk(id: number, body: any) {
     set.push(`${f} = ?`);
     values.push(v);
   }
-  if (!set.length) throw new Error("nothing to change: give --title, --body, --opt, --rec or --link");
+  // --lane L moves the question to lane L; --lane hq (or "") takes it off every lane.
+  let moved: string | null | undefined;
+  if (body.lane !== undefined) {
+    moved = underHq(body.lane) ? null : String(body.lane).trim();
+    if (moved && !db.query("SELECT 1 FROM lanes WHERE name = ?").get(moved)) throw new Error(`no lane named ${moved}: register it first, or use --lane hq`);
+    set.push("lane = ?");
+    values.push(moved);
+  }
+  if (!set.length) throw new Error("nothing to change: give --title, --body, --opt, --rec, --link or --lane");
   db.query(`UPDATE asks SET ${set.join(", ")} WHERE id = ?`).run(...values, id);
   db.query("INSERT INTO ask_edits (ask_id, edited_at) VALUES (?, ?) ON CONFLICT (ask_id) DO UPDATE SET edited_at = excluded.edited_at").run(id, Date.now());
   event("hq", `edited ask #${id} (${set.map((s) => s.split(" ")[0]).join(", ")}): ${body.title ?? ask.title}`, ask.lane);
+  if (moved !== undefined && moved !== (ask.lane ?? null)) event("hq", `moved ask #${id} to ${moved ?? "HQ (no lane)"}`, moved ?? ask.lane);
 }
 
 // ---- comments ----
