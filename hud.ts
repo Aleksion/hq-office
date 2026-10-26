@@ -6,7 +6,7 @@
 //                                 question closes itself ("all done") when every item is done
 // ask ledger: change an open question instead of withdrawing and reposting it
 //   hud update ID [--title T] [--body B] [--opt TEXT --opt TEXT] [--rec OPTION] [--link URL]   only the fields given
-//                                   --rec OPTION: one of the options, by its text or its letter; refused if it matches none
+//                                   --rec OPTION: an option's exact text, or the letter of its own "A:" label; anything else is refused
 //   hud comment ID TEXT          a timestamped line under the question; information, not in the inbox
 //   hud item ID N done|undo      tick or untick item N (from 1) by hand
 //   hud item ID add TEXT         add an item to an open question

@@ -10,39 +10,17 @@ import { notifyHq } from "./herdr.ts";
 // The options as given: one or many, never empty strings. createAsk and updateAsk read them the same way.
 export const optionsOf = (raw: unknown): string[] => (raw == null ? [] : Array.isArray(raw) ? raw : [raw]).map(String).filter(Boolean);
 
-// --rec names one of the options, and is stored as the full option, which is what the page marks HQ PICK:
-// - the option itself, in any case;
-// - its letter: "A" for "A: Allow the two". When the options are not all lettered, an option's letter is its place,
-//   so A is the first;
-// - its text without the letter ("Allow the two"), or its head before a colon ("Yes" for "Yes: do it").
-// Anything else is refused, never guessed: a --rec that names no option or several, and a --rec whose own letter
-// disagrees with the option its text names ("B: Allow the two" when that is A).
-// A letter is one letter, or one or two digits, then ":", "." or ")": "No:", "A-B" and "Re-run" are words, not letters.
-const LETTER = /^([A-Za-z]|\d{1,2})\s*[:.)]\s*/;
+// --rec names one of the options, and is stored as the full option, which is what the page marks HQ PICK. It is
+// either the option's exact text, or a bare letter that exactly one option has as its own label ("A" for
+// "A: Allow the two" or "A. Allow the two"). Anything else is refused with the options listed, never guessed.
 export function resolveRec(rec: unknown, options: string[]): string | null {
   const r = String(rec ?? "").trim();
   if (!r) return null;
   if (!options.length) throw new Error(`--rec "${r}" has no options to pick from: give them with --opt`);
-  const low = (s: string) => s.trim().toLowerCase();
-  const lettered = options.every((o) => LETTER.test(o));
-  const letterOf = (o: string, i: number) => low(lettered ? o.match(LETTER)![1] : String.fromCharCode(65 + i));
-  const textOf = (o: string) => low(lettered ? o.replace(LETTER, "") : o);
-  const bare = /^([A-Za-z]|\d{1,2})$/.test(r);
-  const recLetter = bare ? r : (r.match(LETTER)?.[1] ?? null);
-  const recText = bare ? "" : low(r.replace(LETTER, ""));
-  const one = (hits: number[]) => (hits.length === 1 ? hits[0] : -1);
-  const each = (pick: (o: string, i: number) => boolean) => one(options.flatMap((o, i) => (pick(o, i) ? [i] : [])));
-  let i = each((o) => o === r);
-  if (i < 0) i = each((o) => low(o) === low(r));
-  if (i < 0 && recLetter && !recText) i = each((o, k) => letterOf(o, k) === low(recLetter));
-  if (i < 0 && recText) {
-    i = each((o) => textOf(o) === recText);
-    if (i < 0) i = each((o) => o.includes(":") && low(o.slice(0, o.indexOf(":"))) === recText);
-    if (i >= 0 && recLetter && low(recLetter) !== letterOf(options[i], i))
-      throw new Error(`--rec "${r}" says ${recLetter.toUpperCase()}, but its text is option ${letterOf(options[i], i).toUpperCase()}, "${options[i]}": give one or the other`);
-  }
-  if (i < 0) throw new Error(`--rec "${r}" is not one of the options (${options.map((o) => `"${o}"`).join(", ")}): give its letter or its text`);
-  return options[i];
+  const hits = options.includes(r) ? [r] : /^[A-Za-z]$/.test(r) ? options.filter((o) => o.startsWith(`${r}:`) || o.startsWith(`${r}.`)) : [];
+  if (hits.length === 1) return hits[0];
+  const why = hits.length ? `is the label of ${hits.length} options` : "is not one of the options";
+  throw new Error(`--rec "${r}" ${why} (${options.map((o) => `"${o}"`).join(", ")}): give an option's exact text, or the letter of its "A:" label`);
 }
 
 export function createAsk(body: any) {

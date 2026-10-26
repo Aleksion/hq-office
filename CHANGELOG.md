@@ -7,11 +7,9 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ### Fixed
 
-- **HQ PICK shows on the recommended option.** `--rec` names an option by its letter ("A" for "A: Allow the two")
-  or by its text, and is kept as the full option, so the page marks it. A `--rec` that names no option is refused
-  with the list of options, and changing the options so they no longer hold the recommendation needs a new `--rec`.
-  Options without labels take their letter from their place (A is the first), and a `--rec` whose letter and text
-  point at different options is refused.
+- **HQ PICK shows on the recommended option.** `--rec` is an option's exact text, or the letter of its own "A:"
+  label, and is kept as the full option, so the page marks it. Anything else is refused with the options listed, and
+  changing the options so they no longer hold the recommendation needs a new `--rec`.
 
 ### Added
 
