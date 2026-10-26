@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // HQ's side of the command centre.
 //   hud ask --lane L --title T [--body B] [--opt A --opt B] [--rec A] [--kind decision|action|info] [--link URL] [--due HH:MM]
+//           [--urgent]            sort it to the top of the desk, marked URGENT (it is counted: hud urgent)
 //           [--secret NAME ...]   ask the owner for named secrets, filled in on the question card
 //           [--item TEXT ...]     a checklist; an item naming a PR (#123) ticks itself when it merges, and the
 //                                 question closes itself ("all done") when every item is done
@@ -27,6 +28,20 @@
 //   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal
 //   hud secret rm NAME
 //   hud secret list      names, who set them and when they expire; never values
+// the queue: what a lane sends HQ. It waits until HQ reads it; only --urgent also types a line into HQ's pane.
+//   hud request --lane NAME [--kind READY|BLOCK|QUESTION|DONE|NOTE] [--urgent] [--lead NAME] [--pr N]
+//               [--default "what I will do" --by HH:MM|+30m] ("text" | --file PATH)
+//                                   files it and returns at once. NAME is the lane's herdr agent name; the kind defaults to NOTE;
+//                                   --file reads the text from a file (a long message typed on the line gets truncated);
+//                                   --lead names who must answer (default: the orchestration registry, else HQ); --default/--by
+//                                   only on BLOCK or QUESTION: when --by comes the lane goes ahead and the item is marked defaulted
+//   hud req next [--lead NAME]      the first open item: urgent first, then oldest (nothing when the queue is empty)
+//   hud req list [--lead NAME] [--all] [--json]   open items in that order (--all: closed and defaulted too)
+//   hud req answer ID "text"        types the answer into the lane's pane and closes the item; if it does not
+//                                   reach the pane the item stays open and this exits 1
+//   hud req close ID "why"         closes an item whose lane is gone (no live agent), with the reason; refused for a live lane
+//   hud urgent ID [--by WHO]        push an open item (desk or queue) to the top of its list
+//   hud urgent [--since 7d]         the urgent uses in that window, by who and by recipient
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
@@ -38,12 +53,15 @@ import { treeText } from "./src/lane-tree.ts";
 
 const BASE = process.env.HUD_URL ?? "http://127.0.0.1:4747";
 
+const SWITCHES = new Set(["urgent", "all", "json"]);
+
 function parse(argv: string[]) {
   const flags: Record<string, string[]> = {};
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(argv[++i] ?? "");
+    // A switch takes no value; any other flag followed by another flag has none either (hud req list --all --lead HQ).
+    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(SWITCHES.has(a.slice(2)) || argv[i + 1]?.startsWith("--") ? "" : (argv[++i] ?? ""));
     else rest.push(a);
   }
   const one = (k: string) => flags[k]?.at(-1);
@@ -77,6 +95,41 @@ function dueAt(hhmm?: string) {
   return d.getTime();
 }
 
+// "HH:MM" is its next occurrence, "+30m" or "+2h" is that long from now, anything else is a date Bun can parse.
+function byAt(raw?: string) {
+  if (!raw) return undefined;
+  const rel = raw.match(/^\+(\d+)([mh])$/);
+  if (rel) return Date.now() + Number(rel[1]) * (rel[2] === "h" ? 3600_000 : 60_000);
+  const clock = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (clock) {
+    const d = new Date();
+    d.setHours(Number(clock[1]), Number(clock[2]), 0, 0);
+    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  const t = Date.parse(raw);
+  if (Number.isNaN(t)) {
+    console.error(`--by: not a time: ${raw} (use HH:MM, +30m or +2h)`);
+    process.exit(2);
+  }
+  return t;
+}
+
+function age(ms: number) {
+  const m = Math.max(0, Math.floor((Date.now() - ms) / 60_000));
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
+}
+
+function showRequest(r: any, full: boolean) {
+  const head = `#${r.id} ${r.kind}${r.urgent_at ? " URGENT" : ""} ${r.lane ?? "owner"}${r.pr ? ` PR #${r.pr}` : ""} ${r.status === "open" ? `open ${age(r.created_at)}` : `${r.status} ${age(r.answered_at ?? r.defaulted_at ?? r.created_at)} ago`} lead ${r.lead}`;
+  if (!full) return `${head}: ${r.text.replace(/\s+/g, " ").slice(0, 100)}`;
+  const lines = [head, r.text];
+  if (r.default_by) lines.push(`default: ${r.default_action} (${r.status === "open" ? `at ${new Date(r.default_by).toLocaleTimeString()}` : "came due"})`);
+  if (r.last_error) lines.push(`last delivery failed: ${r.last_error}`);
+  lines.push(`answer with: hud req answer ${r.id} "<text>"`);
+  return lines.join("\n");
+}
+
 const [cmd, ...argv] = process.argv.slice(2);
 const { flags, rest, one } = parse(argv);
 
@@ -93,6 +146,7 @@ switch (cmd) {
       due: dueAt(one("due")),
       secrets: flags.secret ?? [],
       items: flags.item,
+      urgent: "urgent" in flags,
     });
     console.log(`ask #${out.id}`);
     break;
@@ -177,6 +231,58 @@ switch (cmd) {
   case "secret":
     await secret(argv);
     break;
+  case "request": {
+    const file = one("file");
+    if (file !== undefined && !file) {
+      console.error("--file needs a path");
+      process.exit(2);
+    }
+    const text = file ? await Bun.file(file).text().catch((e: Error) => (console.error(`--file: ${e.message}`), process.exit(2))) : rest.join(" ");
+    const out = await call("POST", "/api/requests", { kind: one("kind"), lane: one("lane"), lead: one("lead"), pr: one("pr"), default: one("default"), by: byAt(one("by")), urgent: "urgent" in flags, text });
+    if (out.warning) console.error(`warning: ${out.warning}`);
+    console.log(`request #${out.id}`);
+    break;
+  }
+  case "req": {
+    const [verb, ...more] = rest;
+    const query = (params: Record<string, string> = {}) => {
+      const lead = one("lead")?.trim();
+      const q = new URLSearchParams(lead ? { ...params, lead } : params).toString();
+      return q ? `?${q}` : "";
+    };
+    if (verb === "next") {
+      const r = await call("GET", `/api/requests/next${query()}`);
+      console.log(r ? showRequest(r, true) : "no open requests");
+    } else if (verb === "list") {
+      const list = await call("GET", `/api/requests${query("all" in flags ? { all: "1" } : {})}`);
+      if ("json" in flags) console.log(JSON.stringify(list, null, 2));
+      else console.log(list.length ? list.map((r: any) => showRequest(r, false)).join("\n") : "no open requests");
+    } else if (verb === "answer" && more[0] && more.length > 1) {
+      const out = await call("POST", `/api/requests/${more[0]}/answer`, { text: more.slice(1).join(" ") });
+      console.log(out.lane ? `request #${out.id} answered: delivered to ${out.lane} and closed` : `request #${out.id} read and closed`);
+    } else if (verb === "close" && more[0] && more.length > 1) {
+      const out = await call("POST", `/api/requests/${more[0]}/close`, { reason: more.slice(1).join(" ") });
+      console.log(`request #${out.id} closed without delivery: ${out.lane} is gone`);
+    } else {
+      console.error('usage: hud req next [--lead NAME] | list [--lead NAME] [--all] [--json] | answer ID "text" | close ID "why"');
+      process.exit(2);
+    }
+    break;
+  }
+  case "urgent":
+    if (/^\d+$/.test(rest[0] ?? "")) {
+      await call("POST", `/api/asks/${rest[0]}/urgent`, { by: one("by") });
+      console.log(`#${rest[0]} is urgent`);
+    } else {
+      const since = one("since") || "7d";
+      const rows = await call("GET", `/api/urgent?since=${encodeURIComponent(since)}`);
+      if (!rows.length) console.log(`no urgent uses in the last ${since}`);
+      else {
+        console.log(`urgent uses in the last ${since}: ${rows.reduce((n: number, r: any) => n + r.n, 0)}`);
+        for (const r of rows) console.log(`${String(r.n).padStart(4)}  ${r.by} -> ${r.recipient}`);
+      }
+    }
+    break;
   // ---- work board ----
   case "track":
     await call("POST", "/api/board/track", { issue: rest[0], lane: one("lane"), prs: flags.pr ?? [] });
@@ -208,7 +314,7 @@ switch (cmd) {
     console.log(GUIDE);
     break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|guide");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|urgent|track|done|pause|resume|board|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 

@@ -6,6 +6,8 @@ The owner reads the HQ Office page (the HUD), usually on a second screen, and do
 - Answer every note, answer or reply from the owner through the HUD, never only here: \`hud tell --title T [--body B] [--lane L]\` for information, \`hud comment ID TEXT\` on an open question.
 - A question for the owner is an ask: \`hud ask --title T [--body B] [--opt A --opt B] [--rec A]\`. Change it in place with \`hud update ID ...\` (\`--lane L\` moves it to a lane, \`--lane hq\` takes it off one) or \`hud comment ID TEXT\`; do not withdraw and repost.
 - Work in flight is tracked on the board: \`hud track ISSUE --lane L --pr N\`. Start every sweep with \`hud board\`, and \`hud inbox\` for what the owner sent (\`hud ack\` once acted on).
+- Every message to you waits in your queue, so nothing interrupts your work. Read it when you choose: \`hud req next\` (or \`hud req list\`), and answer with \`hud req answer ID "text"\`, which types the answer into the lane's pane and closes the item. An item left open is a lane waiting on you; only an urgent one also types a line into this terminal.
+- Lanes hand back with \`hud request --lane NAME [--kind READY|BLOCK|QUESTION|DONE|NOTE] [--urgent] [--file PATH] "text"\`, never by typing into a pane. \`--urgent\` is for what cannot wait; \`hud urgent --since 7d\` counts its use.
 - Lanes form a tree under HQ: a lane that starts lanes registers each with \`hud lane CHILD --parent ITSELF\` (HQ's own lanes need no parent); \`hud tree\` shows who reports to whom.
 - This terminal is for your own work.`;
 
