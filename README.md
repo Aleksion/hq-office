@@ -123,7 +123,7 @@ hud urgent --since 7d               # urgent uses by who and by recipient, with 
 
 An item closes only when its answer has reached the lane's pane: if the pane refuses it, the item stays open, `hud req answer` exits 1 and the item shows why. The owner's Tell HQ box files to the queue too; its URGENT toggle sends the note at once. Whether a plain Tell goes to the queue or straight into HQ's pane is the constant `TELL_GOES_TO_QUEUE` in `src/server/queue.ts`.
 
-The top bar shows the queue as `HQ QUEUE 4 · OLDEST 12M · 1 URGENT`, red when an item is urgent or has waited over 30 minutes. `HUD_LEAD` (default `HQ`) says whose queue the bar and the hook show.
+The top bar shows the queue as a label over a value (`HQ QUEUE`, `4 OLDEST 12M 1 URGENT`), a green `0` when it is empty, red when an item is urgent or has waited over 30 minutes. `HUD_LEAD` (default `HQ`) says whose queue the bar shows; the hook shows nothing unless `HUD_LEAD` is set.
 
 ### The hook: the count at every step
 

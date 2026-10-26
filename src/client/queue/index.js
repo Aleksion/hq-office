@@ -1,6 +1,7 @@
 // HQ's queue in the top bar: how many messages wait for HQ, how long the oldest has waited, and whether any is urgent.
-// The box is an alarm when an item is urgent or has waited more than 30 minutes. It is added beside the other top-bar
-// boxes and holds no question, so it can never push an open question out of view.
+// The box is an alarm when an item is urgent or has waited more than 30 minutes, calm green at 0 (like WAITING ON YOU),
+// so "waiting on HQ" is always a number. It is added beside the other top-bar boxes and holds no question, so it can
+// never push an open question out of view.
 import { on } from "../core/bus.js";
 import { S } from "../core/state.js";
 import { esc, setClass, setHTML } from "../core/format.js";
@@ -18,15 +19,16 @@ let timer = null;
 function render() {
   const q = S?.queue ?? null;
   clearTimeout(timer);
-  box.hidden = !q || !q.count;
-  if (box.hidden) return;
-  const age = Date.now() - q.oldest;
+  box.hidden = !q;
+  if (!q) return;
+  const age = q.count ? Date.now() - q.oldest : 0;
   const alarm = q.urgent > 0 || age > ALARM_MS;
-  setClass(box, "box queue" + (alarm ? " alarm" : ""));
-  setHTML(box, `<span class="k">${esc(q.lead.toUpperCase())} QUEUE</span><span class="v"><b>${q.count}</b> · OLDEST ${mins(age)}${q.urgent ? ` · <em>${q.urgent} URGENT</em>` : ""}</span>`);
-  box.title = `${q.count} waiting for ${q.lead}. Read them with: hud req next`;
+  setClass(box, "box queue" + (alarm ? " alarm" : q.count ? "" : " ok"));
+  // A label over a value, like the other top-bar boxes; the value wraps instead of being cut off.
+  setHTML(box, `<span class="k">${esc(q.lead.toUpperCase())} QUEUE</span><span class="v"><b>${q.count}</b>${q.count ? `<span>OLDEST ${mins(age)}</span>` : ""}${q.urgent ? `<em>${q.urgent} URGENT</em>` : ""}</span>`);
+  box.title = q.count ? `${q.count} waiting for ${q.lead}. Read them with: hud req next` : `Nothing waits for ${q.lead}`;
   // The age is in minutes: wake at the next one, and not while the page is hidden.
-  if (!document.hidden) timer = setTimeout(render, 60_000 - (age % 60_000) + 5);
+  if (q.count && !document.hidden) timer = setTimeout(render, 60_000 - (age % 60_000) + 5);
 }
 on("state", render);
 document.addEventListener("visibilitychange", render);

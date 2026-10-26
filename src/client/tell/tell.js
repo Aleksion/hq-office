@@ -28,7 +28,8 @@ urgent.title = TITLES.queue;
 on("state", () => { if (S?.queue) urgent.title = S.queue.tellToQueue === false ? TITLES.direct : TITLES.queue; });
 urgent.setAttribute("aria-pressed", "false");
 urgent.addEventListener("click", () => urgent.setAttribute("aria-pressed", String(urgent.getAttribute("aria-pressed") !== "true")));
-document.querySelector("#compose .acts").prepend(urgent);
+// Appended, and shown first by CSS (order): the photo button stays the first child and SEND the one after it.
+document.querySelector("#compose .acts").append(urgent);
 $("noteText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("compose").requestSubmit(); });
 // The photo button, the same on every send box, and the images kept from before a reload.
 document.querySelector("#compose .acts").insertAdjacentHTML("afterbegin", attachButton("note"));

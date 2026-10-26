@@ -120,17 +120,18 @@ export const agentWhere = (name: string) => db.query("SELECT machine, pane FROM 
 // Types one message into an agent's session through herdr, on the machine the agent lives on. Fire and forget: the
 // caller has already saved what the message is about, so a herdr that cannot even start is logged, not thrown.
 export function promptAgent(agent: string, text: string) {
+  const who = agent === HQ_AGENT ? "HQ" : agent;
   const machine = agentWhere(agent)?.machine ?? LOCAL;
   const args = machine === LOCAL ? [HERDR, "agent", "prompt", agent, text] : [HERDR, "--machine", machine, "agent", "prompt", agent, text];
   let proc: ReturnType<typeof Bun.spawn>;
   try {
     proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
   } catch (e) {
-    event("hud", `could not reach ${agent}: ${(e as Error).message}`);
+    event("hud", `could not reach ${who}: ${(e as Error).message}`);
     return;
   }
   proc.exited.then(async (code) => {
-    if (code !== 0) event("hud", `could not reach ${agent}: ${(await new Response(proc.stderr).text()).trim() || `exit ${code}`}`);
+    if (code !== 0) event("hud", `could not reach ${who}: ${(await new Response(proc.stderr).text()).trim() || `exit ${code}`}`);
   });
 }
 

@@ -13,6 +13,8 @@ const PROMPTS = join(DATA, "prompts.log");
 let stop: () => Promise<void>;
 let BASE = "";
 
+// Prompts are typed after the request returns: let an earlier test's finish before counting, so a test sees only its own.
+const settled = async () => { await Bun.sleep(300); return prompts().length; };
 const prompts = () => (existsSync(PROMPTS) ? readFileSync(PROMPTS, "utf8").trim().split("\n").filter(Boolean) : []);
 const post = async (path: string, body: unknown) => {
   const res = await fetch(BASE + path, { method: "POST", headers: { "x-hud": "1", "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -41,7 +43,7 @@ afterAll(async () => {
 });
 
 test("a plain message waits in the queue and types nothing; an urgent one sorts first and types one line", async () => {
-  const before = prompts().length;
+  const before = await settled();
   const first = (await file({ text: "first, plain" })).body.id;
   await Bun.sleep(5);
   const second = (await file({ text: "second, plain" })).body.id;
@@ -69,7 +71,7 @@ test("hud request --file reads the body from a file, the kind is optional, and t
   const path = join(DATA, "long.txt");
   const long = `Report line one\n${"x".repeat(5000)}\nlast line`;
   writeFileSync(path, long);
-  const before = prompts().length;
+  const before = await settled();
   const out = await hud("request", "--lane", "chat-lane", "--file", path);
   expect(out).toMatchObject({ code: 0 });
   const id = Number(out.out.match(/request #(\d+)/)![1]);
@@ -82,7 +84,7 @@ test("hud request --file reads the body from a file, the kind is optional, and t
 
 test("urgent is a flag on the desk too: it sorts to the top marked, nothing is typed, and the other asks show as before", async () => {
   const plain = (await post("/api/asks", { title: "plain question", created_at: Date.now() - 60_000 })).body.id;
-  const before = prompts().length;
+  const before = await settled();
   const out = await hud("ask", "--lane", "chat-lane", "--title", "urgent question", "--urgent");
   const urgent = Number(out.out.match(/ask #(\d+)/)![1]);
   const open = (await get("/api/state")).open;
@@ -103,7 +105,7 @@ test("pushing an existing item up is an urgent use; it sorts first and the line 
   const a = (await file({ text: "older" })).body.id;
   await Bun.sleep(5);
   const b = (await file({ text: "newer" })).body.id;
-  const before = prompts().length;
+  const before = await settled();
   expect((await hud("urgent", String(b), "--by", "pm-lane")).code).toBe(0);
   expect((await hud("urgent", String(b), "--by", "pm-lane")).code).toBe(0);
   expect(await ids()).toEqual([b, a]);
@@ -127,10 +129,10 @@ test("every urgent use is a row, and hud urgent reports them by who and by recip
 });
 
 test("Tell HQ goes to the queue by default, and URGENT puts it first and types the line", async () => {
-  const before = prompts().length;
+  const before = await settled();
   expect((await post("/api/notes", { text: "a plain note from the owner" })).status).toBe(200);
   expect((await post("/api/notes", { text: "an urgent note", urgent: true })).status).toBe(200);
-  const open = await get("/api/requests?lead=HQ");
+  const open = (await get("/api/requests?lead=HQ")).filter((r: any) => ["an urgent note", "a plain note from the owner"].includes(r.text));
   expect(open.map((r: any) => r.text)).toEqual(["an urgent note", "a plain note from the owner"]);
   expect(open[0]).toMatchObject({ lane: null, kind: "NOTE" });
   // HQ's inbox no longer carries it (hud wait does not wake on a Tell: the queue does), but the owner's page still shows
