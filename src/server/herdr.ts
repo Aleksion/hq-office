@@ -6,6 +6,8 @@ import { bump } from "./push.ts";
 import { event } from "./events.ts";
 import { withHint } from "../hq-guide.ts";
 
+// Every agent herdr listed on the last sync that reached its machine: who is live, and where. An agent in no list is gone.
+export const liveAgents = new Map<string, { machine: string; pane: string }>();
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
 
@@ -53,12 +55,15 @@ export async function syncHerdr() {
     }),
   );
   const now = Date.now();
+  // A machine that did not answer keeps what it had: an unreachable machine does not make its agents gone.
+  for (const [name, a] of liveAgents) if (!errors.some((e) => e.startsWith(`${a.machine}:`))) liveAgents.delete(name);
+  for (const [name, { machine, agent }] of seen) liveAgents.set(name, { machine, pane: agent.pane_id });
   const lanes = db.query("SELECT * FROM lanes").all() as Lane[];
   const known = new Set(lanes.map((l) => l.name));
   // Only lanes that would otherwise read as HQ's turn or stale: any phase but done, parked or waiting (a phase HQ set
   // that the status does not know, such as "paused", also falls through to HQ's turn), agent not working, and no
   // open question waiting on the owner.
-  const asking = new Set((db.query("SELECT DISTINCT lane FROM asks WHERE status = 'open' AND lane IS NOT NULL").all() as { lane: string }[]).map((r) => r.lane));
+  const asking = new Set((db.query("SELECT DISTINCT lane FROM asks WHERE status = 'open' AND recipient = 'owner' AND lane IS NOT NULL").all() as { lane: string }[]).map((r) => r.lane));
   const bg = new Map<string, string | null>();
   await Promise.all(
     lanes.map(async (lane) => {
@@ -103,19 +108,22 @@ export async function syncHerdr() {
   if (changed) bump();
 }
 
-// The owner's answers reach HQ the moment they are sent: typed into HQ's session, with a one-line reminder to reply
-// through the HUD (the owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out).
-const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";
-export function notifyHq(text: string) {
-  // The answer is already saved; a herdr that cannot even start must not turn it into an error for the page.
+// Types one message into an agent's session through herdr. Fire and forget: the caller has already saved what the
+// message is about, so a herdr that cannot even start is logged, not thrown.
+export function promptAgent(agent: string, text: string) {
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn([HERDR, "agent", "prompt", HQ_AGENT, withHint(text)], { stdout: "ignore", stderr: "pipe" });
+    proc = Bun.spawn([HERDR, "agent", "prompt", agent, text], { stdout: "ignore", stderr: "pipe" });
   } catch (e) {
-    event("hud", `could not reach HQ: ${(e as Error).message}`);
+    event("hud", `could not reach ${agent}: ${(e as Error).message}`);
     return;
   }
   proc.exited.then(async (code) => {
-    if (code !== 0) event("hud", `could not reach HQ: ${(await new Response(proc.stderr).text()).trim() || `exit ${code}`}`);
+    if (code !== 0) event("hud", `could not reach ${agent}: ${(await new Response(proc.stderr).text()).trim() || `exit ${code}`}`);
   });
 }
+
+// The owner's answers reach HQ the moment they are sent: typed into HQ's session, with a one-line reminder to reply
+// through the HUD (the owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out).
+export const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";
+export const notifyHq = (text: string) => promptAgent(HQ_AGENT, withHint(text));
