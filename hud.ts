@@ -200,7 +200,7 @@ switch (cmd) {
   case "tell":
   case "say":
     // The text may come as --body or as the trailing words: on 24 Oct 2026 every HQ tell passed it positionally,
-    // it was dropped, and Aleks saw titles only.
+    // it was dropped, and the owner saw titles only.
     await call("POST", "/api/updates", { lane: one("lane"), title: one("title"), body: one("body") ?? (rest.join(" ") || undefined) });
     break;
   case "inbox":
