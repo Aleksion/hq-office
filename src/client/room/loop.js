@@ -22,7 +22,9 @@ let frameTimer = null;
 let frameQueued = 0;
 let frameNext = 0;
 let walked = false;
-const roomVisible = () => document.visibilityState === "visible";
+// The office rests while something covers it: a conference room opened on the stage (rooms/) says so on the bus.
+let covered = false;
+const roomVisible = () => document.visibilityState === "visible" && !covered;
 function scheduleFrame() {
   if (!roomVisible()) {
     clearTimeout(frameTimer);
@@ -51,13 +53,14 @@ function roomFrame() {
 }
 // What changes the picture between its own steps wakes the room at once.
 let drawnHover = null;
-export function wake() {
+function wake() {
   clearTimeout(frameTimer);
   frameTimer = null;
   frameNext = 0;
   scheduleFrame();
 }
 on("state", wake);
+on("stage", (shown) => { covered = shown !== "office"; wake(); });
 on("settings", wake); // PERFORMANCE switches at once
 window.addEventListener("focus", wake);
 window.addEventListener("blur", wake);

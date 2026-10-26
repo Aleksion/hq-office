@@ -8,7 +8,6 @@ import { SEATS } from "./spots.js";
 import { workers } from "./workers.js";
 import { deskCount } from "./collision.js";
 import { steadyClock, steamClock } from "./beat.js";
-import { paintConference } from "./conference.js";
 
 // The room's still parts: floor, walls, windows, sign, plants and furniture. Painted once per season, sign, desk
 // count and font load, then copied. The moving bits (screens, lights, steam) are drawn on top each frame.
@@ -51,8 +50,6 @@ function paintRoomStill(used) {
     px(dx - 2, dy + 14, TS + 4, 2, "#6e4826");
     px(dx + 3, dy - 1, 10, 8, "#2b2f3a");
   }
-  // the conference room in the bottom-left corner (conference.js)
-  paintConference();
   // HQ terminal
   px(16 * TS, 4 * TS + 2, TS, 14, "#1d2733");
   px(16 * TS + 2, 4 * TS + 4, TS - 4, 8, "#163a2a");

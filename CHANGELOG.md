@@ -3,6 +3,31 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-10-26
+
+### Changed
+
+- **A conference room is its own view.** Opening a room (from the ROOMS list, the strip of rooms, or a link to
+  `#room/SLUG`) swaps the office on the right for the room itself, full height. BACK TO OFFICE, Esc or the browser's
+  back button take you back, a reload keeps you in the room, and the strip at its top moves straight to another open
+  room, with its new messages marked. Your questions stay where they are: a room never covers or shrinks the
+  question column, and Tell HQ stays under it.
+- **The conversation comes first.** The thread fills the room with the send box (TO, attach, SEND) always in view at
+  its foot. The lanes, linked work, brief and shelf sit in a rail beside it that you can fold; this browser remembers
+  your choice. The thread, the rail and the ROOMS list each scroll on their own.
+- **A small conference room at the top of each room:** its lanes at the table in their office sprites, you at the
+  head, a lit laptop for each lane that is working and the office's bubbles for the rest. It is drawn only when
+  something in it changes.
+- **On a phone, a room fills the screen** with CHAT, BRIEF and SHELF tabs and a back button that says how many
+  questions are waiting. The send box stays above the keyboard.
+- The office draws as it did before 0.9: no glass room in the bottom-left corner and no lanes gathering there, and
+  the fourth row of desks is back (28 desks). The office stops drawing while a room covers it.
+
+### Fixed
+
+- Line breaks in a room's messages show: a new line breaks the line, a blank line starts a paragraph, and lists and
+  code boxes render as in the brief.
+
 ## [0.9.1] - 2026-10-26
 
 ### Fixed

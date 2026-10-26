@@ -10,11 +10,6 @@ import { isIdle } from "./breakroom.js";
 
 export const workers = new Map(); // name -> { x, y, path, dir, step, t, lane, seat, pal, bob }
 
-// Another feature can send a lane somewhere else for a while (rooms/gather.js: the conference table). The hook gets
-// each lane and returns { at, face } or nothing; a lane it places skips its usual spot and the break room's errands.
-let placeHook = () => null;
-export function setPlaceHook(fn) { placeHook = fn; }
-
 function targetFor(lane, i, counts) {
   const st = lane.status;
   if (st === "needs_you") return { at: slot(QUEUE, counts.queue++), face: "up" };
@@ -38,14 +33,13 @@ export function syncWorkers(initial) {
   const counts = { queue: 0, hq: 0, wait: 0, couch: 0, done: 0 };
   for (const lane of ordered) {
     const seat = seatIndex.get(lane.name);
-    const elsewhere = placeHook(lane);
-    const { at, face } = elsewhere ?? targetFor(lane, seat, counts);
+    const { at, face } = targetFor(lane, seat, counts);
     let w = workers.get(lane.name);
     if (!w) {
       w = { x: at.x, y: at.y, path: [], dir: face, step: 0, t: 0, pal: null, bob: hash(lane.name) % 1000 };
       workers.set(lane.name, w);
     }
-    if (!isIdle(lane) || elsewhere) w.brain = null;
+    if (!isIdle(lane)) w.brain = null;
     if (w.brain) { w.lane = lane; continue; } // the break room decides where idle workers go
     const prevTarget = w.target;
     w.lane = lane;
@@ -54,7 +48,7 @@ export function syncWorkers(initial) {
     w.target = at;
     if (initial) { w.x = at.x; w.y = at.y; w.dir = face; w.path = []; }
     else if (!prevTarget || prevTarget.x !== at.x || prevTarget.y !== at.y) w.path = route(w, at);
-    if (isIdle(lane) && !elsewhere) w.brain = { nextAt: 0, act: null, acting: false, until: 0 };
+    if (isIdle(lane)) w.brain = { nextAt: 0, act: null, acting: false, until: 0 };
   }
   dressWorkers(workers, lanes, settings.theme, seatIndex);
 }

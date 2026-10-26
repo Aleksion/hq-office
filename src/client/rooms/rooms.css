@@ -1,13 +1,10 @@
-/* ROOMS: the conference rooms tab over the question column: the list, and an open room (its lanes, brief, shelf,
-   thread and send box). */
-.rooms[hidden], .rlist[hidden], .rview[hidden] { display: none; }
+/* ROOMS: the list in the question column, and an open room: a view of its own on the stage, in place of the office
+   (the room canvas and the panels under it). Each pane scrolls on its own: the list, the thread, the rail. */
+.rooms[hidden], .roomview[hidden] { display: none; }
 .rooms { display: grid; align-content: start; padding: 12px 14px; }
 @media (min-width: 1151px) {
   .rooms { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
-  .rooms.inroom { overflow: hidden; grid-template-rows: minmax(0, 1fr); align-content: stretch; }
 }
-/* In a room its own send box is the one to write in: Tell HQ steps aside until you leave the room (or the tab). */
-.desk:has(.rooms.inroom:not([hidden])) > .tell { display: none; }
 
 /* the list */
 .rlist { display: grid; gap: 10px; align-content: start; }
@@ -17,19 +14,21 @@
 .rrow:hover { background: #fff; border-color: var(--edge-2); }
 .rrow:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .rrow.unread { background: #fff8e6; border-color: #f0d080; }
+.rrow.here { border-color: var(--blue); background: #eef4ff; }
 .rrow.archived { opacity: .6; }
 .rrow .meta { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .rrow .rt { min-width: 0; font: 800 15px/1.3 var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .rrow .age { margin-left: auto; flex: 0 0 auto; font: 8px/1 var(--pixel); color: var(--muted); }
-.rrow .plus { font: 7px/1 var(--pixel); color: var(--muted); }
+.rrow .plus, .rvhead .plus { font: 7px/1 var(--pixel); color: var(--muted); }
 .rrow .last { font-size: 13px; color: #3a3a52; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .rrow .last b { margin-right: 4px; font: 7px/1 var(--pixel); color: var(--ink); }
 .rrow .last.none { color: var(--muted); }
 .tag.kept { background: var(--amber); color: #fff; }
+.tag.in { background: var(--blue); color: #fff; }
 .rrow .meta .tag { flex: 0 0 auto; white-space: nowrap; }
 
 /* a lane: its status colour, name, level and role; a tap selects its worker in the office */
-.rooms .people, .rooms .works { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.rooms .people, .roomview .people, .roomview .works { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .rlane { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 7px 3px 5px; border: 2px solid var(--edge); border-radius: 6px; background: var(--box); font: 700 13px/1.2 var(--text); }
 .rlane:hover { background: #fff; }
 .rlane i { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 2px; }
@@ -43,34 +42,52 @@
 .rwork .tag { text-decoration: none; }
 .tag.key { color: var(--ink); }
 
-/* an open room */
-.rview { display: grid; gap: 10px; min-width: 0; }
-/* On a computer the room fills the column: the brief takes up to a third and scrolls inside itself, the thread keeps
-   at least 150px and gets the rest. */
-@media (min-width: 1151px) {
-  .rview { min-height: 0; grid-template-rows: auto fit-content(34%) auto minmax(150px, 1fr) auto; }
-  .rbrief { overflow: hidden; grid-template-rows: auto minmax(0, 1fr); }
-  .rbrief .md { max-height: none; min-height: 0; }
-}
-.rtop { display: grid; gap: 6px; min-width: 0; }
-.rhead { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.rhead .back { flex: 0 0 auto; }
-.rhead h3 { min-width: 0; margin: 0; font: 800 17px/1.3 var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.rbrief, .rshelf { display: grid; gap: 6px; min-width: 0; padding: 8px 10px; border: 2px solid #e2e2ee; border-radius: 8px; background: #fff; }
-.rooms .k { display: flex; align-items: center; gap: 8px; min-height: 20px; font: 8px/1 var(--pixel); color: var(--muted); }
-.rooms .k .by { font: 12px/1 var(--text); }
-.rbrief .k .btn-s { margin-left: auto; padding: 4px 6px; font-size: 7px; }
-.rbrief.folded { padding-block: 6px; }
-.rooms .none { font-size: 13px; color: var(--muted); }
+/* ---- an open room ---- */
+.stage.inroom > .room, .stage.inroom > .under { display: none; }
+.roomview { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; padding: 12px 14px; }
+.roomview > * { flex: 0 0 auto; }
+.roomview > .rvbody { flex: 1 1 0; }
+/* the way back, and the other open rooms */
+.rvbar { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rvbar .back { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; }
+.rvbar .back .tag { padding: 3px 5px; font-size: 7px; }
+.rvbar .back .tag[hidden] { display: none; }
+.rvtabs { display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.rvtabs::-webkit-scrollbar { display: none; }
+.rvtab { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; max-width: 230px; padding: 6px 8px; border: 2px solid var(--edge-2); border-radius: 6px; background: var(--box); color: var(--ink); font: 8px/1.2 var(--pixel); text-decoration: none; }
+.rvtab span:first-child { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rvtab:hover { background: #fff; border-color: var(--edge); }
+.rvtab.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.rvtab.unread { border-color: #f0d080; background: #fff8e6; }
+.rvtab .tag { padding: 3px 4px; font-size: 7px; }
+/* the room's name, its owner, and the rail's fold */
+.rvhead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rvhead h2 { min-width: 0; margin: 0; font: 800 18px/1.3 var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rvhead .who { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; }
+.rvhead .railbtn { margin-left: auto; flex: 0 0 auto; }
+/* the conference room in pixels (pix.js): its height is set from its art */
+.rvpix { display: block; width: 100%; height: 96px; image-rendering: pixelated; border: 2px solid var(--edge); border-radius: 6px; background: #9aa8c4; }
+.rvptabs { display: none; gap: 6px; }
+.rvptabs .tab { flex: 1 1 0; justify-content: center; }
+/* the thread beside the rail; folded, the thread takes the width */
+.rvbody { display: grid; grid-template-columns: minmax(0, 1fr) clamp(250px, 32%, 380px); gap: 12px; min-height: 0; }
+.roomview.folded .rvbody { grid-template-columns: minmax(0, 1fr); }
+.roomview.folded .rvrail { display: none; }
+.rvchat { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; min-width: 0; min-height: 0; }
+.rvrail { display: grid; align-content: start; gap: 10px; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.rtop, .rbrief, .rshelf { display: grid; gap: 6px; min-width: 0; padding: 8px 10px; border: 2px solid #e2e2ee; border-radius: 8px; background: #fff; }
+.roomview .k { display: flex; align-items: center; gap: 8px; min-height: 16px; font: 8px/1 var(--pixel); color: var(--muted); }
+.roomview .k .by { font: 12px/1 var(--text); }
+.roomview .none, .roomview .empty { font-size: 13px; color: var(--muted); }
 
-/* the brief, as markdown */
-.md { max-height: clamp(90px, 20vh, 210px); overflow-y: auto; overscroll-behavior: contain; font: 400 14px/1.45 var(--text); color: #3a3a52; overflow-wrap: anywhere; } /* as a message's text; the pixel font is for labels only */
-.md.more { -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
+/* markdown: the brief and the thread's messages (as a message's text; the pixel font is for labels only) */
+.md { font: 400 14px/1.45 var(--text); color: #3a3a52; overflow-wrap: anywhere; }
+.rthread .msg .text.md { white-space: normal; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md h3, .md h4, .md h5, .md h6 { margin: 10px 0 4px; font: 800 15px/1.3 var(--text); color: var(--ink); }
 .md h5, .md h6 { font-size: 14px; }
-.md p { margin: 4px 0; }
+.md p { margin: 6px 0; }
 .md ul, .md ol { margin: 4px 0; padding-left: 20px; }
 .md li { margin: 2px 0; }
 .md li:has(> .tick) { list-style: none; margin-left: -18px; }
@@ -83,10 +100,11 @@
 .md table { border-collapse: collapse; font-size: 13px; }
 .md th, .md td { padding: 3px 7px; border: 1px solid #e2e2ee; text-align: left; vertical-align: top; }
 .md th { background: #f2f2f8; }
+.md .more { margin-top: 4px; }
 
-/* the shelf: a card per artifact, in a row that scrolls sideways, newest first */
-.cards { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; overscroll-behavior-x: contain; }
-.art { flex: 0 0 156px; display: grid; grid-template-rows: auto 1fr auto; gap: 4px; min-width: 0; padding: 6px 8px; border: 2px solid var(--edge); border-radius: 8px; background: var(--box); }
+/* the shelf: a card per artifact, newest first, wrapping in the rail (no scroll of its own) */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.art { display: grid; grid-template-rows: auto 1fr auto; gap: 4px; min-width: 0; padding: 6px 8px; border: 2px solid var(--edge); border-radius: 8px; background: var(--box); }
 .art .ak { display: flex; align-items: center; gap: 5px; min-width: 0; font: 6px/1.3 var(--pixel); color: var(--muted); }
 .art .ak span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .art .ak svg { flex: 0 0 auto; width: 14px; height: 14px; fill: currentColor; }
@@ -98,11 +116,11 @@
 .art .open { margin-left: auto; flex: 0 0 auto; padding: 4px 6px; font-size: 7px; color: var(--ink); text-decoration: none; }
 .art.image { grid-template-rows: auto auto auto; padding: 5px; }
 .art.image .at { -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block; }
-.aimg { display: block; width: 100%; height: 40px; padding: 0; border: 0; border-radius: 6px; overflow: hidden; background: #e8e8f4; cursor: zoom-in; }
+.aimg { display: block; width: 100%; height: 64px; padding: 0; border: 0; border-radius: 6px; overflow: hidden; background: #e8e8f4; cursor: zoom-in; }
 .aimg img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* the thread: the same messages as MESSAGES; a lane's on white, yours tinted */
-.rthread { display: grid; gap: 8px; align-content: start; min-height: 140px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.rthread { display: grid; gap: 8px; align-content: start; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; outline: none; }
 .rthread .msg.lane { background: #fff; border-color: #e2e2ee; }
 .rthread .msg.lane.unread { background: #fff8e6; border-color: #f0d080; }
 .rthread .msg .to { font: 7px/1 var(--pixel); color: var(--blue); }
@@ -111,7 +129,7 @@
 .rthread .msg .meta .btn-s:last-child { margin-left: auto; padding: 5px 7px; font-size: 7px; }
 .rthread .earlier { font: 7px/1.4 var(--pixel); color: var(--muted); text-align: center; }
 
-/* the send box: who it goes to, what it answers, then the composer */
+/* the send box, always at the thread's foot: who it goes to, what it answers, then the composer */
 .rsend { display: grid; gap: 6px; min-width: 0; }
 .rto { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .rto label { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; font: 8px/1 var(--pixel); color: var(--ink); }
@@ -122,13 +140,27 @@
 .rquote span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .rquote .btn-s { padding: 4px 7px; }
 
-/* Under 1151px the page scrolls: the thread keeps a bounded height and scrolls inside itself, so the send box under
-   it stays in reach. On a phone the To picker is 16px (no zoom on focus) and the cards a little narrower. */
+/* Under 1151px there is no stage beside the questions: a room is a full-screen view over the page, sized to the part
+   of the screen the keyboard leaves (index.js sets --vvh and --vvt), with CHAT, BRIEF and SHELF tabs. The page under
+   it does not scroll. */
 @media (max-width: 1150px) {
-  .rthread { max-height: max(260px, calc(100vh - 300px)); max-height: max(260px, calc(100svh - 300px)); -webkit-overflow-scrolling: touch; }
+  html.roomopen, html.roomopen body { overflow: hidden; }
+  .roomview { position: fixed; z-index: 30; left: 0; right: 0; top: var(--vvt, 0px); height: 100vh; height: var(--vvh, 100dvh); margin: 0; border-width: 0; border-radius: 0; box-shadow: none; gap: 8px;
+    padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+  .roomview .railbtn { display: none; }
+  .rvptabs { display: flex; }
+  .rvhead h2 { font-size: 16px; }
+  .rvhead .who { display: none; }
+  .roomview.typing .rvpix, .roomview.typing .rvhead { display: none; }
+  .rvbody, .roomview.folded .rvbody { grid-template-columns: minmax(0, 1fr); }
+  .roomview[data-pane="chat"] .rvrail { display: none; }
+  .roomview:not([data-pane="chat"]) .rvchat { display: none; }
+  .roomview:not([data-pane="chat"]) .rvrail, .roomview.folded:not([data-pane="chat"]) .rvrail { display: grid; }
+  .roomview[data-pane="brief"] .rshelf, .roomview[data-pane="shelf"] .rtop, .roomview[data-pane="shelf"] .rbrief { display: none; }
+  .rthread, .rvrail { -webkit-overflow-scrolling: touch; }
 }
 @media (max-width: 1150px) and (pointer: coarse) {
   html .rto select { font-size: 16px; }
-  .art { flex-basis: 136px; }
   .rlane { padding-block: 5px; }
+  .rvtab, .rvptabs .tab { min-height: 34px; }
 }

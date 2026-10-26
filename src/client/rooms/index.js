@@ -1,38 +1,74 @@
-// ROOMS: a conference room per piece of work. The list shows each room's owner, its work's state on the board and
-// its last activity; an open room shows its lanes, the pinned brief, the artifacts shelf and the thread, where you
-// write to the owning lane or any lane in the room (the server types it into that lane). The office's conference
-// table fills while a room talks (gather.js).
-import "./gather.js";
-import { $, keepScroll, phone, showEdges, toast } from "../core/dom.js";
+// ROOMS: a conference room per piece of work. The ROOMS tab in the question column lists them: each room's owner,
+// its work's state on the board and its last activity. A room is a place you go to: opening one (from the list, a
+// link to #room/SLUG, or the strip of rooms at its top) swaps the office on the right for the room's own view, and
+// BACK TO OFFICE, Esc or the browser's back button return. The question column never moves.
+//
+// In the room the conversation comes first: the thread fills the main column with the send box always at its foot
+// (write to the owning lane or any lane in the room; the server types it into that lane). The lanes, linked work,
+// the brief and the shelf sit in a rail beside it, folded or open as this browser last left it. Each pane scrolls
+// on its own. On a phone (or any screen under 1151px) a room is a full-screen view with CHAT, BRIEF and SHELF tabs.
+import { $, keepScroll, showEdges, toast } from "../core/dom.js";
 import { CONFIG, S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
-import { clipText, renderBody } from "../core/text.js";
+import { expanded } from "../core/text.js";
 import { post } from "../core/net.js";
-import { on } from "../core/bus.js";
+import { emit, on } from "../core/bus.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { qTab } from "../messages/messages.js";
 import { clearImages, composer, hasImages, notReady, openPreview, withImages } from "../images/images.js";
 import { markdown } from "./markdown.js";
+import { ART_H, drawStrip, laneAt, stripKey } from "./pix.js";
 
-const box = $("rooms");
-box.innerHTML = `<div class="rlist"></div>
-  <div class="rview" hidden>
-    <div class="rtop"></div>
-    <section class="rbrief"></section>
-    <section class="rshelf"></section>
-    <div class="rthread"></div>
-    <div class="rsend"></div>
-  </div>`;
-const part = (cls) => box.querySelector(`.${cls}`);
 const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+// Rooms 0.9 remembered the open room here; a room's address is its #room/SLUG now.
+store("hq-room", null);
 
-let openSlug = stored("hq-room");
+// ---- the list, in the question column ----
+
+const box = $("rooms");
+box.innerHTML = `<div class="rlist"></div>`;
+const list = box.querySelector(".rlist");
+
+// ---- the room view, on the stage in place of the office ----
+
+const stage = document.querySelector(".stage");
+const view = document.createElement("section");
+view.className = "box roomview";
+view.id = "roomView";
+view.hidden = true;
+view.setAttribute("aria-label", "Conference room");
+view.innerHTML = `<div class="rvbar">
+    <button class="btn back" type="button" data-room-back>◀ BACK TO OFFICE<span class="tag count waitn" hidden></span></button>
+    <nav class="rvtabs" aria-label="Open rooms"></nav>
+  </div>
+  <div class="rvhead"></div>
+  <canvas class="rvpix" aria-hidden="true"></canvas>
+  <div class="rvptabs" role="tablist">
+    <button class="tab" type="button" role="tab" data-ptab="chat">CHAT</button>
+    <button class="tab" type="button" role="tab" data-ptab="brief">BRIEF</button>
+    <button class="tab" type="button" role="tab" data-ptab="shelf">SHELF</button>
+  </div>
+  <div class="rvbody">
+    <div class="rvchat">
+      <div class="rthread" tabindex="-1" aria-label="Thread"></div>
+      <div class="rsend"></div>
+    </div>
+    <aside class="rvrail" id="roomRail" aria-label="Lanes, brief and shelf">
+      <section class="rtop"></section>
+      <section class="rbrief"></section>
+      <section class="rshelf"></section>
+    </aside>
+  </div>`;
+stage.append(view);
+const part = (cls) => view.querySelector(`.${cls}`);
+
+let openSlug = null; // the room on the stage
 let detail = null; // the open room, as /api/rooms/SLUG gave it
 let fetching = "";
 let stick = true; // the thread opens at its newest message
 let sendFor = null; // the room the send box was built for
-let briefHidden = stored("hq-room-brief") === "hidden";
+let railFolded = stored("hq-room-rail") === "folded";
 const fresh = new Set(); // lanes' messages that were new when shown: tinted until you leave the room
 const seenSent = new Map(); // slug -> the rev a "seen" was sent for
 // Unsent text per room, its To and the message it replies to; kept across a reload.
@@ -46,6 +82,8 @@ const key = (slug) => `room:${slug}`;
 const roomOf = (slug) => (S?.rooms ?? []).find((r) => r.slug === slug) ?? null;
 const short = (s, n) => { const t = String(s ?? "").replace(/```[\s\S]*?```/g, "[code]").replace(/\[image: [^\]]+\]/g, "[image]").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
 function ago(t) { const m = Math.floor((Date.now() - t) / 60000), h = Math.floor(m / 60); return m < 1 ? "NOW" : h < 1 ? `${m}M AGO` : h < 48 ? `${h}H AGO` : `${Math.floor(h / 24)}D AGO`; }
+// Under 1151px there is no stage beside the questions: a room takes the whole screen.
+const fullScreen = matchMedia("(max-width: 1150px)");
 
 // ---- lanes: level, status, away ----
 
@@ -100,8 +138,9 @@ function workHtml(r, full) {
 function rowHtml(r) {
   const state = workState(r);
   const last = r.last ? `<b>${r.last.who === "owner" ? `YOU → ${esc(r.last.to)}` : esc(r.last.who)}</b> ${esc(r.last.text)}` : `No messages yet${r.artifacts ? ` · ${r.artifacts} on the shelf` : ""}`;
-  return `<article class="rrow${r.unread ? " unread" : ""}${r.archivedAt ? " archived" : ""}" data-room="${esc(r.slug)}" tabindex="0" role="button" aria-label="Open room ${esc(r.title)}">
-      <div class="meta"><b class="rt">${esc(r.title)}</b>${r.unread ? `<span class="tag new">${r.unread} NEW</span>` : ""}${r.undelivered ? `<span class="tag kept">${r.undelivered} KEPT</span>` : ""}<span class="age">${ago(r.lastAt)}</span></div>
+  const here = r.slug === openSlug;
+  return `<article class="rrow${r.unread ? " unread" : ""}${r.archivedAt ? " archived" : ""}${here ? " here" : ""}" data-room="${esc(r.slug)}" tabindex="0" role="link" aria-label="Go to room ${esc(r.title)}"${here ? ` aria-current="page"` : ""}>
+      <div class="meta"><b class="rt">${esc(r.title)}</b>${here ? `<span class="tag in">YOU ARE HERE</span>` : ""}${r.unread ? `<span class="tag new">${r.unread} NEW</span>` : ""}${r.undelivered ? `<span class="tag kept">${r.undelivered} KEPT</span>` : ""}<span class="age">${ago(r.lastAt)}</span></div>
       <div class="people">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}${state ? `<span class="tag ws ${state}">${WS[state]}</span>` : ""}${workHtml(r, false)}</div>
       <div class="last${r.last ? "" : " none"}">${last}</div>
     </article>`;
@@ -110,30 +149,67 @@ function renderList() {
   const rooms = S?.rooms ?? [];
   const live = rooms.filter((r) => !r.archivedAt), old = rooms.filter((r) => r.archivedAt);
   const unread = live.filter((r) => r.unread).length;
-  setHTML(part("rlist"), rooms.length
+  setHTML(list, rooms.length
     ? `<div class="rsum">${live.length} OPEN ${live.length === 1 ? "ROOM" : "ROOMS"}${unread ? ` · ${unread} WITH NEW MESSAGES` : ""}</div>${live.map(rowHtml).join("")}${old.length ? `<h4>ARCHIVED (${old.length})</h4>${old.map(rowHtml).join("")}` : ""}`
     : `<div class="empty">No rooms yet. HQ opens one for a piece of work with hud room create. Its lane keeps the brief and the artifacts there, and you talk to it here.</div>`);
 }
+function renderCount() {
+  const n = (S?.rooms ?? []).filter((r) => !r.archivedAt && r.unread).length, t = $("qtRooms");
+  t.hidden = !n;
+  t.textContent = n;
+  t.title = `${n} ${n === 1 ? "room has" : "rooms have"} new messages`;
+}
 
-// ---- an open room ----
+// ---- an open room: the bar, the head, the strip ----
+
+// The other open rooms, one step away; a count on those with new lane messages.
+function renderBar(r) {
+  const rooms = (S?.rooms ?? []).filter((x) => !x.archivedAt || x.slug === r.slug);
+  setHTML(part("rvtabs"), rooms.map((x) => `<a class="rvtab${x.slug === r.slug ? " on" : ""}${x.unread && x.slug !== r.slug ? " unread" : ""}" href="#room/${esc(x.slug)}" data-room-go="${esc(x.slug)}"${x.slug === r.slug ? ` aria-current="page"` : ""} title="${esc(x.title)}"><span>${esc(x.title)}</span>${x.unread && x.slug !== r.slug ? `<span class="tag new">${x.unread}</span>` : ""}</a>`).join(""));
+  // The questions stay in their column; on a full-screen room, the way back says when some are waiting.
+  const n = S?.open?.length ?? 0, w = part("waitn");
+  w.hidden = !n;
+  w.textContent = `${n} WAITING`;
+}
+function renderHead(r, d) {
+  const shelf = d?.artifactList.length ?? r.artifacts ?? 0;
+  setHTML(part("rvhead"), `<h2>${esc(r.title)}</h2>${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}<span class="who">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}</span><button class="btn-s railbtn" type="button" data-rail-toggle aria-expanded="${!railFolded}" aria-controls="roomRail">${railFolded ? "◀ BRIEF · SHELF" : "FOLD ▶"}${railFolded && shelf ? ` (${shelf})` : ""}</button>`);
+  view.classList.toggle("folded", railFolded);
+}
+
+// The strip is drawn at 2 screen pixels per art pixel (1.5 on a full screen); its art is as wide as its box allows.
+const pix = part("rvpix");
+let pixKey = "", pixWidth = 0;
+function renderStrip(r) {
+  if (!r) return;
+  const scale = fullScreen.matches ? 1.5 : 2;
+  const css = pix.clientWidth;
+  if (css <= 0) return;
+  const width = Math.max(120, Math.round(css / scale));
+  const lanes = new Map((S?.lanes ?? []).map((l) => [l.name, l]));
+  const k = `${scale}|${stripKey(r, lanes, width)}`;
+  if (k === pixKey) return;
+  pixKey = k;
+  pixWidth = width;
+  pix.style.height = `${ART_H * scale}px`;
+  drawStrip(pix, r, lanes, width);
+}
+pix.addEventListener("mousemove", (e) => {
+  const r = roomOf(openSlug), b = pix.getBoundingClientRect();
+  const name = laneAt(r, pixWidth, ((e.clientX - b.left) / b.width) * pixWidth);
+  const t = name ? (name === "you" ? "You, at the head of the table" : `${name}: ${laneInfo(name).label}`) : "";
+  if (pix.title !== t) pix.title = t;
+});
+
+// ---- the rail: lanes and work, the brief, the shelf ----
 
 function renderTop(r) {
-  setHTML(part("rtop"), `<div class="rhead"><button class="btn-s back" type="button" data-room-back aria-label="Back to the rooms">◀ ROOMS</button><h3>${esc(r.title)}</h3>${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}</div>
-    <div class="people">${laneChip(r.owner, "OWNER")}${r.members.map((m) => laneChip(m)).join("")}</div>
-    ${r.issues.length || r.prs.length ? `<div class="works">${workHtml(r, true)}</div>` : ""}`);
+  setHTML(part("rtop"), `<div class="k"><span>LANES</span></div><div class="people">${laneChip(r.owner, "OWNER")}${r.members.map((m) => laneChip(m)).join("")}</div>${r.issues.length || r.prs.length ? `<div class="k"><span>WORK</span></div><div class="works">${workHtml(r, true)}</div>` : ""}`);
 }
-
 function renderBrief(d) {
-  const head = `<div class="k"><span>BRIEF</span>${d?.briefAt ? `<span class="by">${esc(d.briefBy || "")} · ${ago(d.briefAt)}</span>` : ""}<button class="btn-s" type="button" data-brief-toggle aria-expanded="${!briefHidden}">${briefHidden ? "SHOW" : "HIDE"}</button></div>`;
+  const head = `<div class="k"><span>BRIEF</span>${d?.briefAt ? `<span class="by">${esc(d.briefBy || "")} · ${ago(d.briefAt)}</span>` : ""}</div>`;
   const body = !d ? "" : d.brief ? `<div class="md">${markdown(d.brief)}</div>` : `<div class="md none">No brief yet. The owning lane pins one with hud room brief ${esc(d.slug)}.</div>`;
-  part("rbrief").classList.toggle("folded", briefHidden);
-  setHTML(part("rbrief"), head + (briefHidden ? "" : body));
-  briefEdge();
-}
-// A fade at the brief's foot while more of it is below.
-function briefEdge() {
-  const md = part("rbrief").querySelector(".md");
-  if (md) md.classList.toggle("more", md.scrollHeight - md.clientHeight - md.scrollTop > 2);
+  setHTML(part("rbrief"), head + body);
 }
 
 // Pixel icons for the shelf's cards.
@@ -155,11 +231,15 @@ function cardHtml(a) {
   return `<div class="art ${esc(a.kind)}"><div class="ak">${ICON[a.kind] ?? ICON.link}<span>${esc(label)}</span></div><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}<a class="btn-s open" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN</a></div></div>`;
 }
 function renderShelf(d) {
-  const list = d?.artifactList ?? [];
-  setHTML(part("rshelf"), `<div class="k"><span>ARTIFACTS${list.length ? ` (${list.length})` : ""}</span></div>${list.length
-    ? `<div class="cards">${[...list].reverse().map(cardHtml).join("")}</div>`
+  const items = d?.artifactList ?? [];
+  const tab = view.querySelector('[data-ptab="shelf"]'), label = items.length ? `SHELF (${items.length})` : "SHELF";
+  if (tab.textContent !== label) tab.textContent = label;
+  setHTML(part("rshelf"), `<div class="k"><span>SHELF${items.length ? ` (${items.length})` : ""}</span></div>${items.length
+    ? `<div class="cards">${[...items].reverse().map(cardHtml).join("")}</div>`
     : `<div class="none">Nothing on the shelf yet. Lanes add Claude artifacts, links, images and files with hud room artifact.</div>`}`);
 }
+
+// ---- the thread ----
 
 function deliveryHtml(m) {
   if (m.delivery === "sent") return `<span class="seen ok">DELIVERED</span>`;
@@ -167,31 +247,45 @@ function deliveryHtml(m) {
   if (m.delivery === "failed") return `<span class="seen bad" title="${esc(m.error || "")}">NOT DELIVERED</span><button class="btn-s" type="button" data-room-retry="${m.id}">RETRY</button>`;
   return `<span class="seen">SENDING…</span>`;
 }
+// A message's text as markdown with its line breaks kept. A long one without code shows its first part and MORE.
+const LONG = 600;
+function textHtml(m) {
+  const t = m.text, k = `room${m.id}`;
+  if (t.length <= LONG || t.includes("```")) return markdown(t, true);
+  const open = expanded.has(k);
+  return `${markdown(open ? t : t.slice(0, LONG).replace(/\s+\S*$/, "") + "…", true)}<button class="more" type="button" data-more="${esc(k)}">${open ? "LESS" : "MORE"}</button>`;
+}
 function messageHtml(m, byId, live) {
   const lane = m.who !== "owner";
   const p = m.reply ? byId.get(m.reply) : null;
   const quote = p ? `<div class="quote">↩ ${p.who === "owner" ? "you" : esc(p.who)} ${clock(p.at)}: ${esc(short(p.text, 80))}</div>` : m.reply ? `<div class="quote">↩ an earlier message</div>` : "";
-  const text = m.text.includes("```") ? renderBody(m.text) : clipText(m.text, `room${m.id}`);
   return `<article class="msg ${lane ? "lane" : "you"}${lane && (!m.read || fresh.has(m.id)) ? " unread" : ""}" data-rmsg="${m.id}">
       <div class="meta"><span class="who">${lane ? esc(m.who) : "YOU"}</span>${lane ? "" : `<span class="to">→ ${esc(m.to)}</span>`}<span class="tag">${clock(m.at)}</span>${lane ? "" : deliveryHtml(m)}${lane && live ? `<button class="btn-s" type="button" data-room-reply="${m.id}">REPLY</button>` : ""}</div>
-      ${quote}<div class="text">${text}</div>
+      ${quote}<div class="text md">${textHtml(m)}</div>
     </article>`;
 }
+const thread = part("rthread");
+let atEnd = true; // at the thread's end it stays there while the room settles around it (fonts, an image)
+// The page's own move to the end fires a scroll event a frame later, by when the room may have changed size around
+// the thread: that event is not you scrolling away from the end, so it leaves atEnd as it is.
+let setTop = -1;
+function toBottom() { thread.scrollTop = thread.scrollHeight; setTop = thread.scrollTop; }
 function renderThread(d, r) {
-  const el = part("rthread");
-  if (!d) { setHTML(el, `<div class="empty">LOADING…</div>`); return; }
+  if (!d) { setHTML(thread, `<div class="empty">LOADING…</div>`); return; }
   for (const m of d.messages) if (m.who !== "owner" && !m.read) fresh.add(m.id);
   const byId = new Map(d.messages.map((m) => [m.id, m]));
   const html = (d.earlier ? `<div class="earlier">${d.earlier} EARLIER ${d.earlier === 1 ? "MESSAGE" : "MESSAGES"} NOT SHOWN</div>` : "")
     + (d.messages.map((m) => messageHtml(m, byId, !r.archivedAt)).join("") || `<div class="empty">No messages yet. Write to ${esc(r.owner)} below: it is typed into the lane, and its reply lands here.</div>`);
   // At the newest message (just opened, or within 40px of it), stay on it; reading older ones, what you read stays put.
-  const pinned = stick || el.scrollHeight - el.scrollTop - el.clientHeight < 40, place = pinned ? null : keepScroll(el, "data-rmsg");
-  setHTML(el, html);
-  if (pinned) el.scrollTop = el.scrollHeight; else place();
-  atEnd = pinned || el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  const pinned = stick || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40, place = pinned ? null : keepScroll(thread, "data-rmsg");
+  setHTML(thread, html);
+  if (pinned) toBottom(); else place();
+  atEnd = pinned || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
   stick = false;
-  showEdges(el);
+  showEdges(thread);
 }
+
+// ---- the send box ----
 
 const lanesOf = (r) => [r.owner, ...r.members];
 function renderSend(r) {
@@ -224,15 +318,20 @@ function sendState() {
   if (btn && openSlug) btn.disabled = !draft(openSlug).text.trim() && !hasImages(key(openSlug));
 }
 
+// ---- drawing the room ----
+
 function renderRoom() {
   const r = roomOf(openSlug);
-  if (!r) { closeRoom(); return; }
+  if (!r) return;
   const d = detail?.slug === r.slug ? detail : null;
+  renderBar(r);
+  renderHead(r, d);
   renderTop(r);
   renderBrief(d);
   renderShelf(d);
   renderThread(d, r);
   renderSend(r);
+  renderStrip(r);
   // Seen: its lanes' messages stop counting as new (the tint stays until you leave the room).
   if (d && r.unread && seenSent.get(r.slug) !== r.rev && document.visibilityState === "visible") {
     seenSent.set(r.slug, r.rev);
@@ -248,48 +347,82 @@ async function fetchRoom(slug) {
   fetching = want;
   try {
     const res = await fetch(`/api/rooms/${encodeURIComponent(slug)}`);
-    if (res.ok && openSlug === slug) { detail = await res.json(); if (qTab === "rooms") renderRoom(); }
+    if (res.ok && openSlug === slug) { detail = await res.json(); renderRoom(); }
   } catch {} finally { if (fetching === want) fetching = ""; }
 }
 
 function render() {
   renderCount();
-  if (qTab !== "rooms" || !S) return;
-  const r = openSlug && roomOf(openSlug);
-  part("rlist").hidden = !!r;
-  part("rview").hidden = !r;
-  box.classList.toggle("inroom", !!r);
-  if (!r) { renderList(); return; }
+  if (!S) return;
+  route();
+  if (qTab === "rooms") renderList();
+  if (!openSlug) return;
   renderRoom();
-  fetchRoom(r.slug);
-}
-function renderCount() {
-  const n = (S?.rooms ?? []).filter((r) => !r.archivedAt && r.unread).length, t = $("qtRooms");
-  t.hidden = !n;
-  t.textContent = n;
-  t.title = `${n} ${n === 1 ? "room has" : "rooms have"} new messages`;
+  fetchRoom(openSlug);
 }
 
-function openRoom(slug) {
-  if (openSlug !== slug) { detail = null; fresh.clear(); }
-  openSlug = slug;
-  store("hq-room", slug);
-  stick = true;
-  sendFor = null;
-  render();
-  if (phone()) box.scrollIntoView({ block: "start" });
+// ---- where you are: the address says it (#room/SLUG), and the page follows it ----
+
+const slugInHash = () => { const m = location.hash.match(/^#room\/([a-z0-9][a-z0-9-]{0,47})$/); return m ? m[1] : null; };
+function setPtab(t) {
+  view.dataset.pane = t;
+  for (const b of view.querySelectorAll("[data-ptab]")) { b.classList.toggle("on", b.dataset.ptab === t); b.setAttribute("aria-selected", String(b.dataset.ptab === t)); }
 }
-function closeRoom() {
-  openSlug = null;
-  detail = null;
-  sendFor = null;
-  fresh.clear();
-  store("hq-room", null);
-  part("rview").hidden = true;
-  part("rlist").hidden = false;
-  box.classList.remove("inroom");
+function show(slug) {
+  if (openSlug !== slug) { detail = null; fresh.clear(); stick = true; atEnd = true; sendFor = null; pixKey = ""; setPtab("chat"); }
+  openSlug = slug;
+  view.hidden = !slug;
+  stage.classList.toggle("inroom", !!slug);
+  document.documentElement.classList.toggle("roomopen", !!slug);
+  emit("stage", slug ? "room" : "office"); // the office's frame loop rests while a room covers it (room/loop.js)
+  fitViewport();
   if (qTab === "rooms") renderList();
 }
+// Follows the address: on load, on every state and whenever the address changes.
+function route() {
+  const slug = slugInHash();
+  if (slug === openSlug || (slug && !S)) return; // a room's summary comes with the first state
+  if (slug && !roomOf(slug)) {
+    toast(`NO ROOM ${slug.toUpperCase()}`);
+    history.replaceState(null, "", location.pathname + location.search);
+    if (openSlug) show(null);
+    return;
+  }
+  show(slug);
+  if (slug) { renderRoom(); fetchRoom(slug); }
+}
+// Going to a room from the office adds a step to the browser's history; moving from room to room replaces it, so
+// one BACK always lands in the office.
+export function goRoom(slug) {
+  if (slugInHash() === slug) { route(); return; }
+  const url = `${location.pathname}${location.search}#room/${slug}`;
+  if (slugInHash()) history.replaceState(history.state, "", url);
+  else history.pushState({ hqRoom: true }, "", url);
+  route();
+}
+export function leaveRoom() {
+  if (!slugInHash()) { route(); return; }
+  if (history.state?.hqRoom) { history.back(); return; } // popstate routes
+  history.replaceState(null, "", location.pathname + location.search);
+  route();
+}
+addEventListener("popstate", route);
+addEventListener("hashchange", route);
+
+// On a full-screen room the send box stays above the keyboard: the view follows the visible part of the screen.
+const vv = window.visualViewport;
+function fitViewport() {
+  if (!vv) return;
+  if (!openSlug || !fullScreen.matches) { view.style.removeProperty("--vvh"); view.style.removeProperty("--vvt"); view.classList.remove("typing"); return; }
+  view.style.setProperty("--vvh", `${vv.height}px`);
+  view.style.setProperty("--vvt", `${vv.offsetTop}px`);
+  view.classList.toggle("typing", vv.height < innerHeight * 0.75); // the keyboard is up: the strip steps aside
+}
+vv?.addEventListener("resize", fitViewport);
+vv?.addEventListener("scroll", fitViewport);
+fullScreen.addEventListener("change", () => { fitViewport(); if (openSlug) renderStrip(roomOf(openSlug)); });
+
+// ---- sending ----
 
 async function send(btn) {
   const slug = openSlug, d = draft(slug), k = key(slug);
@@ -311,16 +444,36 @@ async function send(btn) {
   } catch (err) { toast(err.message); btn.disabled = false; }
 }
 
+// ---- input ----
+
 box.addEventListener("click", (e) => {
   const t = e.target;
   if (t.closest("[data-select]") || t.closest("a")) return; // a lane chip selects its worker; a link opens
   const row = t.closest("[data-room]");
-  if (row) { openRoom(row.dataset.room); return; }
-  if (t.closest("[data-room-back]")) { closeRoom(); return; }
-  if (t.closest("[data-brief-toggle]")) {
-    briefHidden = !briefHidden;
-    store("hq-room-brief", briefHidden ? "hidden" : null);
-    renderBrief(detail);
+  if (row) goRoom(row.dataset.room);
+});
+box.addEventListener("keydown", (e) => {
+  const row = e.target.closest?.("[data-room]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); goRoom(row.dataset.room); }
+});
+view.addEventListener("click", (e) => {
+  const t = e.target;
+  // A lane chip selects its worker (core/clicks.js); its card is in the office, so go there.
+  if (t.closest("[data-select]")) { leaveRoom(); return; }
+  const go = t.closest("[data-room-go]");
+  if (go) { e.preventDefault(); goRoom(go.dataset.roomGo); return; }
+  if (t.closest("a")) return;
+  if (t.closest("[data-room-back]")) { leaveRoom(); return; }
+  const tab = t.closest("[data-ptab]");
+  if (tab) {
+    setPtab(tab.dataset.ptab);
+    if (tab.dataset.ptab === "chat") toEnd();
+    return;
+  }
+  if (t.closest("[data-rail-toggle]")) {
+    railFolded = !railFolded;
+    store("hq-room-rail", railFolded ? "folded" : null);
+    renderHead(roomOf(openSlug), detail);
     return;
   }
   const art = t.closest("[data-art-preview]");
@@ -336,37 +489,47 @@ box.addEventListener("click", (e) => {
   if (t.closest("[data-room-unreply]")) { draft(openSlug).reply = null; renderSend(roomOf(openSlug)); return; }
   const retry = t.closest("[data-room-retry]");
   if (retry) { retry.disabled = true; post(`/api/rooms/${encodeURIComponent(openSlug)}/messages/${retry.dataset.roomRetry}/retry`, {}).catch((err) => { toast(err.message); retry.disabled = false; }); return; }
-  const go = t.closest("[data-room-send]");
-  if (go) { send(go); return; }
+  const sendBtn = t.closest("[data-room-send]");
+  if (sendBtn) { send(sendBtn); return; }
   // MORE / LESS on a long message: core/clicks.js flips it after this handler; draw the thread once it has.
   if (t.closest(".more[data-more]")) setTimeout(() => detail && renderThread(detail, roomOf(openSlug)), 0);
 });
-box.addEventListener("keydown", (e) => {
-  const row = e.target.closest?.("[data-room]");
-  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRoom(row.dataset.room); return; }
+view.addEventListener("keydown", (e) => {
   if (!e.target.closest?.(".rsend")) return;
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) part("rsend").querySelector("[data-room-send]")?.click();
-  if (e.key === "Escape" && openSlug && draft(openSlug).reply) { draft(openSlug).reply = null; renderSend(roomOf(openSlug)); }
+  if (e.key === "Escape" && openSlug && draft(openSlug).reply) { e.preventDefault(); draft(openSlug).reply = null; renderSend(roomOf(openSlug)); }
 });
-box.addEventListener("input", (e) => {
+// Esc goes back to the office, unless something over the room takes it first (a preview, SETTINGS, a reply being
+// set up) or you are typing in the question column.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !openSlug || e.defaultPrevented) return;
+  if (document.querySelector("dialog[open]") || !$("settings").hidden) return;
+  const f = document.activeElement;
+  if (f && !view.contains(f) && f.matches("input, textarea, select, [contenteditable]")) return;
+  leaveRoom();
+});
+view.addEventListener("input", (e) => {
   if (e.target.tagName !== "TEXTAREA" || !openSlug || !e.target.closest(".rsend")) return;
   draft(openSlug).text = e.target.value;
   sendState();
 });
-box.addEventListener("change", (e) => {
+view.addEventListener("change", (e) => {
   if (!e.target.matches("[data-room-to]") || !openSlug) return;
   draft(openSlug).to = e.target.value;
   renderSend(roomOf(openSlug));
 });
-// At the thread's end it stays there while the room settles around it (fonts, the brief, an image in a message).
-let atEnd = true;
-const thread = part("rthread");
-const toEnd = () => { if (atEnd && !thread.hidden) thread.scrollTop = thread.scrollHeight; };
-thread.addEventListener("scroll", () => { atEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40; showEdges(thread); }, { passive: true });
+const toEnd = () => { if (atEnd && openSlug) toBottom(); };
+thread.addEventListener("scroll", () => {
+  if (thread.scrollTop !== setTop) atEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
+  setTop = -1;
+  showEdges(thread);
+}, { passive: true });
 thread.addEventListener("load", toEnd, true);
 new ResizeObserver(toEnd).observe(thread);
-part("rbrief").addEventListener("scroll", briefEdge, { passive: true, capture: true });
-addEventListener("resize", briefEdge);
+// The strip follows its own width (the rail folding, the window) and redraws only when that changes what it shows.
+new ResizeObserver(() => { if (openSlug) renderStrip(roomOf(openSlug)); }).observe(pix);
+document.fonts?.addEventListener?.("loadingdone", () => { if (openSlug) renderStrip(roomOf(openSlug)); });
 on("attach", (k) => { if (openSlug && k === key(openSlug)) sendState(); });
 on("state", render);
-on("qtab", (t) => { if (t === "rooms") { stick = true; render(); } else fresh.clear(); });
+on("settings", () => { if (openSlug) renderStrip(roomOf(openSlug)); });
+on("qtab", (t) => { if (t === "rooms") render(); });
