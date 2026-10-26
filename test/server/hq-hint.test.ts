@@ -44,7 +44,8 @@ async function office(hint: string | undefined) {
     }
     throw new Error(`no prompt containing ${part}`);
   };
-  return { post, prompt };
+  const state = async () => (await fetch(`${base}/api/state`)).json();
+  return { post, prompt, state };
 }
 
 describe("reply reminder on (the default)", async () => {
@@ -61,6 +62,15 @@ describe("reply reminder on (the default)", async () => {
     const { id } = await o.post("/api/asks", { title: "Merge the fix?" });
     await o.post(`/api/asks/${id}/answer`, { answer: "yes, merge" });
     expect(await o.prompt("yes, merge")).toBe(`HUD answer #${id}: "Merge the fix?" -> yes, merge\n${HINT}`);
+  });
+
+  // A reply from the MESSAGES tab is an ordinary note now: it waits in HQ's queue and stays in the owner's thread.
+  test("a reply from the messages tab waits in the queue and stays in the owner's notes", async () => {
+    const { id } = await o.post("/api/updates", { title: "PR is up" });
+    await o.post("/api/notes", { text: `re: #u${id} ("PR is up") looks good` });
+    await Bun.sleep(300);
+    await expect(o.prompt("looks good")).rejects.toThrow("no prompt containing");
+    expect((await o.state()).notes.map((n: any) => n.text)).toContain(`re: #u${id} ("PR is up") looks good`);
   });
 
   test("the reminder is one line and names the commands", () => {

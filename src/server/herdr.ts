@@ -6,8 +6,6 @@ import { bump } from "./push.ts";
 import { event } from "./events.ts";
 import { withHint } from "../hq-guide.ts";
 
-// Every agent herdr listed on the last sync that reached its machine: who is live, and where. An agent in no list is gone.
-export const liveAgents = new Map<string, { machine: string; pane: string }>();
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
 
@@ -55,9 +53,6 @@ export async function syncHerdr() {
     }),
   );
   const now = Date.now();
-  // A machine that did not answer keeps what it had: an unreachable machine does not make its agents gone.
-  for (const [name, a] of liveAgents) if (!errors.some((e) => e.startsWith(`${a.machine}:`))) liveAgents.delete(name);
-  for (const [name, { machine, agent }] of seen) liveAgents.set(name, { machine, pane: agent.pane_id });
   const lanes = db.query("SELECT * FROM lanes").all() as Lane[];
   const known = new Set(lanes.map((l) => l.name));
   // Only lanes that would otherwise read as HQ's turn or stale: any phase but done, parked or waiting (a phase HQ set
@@ -100,6 +95,17 @@ export async function syncHerdr() {
       }
       db.query("UPDATE lanes SET herdr_seen = ? WHERE name = ?").run(now, lane.name);
     }
+    // Every named agent, with when its status began: the real stop time of a lane that is in no list.
+    for (const [name, { machine, agent }] of seen) {
+      db.query(
+        `INSERT INTO agents (name, machine, pane, agent, status, since, seen) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(name) DO UPDATE SET machine = excluded.machine, pane = excluded.pane, agent = excluded.agent,
+           since = CASE WHEN agents.status = excluded.status THEN agents.since ELSE excluded.since END,
+           status = excluded.status, seen = excluded.seen`,
+      ).run(name, machine, agent.pane_id, agent.agent, agent.agent_status, now, now);
+    }
+    // An agent that left, on a machine that answered, is no longer a live agent.
+    for (const machine of MACHINES) if (!errors.some((e) => e.startsWith(`${machine}:`))) db.query("DELETE FROM agents WHERE machine = ? AND seen < ?").run(machine, now);
   })();
   untracked = [...seen.entries()]
     .filter(([name]) => !known.has(name))
@@ -108,12 +114,17 @@ export async function syncHerdr() {
   if (changed) bump();
 }
 
-// Types one message into an agent's session through herdr. Fire and forget: the caller has already saved what the
-// message is about, so a herdr that cannot even start is logged, not thrown.
+// Where a named agent lives, from the last sync (the agents table). Undefined when no sync has seen it.
+export const agentWhere = (name: string) => db.query("SELECT machine, pane FROM agents WHERE name = ?").get(name) as { machine: string; pane: string } | null;
+
+// Types one message into an agent's session through herdr, on the machine the agent lives on. Fire and forget: the
+// caller has already saved what the message is about, so a herdr that cannot even start is logged, not thrown.
 export function promptAgent(agent: string, text: string) {
+  const machine = agentWhere(agent)?.machine ?? LOCAL;
+  const args = machine === LOCAL ? [HERDR, "agent", "prompt", agent, text] : [HERDR, "--machine", machine, "agent", "prompt", agent, text];
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn([HERDR, "agent", "prompt", agent, text], { stdout: "ignore", stderr: "pipe" });
+    proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
   } catch (e) {
     event("hud", `could not reach ${agent}: ${(e as Error).message}`);
     return;

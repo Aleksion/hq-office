@@ -1,5 +1,7 @@
 // Tell HQ: the free-text note box, with its attached images.
 import { $, toast } from "../core/dom.js";
+import { on } from "../core/bus.js";
+import { S } from "../core/state.js";
 import { post } from "../core/net.js";
 import { attachButton, chipsHTML, clearImages, hasImages, notReady, withImages } from "../images/images.js";
 import { setHTML } from "../core/format.js";
@@ -12,12 +14,18 @@ $("compose").addEventListener("submit", async (e) => {
   if (wait) { toast(wait); return; }
   try { await post("/api/notes", { text: withImages("note", typed), urgent: urgent.getAttribute("aria-pressed") === "true" }); urgent.setAttribute("aria-pressed", "false"); $("noteText").value = ""; $("noteText").style.height = ""; clearImages("note"); toast("SENT TO HQ."); } catch (err) { toast(err.message); }
 });
-// URGENT: this one is not for the queue. It goes to the top, and one line is typed into HQ's pane (see TELL_GOES_TO_QUEUE).
+// URGENT: it goes to the top of HQ's queue and one line is typed into HQ's pane. Whether a plain note waits in the queue
+// is the server's TELL_GOES_TO_QUEUE; the title follows what /api/state says.
 const urgent = document.createElement("button");
 urgent.type = "button";
 urgent.className = "btn urgent-toggle";
 urgent.textContent = "URGENT";
-urgent.title = "HQ reads a plain note from its queue; an urgent one reaches HQ at once";
+const TITLES = {
+  queue: "HQ reads a plain note from its queue; an urgent one reaches HQ at once",
+  direct: "A plain note reaches HQ at once; an urgent one also goes to the top of HQ's queue",
+};
+urgent.title = TITLES.queue;
+on("state", () => { if (S?.queue) urgent.title = S.queue.tellToQueue === false ? TITLES.direct : TITLES.queue; });
 urgent.setAttribute("aria-pressed", "false");
 urgent.addEventListener("click", () => urgent.setAttribute("aria-pressed", String(urgent.getAttribute("aria-pressed") !== "true")));
 document.querySelector("#compose .acts").prepend(urgent);

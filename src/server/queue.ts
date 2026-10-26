@@ -10,7 +10,8 @@ import { HERDR, LOCAL, ORCHESTRATION, OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import { createAsk } from "./asks.ts";
 import { event } from "./events.ts";
-import { liveAgents } from "./herdr.ts";
+import { postUpdate } from "./updates.ts";
+import { agentWhere, lastSync } from "./herdr.ts";
 import { addStatePart } from "./state.ts";
 import { firstLine } from "./urgent.ts";
 import type { Ask } from "./types.ts";
@@ -68,7 +69,7 @@ export type Deliver = (lane: string, text: string) => Promise<{ ok: true } | { o
 // Who must answer a lane's request, from the orchestration registry: the PM a lane works under, else the orchestrator
 // that lists it, else HQ. A missing or unreadable registry, or an unknown agent, means HQ.
 function resolveLead(lane: string): string {
-  const where = liveAgents.get(lane) ?? (db.query("SELECT machine, pane FROM lanes WHERE name = ?").get(lane) as { machine: string; pane: string } | null);
+  const where = agentWhere(lane) ?? (db.query("SELECT machine, pane FROM lanes WHERE name = ?").get(lane) as { machine: string; pane: string } | null);
   if (!where?.machine || !where.pane || !ORCHESTRATION) return "HQ";
   try {
     const reg = JSON.parse(readFileSync(ORCHESTRATION, "utf8"));
@@ -100,7 +101,7 @@ export function fileRequest(body: any, now = Date.now()) {
   const id = createAsk({ lane, kind, title: firstLine(text), body: text, link: pr, recommended: action, due: by, created_at: now, recipient: lead, urgent: !!body.urgent, by: lane });
   event(lane, `request #${id} ${kind}${pr ? ` PR #${pr}` : ""}${body.urgent ? " URGENT" : ""}: ${text.slice(0, 120)}`, lane);
   // A lane HQ cannot type into could never be answered; say so while the lane can still fix the name.
-  const known = liveAgents.has(lane);
+  const known = !!agentWhere(lane);
   return { id, warning: known ? undefined : `no live herdr agent is named ${lane}: HQ's answer cannot reach you until the name matches` };
 }
 
@@ -139,10 +140,15 @@ export function allRequests(lead?: string, now = Date.now()): RequestRow[] {
   return (db.query("SELECT * FROM asks WHERE recipient != 'owner' AND (? IS NULL OR recipient = ?) ORDER BY id DESC LIMIT 200").all(lead ?? null, lead ?? null) as Ask[]).map(toRequest);
 }
 
-export const nextRequest = (lead?: string, now = Date.now()) => openRequests(lead, now)[0] ?? null;
+// The first open item. Reading a note from the owner (no lane) is how the owner's page learns HQ has it.
+export function nextRequest(lead?: string, now = Date.now()) {
+  const r = openRequests(lead, now)[0] ?? null;
+  if (r && !r.lane) db.query("UPDATE asks SET acked_at = COALESCE(acked_at, ?) WHERE id = ?").run(now, r.id);
+  return r;
+}
 
 export const herdrDeliver: Deliver = async (lane, text) => {
-  const a = liveAgents.get(lane);
+  const a = agentWhere(lane);
   if (!a) return { ok: false, error: `no live herdr agent is named ${lane}` };
   const args = a.machine === LOCAL ? [HERDR, "agent", "prompt", lane, text] : [HERDR, "--machine", a.machine, "agent", "prompt", lane, text];
   try {
@@ -156,8 +162,9 @@ export const herdrDeliver: Deliver = async (lane, text) => {
   }
 };
 
+// A queue item by its ask id, or else by the number it had as a request before the copy (lanes still hold those).
 function queued(id: number): Ask {
-  const a = db.query("SELECT * FROM asks WHERE id = ? AND recipient != 'owner'").get(id) as Ask | null;
+  const a = (db.query("SELECT * FROM asks WHERE id = ? AND recipient != 'owner'").get(id) ?? db.query("SELECT * FROM asks WHERE request_id = ? AND recipient != 'owner'").get(id)) as Ask | null;
   if (!a) throw new Error(`no request #${id}`);
   if (a.status === "answered" || a.status === "withdrawn") throw new Error(`request #${id} is already closed`);
   return a;
@@ -170,10 +177,12 @@ export function closeRequest(id: number, reason: string, now = Date.now()) {
   const text = reason.trim();
   if (!text) throw new Error("the reason is required");
   const r = queued(id);
-  if (r.lane && liveAgents.has(r.lane)) throw new Error(`${r.lane} is live: answer it with hud req answer ${id} so the answer reaches its pane`);
-  db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ?, acked_at = ?, last_error = ? WHERE id = ?").run(text, now, now, `not delivered: no live agent named ${r.lane}`, id);
-  event("hq", `closed request #${id} from ${r.lane}, which is gone: ${text.slice(0, 120)}`, r.lane);
-  return { id, lane: r.lane };
+  // The agents table keeps the last sync's answer across a restart; a table with no sync behind it (a first start) proves nothing.
+  if (r.lane && agentWhere(r.lane)) throw new Error(`${r.lane} is live: answer it with hud req answer ${id} so the answer reaches its pane`);
+  if (r.lane && lastSync.at === 0) throw new Error(`HUD has not listed herdr's agents since it started, so it cannot tell whether ${r.lane} is gone: try again in a minute`);
+  db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ?, acked_at = ?, last_error = ? WHERE id = ?").run(text, now, now, `not delivered: no live agent named ${r.lane}`, r.id);
+  event("hq", `closed request #${r.id} from ${r.lane}, which is gone: ${text.slice(0, 120)}`, r.lane);
+  return { id: r.id, lane: r.lane };
 }
 
 // Answers can overlap (two HQ turns, a retry): one delivery per request at a time.
@@ -185,10 +194,13 @@ export async function answerRequest(id: number, answer: string, deliver: Deliver
   const text = answer.trim();
   if (!text) throw new Error("the answer text is required");
   const r = queued(id);
+  id = r.id;
   if (delivering.has(id)) throw new Error(`request #${id} is being answered right now`);
   delivering.add(id);
   try {
-    // A note from the owner has no lane to type into: reading it is answering it, and the reply goes through hud tell.
+    // A note from the owner has no lane to type into: the answer is an HQ update (what hud tell makes), so it lands in
+    // FROM HQ and MESSAGES, titled with the note it answers.
+    if (!r.lane) postUpdate({ title: `Re: ${firstLine(r.title).slice(0, 80)}`, body: text });
     const sent = r.lane ? await deliver(r.lane, `${r.recipient} answer to your request #${id} (${r.kind}): ${text}`) : { ok: true as const };
     if (!sent.ok) {
       db.query("UPDATE asks SET last_error = ? WHERE id = ?").run(sent.error, id);
@@ -207,4 +219,5 @@ export function queueView(lead = "HQ", now = Date.now()) {
   const rows = openRequests(lead, now);
   return { lead, count: rows.length, oldest: rows.length ? Math.min(...rows.map((r) => r.created_at)) : null, urgent: rows.filter((r) => r.urgent_at).length };
 }
-addStatePart("queue", () => queueView(process.env.HUD_LEAD || "HQ"));
+// tellToQueue lets the page word the URGENT toggle for what the constant says.
+addStatePart("queue", () => ({ ...queueView(process.env.HUD_LEAD || "HQ"), tellToQueue: TELL_GOES_TO_QUEUE }));

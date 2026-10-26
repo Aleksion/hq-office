@@ -40,7 +40,7 @@
 //   hud req answer ID "text"        types the answer into the lane's pane and closes the item; if it does not
 //                                   reach the pane the item stays open and this exits 1
 //   hud req close ID "why"         closes an item whose lane is gone (no live agent), with the reason; refused for a live lane
-//   hud urgent ID [--by WHO]        push an open item (desk or queue) to the top of its list
+//   hud urgent ID --by WHO|--lane NAME      push an open item (desk or queue) to the top of its list
 //   hud urgent [--since 7d]         the urgent uses in that window, by who and by recipient
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
@@ -60,8 +60,8 @@ function parse(argv: string[]) {
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    // A switch takes no value; any other flag followed by another flag has none either (hud req list --all --lead HQ).
-    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(SWITCHES.has(a.slice(2)) || argv[i + 1]?.startsWith("--") ? "" : (argv[++i] ?? ""));
+    // A switch takes no value; every other flag takes the next word, even one that begins with -- (--opt "--force push").
+    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(SWITCHES.has(a.slice(2)) ? "" : (argv[++i] ?? ""));
     else rest.push(a);
   }
   const one = (k: string) => flags[k]?.at(-1);
@@ -259,7 +259,7 @@ switch (cmd) {
       else console.log(list.length ? list.map((r: any) => showRequest(r, false)).join("\n") : "no open requests");
     } else if (verb === "answer" && more[0] && more.length > 1) {
       const out = await call("POST", `/api/requests/${more[0]}/answer`, { text: more.slice(1).join(" ") });
-      console.log(out.lane ? `request #${out.id} answered: delivered to ${out.lane} and closed` : `request #${out.id} read and closed`);
+      console.log(out.lane ? `request #${out.id} answered: delivered to ${out.lane} and closed` : `request #${out.id} answered: posted to the owner as an update (FROM HQ and MESSAGES) and closed`);
     } else if (verb === "close" && more[0] && more.length > 1) {
       const out = await call("POST", `/api/requests/${more[0]}/close`, { reason: more.slice(1).join(" ") });
       console.log(`request #${out.id} closed without delivery: ${out.lane} is gone`);
@@ -271,7 +271,13 @@ switch (cmd) {
   }
   case "urgent":
     if (/^\d+$/.test(rest[0] ?? "")) {
-      await call("POST", `/api/asks/${rest[0]}/urgent`, { by: one("by") });
+      // Every use is counted by who made it, so say who: a lane its name, HQ --by hq.
+      const by = (one("by") || one("lane"))?.trim();
+      if (!by) {
+        console.error("usage: hud urgent ID --by WHO (or --lane NAME): the urgent report counts uses by who made them");
+        process.exit(2);
+      }
+      await call("POST", `/api/asks/${rest[0]}/urgent`, { by });
       console.log(`#${rest[0]} is urgent`);
     } else {
       const since = one("since") || "7d";

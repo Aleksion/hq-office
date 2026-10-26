@@ -109,7 +109,7 @@ hud request --lane NAME [--kind READY|BLOCK|QUESTION|DONE|NOTE] [--urgent] [--le
 - `--file PATH` reads the text from a file; use it for long messages, which get truncated when typed on the line.
 - `--lead` names who must answer. Without it the server reads the orchestration registry (`HUD_ORCHESTRATION`, a JSON file): the PM the lane works under, else the orchestrator that lists it, else HQ.
 - `--default ... --by ...` (BLOCK and QUESTION only): when the time comes the item is marked `defaulted`, leaves the open queue, and the lane goes ahead on its own. HQ can still answer it.
-- `--urgent` puts the item first and also types one line into the recipient's pane: `URGENT from <lane>: <first line>`. Nothing else is ever typed. `hud ask --urgent` does the same for the owner's desk, where the question sorts to the top marked URGENT, and `hud urgent ID` pushes an open item up.
+- `--urgent` puts the item first and also types one line into the recipient's pane: `URGENT from <lane>: <first line>`. Nothing else is ever typed. `hud ask --urgent` does the same for the owner's desk, where the question sorts to the top marked URGENT, and `hud urgent ID --by WHO` (or `--lane NAME`) pushes an open item up; the report counts uses by who made them.
 
 HQ reads and answers the queue:
 

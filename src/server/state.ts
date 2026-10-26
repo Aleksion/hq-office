@@ -10,6 +10,17 @@ import { pageStamp } from "./page.ts";
 import { machineHealth } from "./machines.ts";
 import { board } from "./work-board.ts";
 
+// What the owner told HQ, newest first, in the page's note shape. Older notes are in the notes table (ids 12); a Tell
+// goes to HQ's queue now and is an ask with no lane and a recipient (ids q12, so the two never share a key). Its
+// acked_at is set when HQ reads it (hud req next), which is what lights "HQ has it".
+function notes() {
+  const old = db.query("SELECT id, at, text, acked_at FROM notes ORDER BY at DESC, id DESC LIMIT 20").all();
+  const queued = db
+    .query("SELECT 'q' || id AS id, created_at AS at, COALESCE(body, title) AS text, acked_at FROM asks WHERE lane IS NULL AND recipient != 'owner' ORDER BY created_at DESC, id DESC LIMIT 20")
+    .all();
+  return [...old, ...queued].sort((a: any, b: any) => b.at - a.at).slice(0, 20);
+}
+
 export function state() {
   const now = Date.now();
   const lanes = db.query("SELECT * FROM lanes ORDER BY name").all() as Lane[];
@@ -26,7 +37,7 @@ export function state() {
     lanes: withTree(lanes).map((l) => ({ ...l, status: laneStatus(l, openByLane, now), asks: openByLane.get(l.name) ?? 0 })),
     open: open.map(parse),
     answered: answered.map(parse),
-    notes: db.query("SELECT * FROM notes ORDER BY at DESC LIMIT 20").all(),
+    notes: notes(),
     updates: db.query("SELECT * FROM updates ORDER BY at DESC, id DESC LIMIT 40").all(),
     updatesUnread: (db.query("SELECT COUNT(*) AS n FROM updates WHERE read_at IS NULL").get() as { n: number }).n,
     events: (db.query("SELECT * FROM events ORDER BY at DESC LIMIT 60").all() as { who: string }[]).map((e) => ({ ...e, who: whoOf(e.who) })),

@@ -37,6 +37,15 @@ export function createAsk(body: any) {
   return id;
 }
 
+// An ask on the owner's desk. The desk's routes (withdraw, update, comment, ack, secrets) refuse an item in someone's
+// queue: that one is answered with hud req, and closing it from the desk would skip its delivery.
+export function ownerAsk(id: number): Ask {
+  const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
+  if (!ask) throw new Error(`no ask ${id}`);
+  if (ask.recipient !== "owner") throw new Error(`ask ${id} is for ${ask.recipient}, not the owner: use hud req ${id}`);
+  return ask;
+}
+
 export function answerAsk(id: number, answer: string) {
   const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
   if (!ask) throw new Error(`no ask ${id}`);
@@ -50,8 +59,7 @@ export function answerAsk(id: number, answer: string) {
 // An ask that requests secrets is answered with their values: each one goes to the secret store, and the
 // answer HQ gets (and the database keeps) names them only.
 export function answerWithSecrets(id: number, body: any) {
-  const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
-  if (!ask) throw new Error(`no ask ${id}`);
+  const ask = ownerAsk(id);
   if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
   const wanted: string[] = ask.secrets ? JSON.parse(ask.secrets) : [];
   if (!wanted.length) throw new Error(`ask ${id} requests no secrets`);

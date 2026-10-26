@@ -133,11 +133,117 @@ test("Tell HQ goes to the queue by default, and URGENT puts it first and types t
   const open = await get("/api/requests?lead=HQ");
   expect(open.map((r: any) => r.text)).toEqual(["an urgent note", "a plain note from the owner"]);
   expect(open[0]).toMatchObject({ lane: null, kind: "NOTE" });
+  // HQ's inbox no longer carries it (hud wait does not wake on a Tell: the queue does), but the owner's page still shows
+  // what he sent, in the note shape, newest first, and "HQ has it" lights once HQ reads it.
   expect((await get("/api/inbox")).notes).toEqual([]);
+  const mine = (await get("/api/state")).notes.filter((n: any) => ["a plain note from the owner", "an urgent note"].includes(n.text));
+  expect(mine.map((n: any) => n.text)).toEqual(["an urgent note", "a plain note from the owner"]);
+  expect(mine[0]).toMatchObject({ id: expect.stringMatching(/^q\d+$/), acked_at: null });
   await Bun.sleep(300);
   expect(prompts().slice(before)).toEqual(["agent prompt hq URGENT from the owner: an urgent note"]);
-  // A note with no lane has nothing to deliver: reading it closes it.
+  // Reading the first (hud req next) lights it; the other stays unread.
+  expect((await get("/api/requests/next")).text).toBe("an urgent note");
+  const after = (await get("/api/state")).notes;
+  expect(after.find((n: any) => n.text === "an urgent note").acked_at).toBeGreaterThan(0);
+  expect(after.find((n: any) => n.text === "a plain note from the owner").acked_at).toBeNull();
+  // A note with no lane has nothing to deliver: answering it closes it.
   for (const r of open) expect((await post(`/api/requests/${r.id}/answer`, { text: "read" })).status).toBe(200);
+});
+
+test("a reply from the MESSAGES tab reaches the queue and stays in the page's notes, with ids the thread can address", async () => {
+  const up = (await post("/api/updates", { title: "PR is up" })).body.id;
+  await post("/api/notes", { text: "the first note" });
+  const parent = (await get("/api/state")).notes.find((n: any) => n.text === "the first note");
+  await post("/api/notes", { text: `re: #u${up} ("PR is up") looks good` });
+  await post("/api/notes", { text: `re: #n${parent.id} ("first note") and also this` });
+  const notes = (await get("/api/state")).notes;
+  const ids = notes.map((n: any) => n.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(notes.map((n: any) => n.text)).toEqual(expect.arrayContaining([`re: #u${up} ("PR is up") looks good`, `re: #n${parent.id} ("first note") and also this`]));
+  for (const r of await get("/api/requests")) await post(`/api/requests/${r.id}/answer`, { text: "read" });
+});
+
+test("an old note in the notes table and a queued Tell share the page's list with distinct ids", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hq-office-notes-"));
+  const script = `
+    const { db } = await import("./src/server/db.ts");
+    const { tellHq } = await import("./src/server/queue.ts");
+    const { state } = await import("./src/server/state.ts");
+    db.query("INSERT INTO notes (at, text, acked_at) VALUES (?, ?, ?)").run(1000, "an old note", 2000);
+    const id = tellHq("a new tell", false, true, 5000).id;
+    console.log(JSON.stringify([id, state().notes]));
+    process.exit(0);`;
+  const proc = Bun.spawn([process.execPath, "-e", script], { cwd: ROOT, env: { ...process.env, HUD_DATA_DIR: dir, HERDR_BIN: join(DATA, "herdr") }, stdout: "pipe", stderr: "pipe" });
+  const out = await new Response(proc.stdout).text();
+  await proc.exited;
+  rmSync(dir, { recursive: true, force: true });
+  const [id, notes] = JSON.parse(out.trim().split("\n").at(-1)!);
+  expect(notes).toEqual([
+    { id: `q${id}`, at: 5000, text: "a new tell", acked_at: null },
+    { id: 1, at: 1000, text: "an old note", acked_at: 2000 },
+  ]);
+});
+
+test("HQ's answer to an owner's note is an HQ update titled with the note, and the CLI says so", async () => {
+  await post("/api/notes", { text: "can you merge the fix?\nthanks" });
+  const item = (await get("/api/requests")).find((r: any) => r.text.startsWith("can you merge"));
+  const out = await hud("req", "answer", String(item.id), "done,", "merged");
+  expect(out).toMatchObject({ code: 0 });
+  expect(out.out).toContain("posted to the owner");
+  const updates = (await get("/api/state")).updates;
+  expect(updates[0]).toMatchObject({ title: "Re: can you merge the fix?", body: "done, merged", lane: null });
+  expect(await ids()).not.toContain(item.id);
+});
+
+test("an old request number still works: the id falls back to the request it was copied from", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hq-office-oldid-"));
+  const script = `
+    const { db } = await import("./src/server/db.ts");
+    const { answerRequest, openRequests } = await import("./src/server/queue.ts");
+    db.query("INSERT INTO asks (lane, kind, title, created_at, recipient, request_id) VALUES (NULL, 'NOTE', 'old one', 1, 'HQ', 52)").run();
+    const r = await answerRequest(52, "ok", async () => ({ ok: true }));
+    console.log(JSON.stringify([r.id !== 52, openRequests().length]));
+    process.exit(0);`;
+  const proc = Bun.spawn([process.execPath, "-e", script], { cwd: ROOT, env: { ...process.env, HUD_DATA_DIR: dir, HERDR_BIN: join(DATA, "herdr") }, stdout: "pipe", stderr: "pipe" });
+  const out = await new Response(proc.stdout).text();
+  const err = await new Response(proc.stderr).text();
+  await proc.exited;
+  rmSync(dir, { recursive: true, force: true });
+  expect(JSON.parse(out.trim().split("\n").at(-1) || "null"), err).toEqual([true, 0]);
+});
+
+test("the owner's desk routes refuse a queue item: withdraw, ack, update, comment, secrets", async () => {
+  const id = (await file({ text: "queue only" })).body.id;
+  for (const [path, body] of [["withdraw", {}], ["ack", {}], ["update", { title: "x" }], ["comment", { text: "x" }], ["items", { text: "x" }]] as const) {
+    const r = await post(`/api/asks/${id}/${path}`, body);
+    expect(r.status, path).toBe(400);
+    expect(r.body.error).toContain("not the owner");
+  }
+  expect((await get("/api/requests")).find((r: any) => r.id === id)).toMatchObject({ status: "open" });
+  await post(`/api/requests/${id}/answer`, { text: "ok" });
+});
+
+test("hud urgent ID needs --by or --lane, and a flag value may begin with --", async () => {
+  const id = (await file({ text: "who pushes this" })).body.id;
+  const bare = await hud("urgent", String(id));
+  expect(bare.code).toBe(2);
+  expect(bare.err).toContain("--by");
+  expect((await hud("urgent", String(id), "--lane", "chat-lane")).code).toBe(0);
+  expect((await get("/api/urgent?since=7d")).some((r: any) => r.by === "chat-lane")).toBe(true);
+  const ask = await hud("ask", "--title", "flag values", "--opt", "--force push", "--opt", "wait");
+  const ctr = Number(ask.out.match(/ask #(\d+)/)![1]);
+  expect((await get("/api/state")).open.find((a: any) => a.id === ctr).options).toEqual(["--force push", "wait"]);
+  await post(`/api/asks/${ctr}/answer`, { answer: "wait" });
+  await post(`/api/requests/${id}/answer`, { text: "ok" });
+});
+
+test("a queued item is not closed as gone before the first sync: a live lane's row is in the agents table", async () => {
+  const id = (await file({ text: "lane is live" })).body.id;
+  const r = await post(`/api/requests/${id}/close`, { reason: "gone" });
+  expect(r.status).toBe(400);
+  expect(r.body.error).toContain("is live");
+  expect((await get("/api/agents")).map((a: any) => a.name)).toContain("chat-lane");
+  await post(`/api/requests/${id}/answer`, { text: "ok" });
 });
 
 test("tellHq takes either path from the one constant: the queue by default, the pane when it is off", async () => {
