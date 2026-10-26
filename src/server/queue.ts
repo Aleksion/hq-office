@@ -109,7 +109,7 @@ export function fileRequest(body: any, now = Date.now()) {
 export function tellHq(text: string, urgent: boolean, toQueue = TELL_GOES_TO_QUEUE, now = Date.now()): { queued: boolean; id?: number } {
   if (!toQueue && !urgent) return { queued: false };
   const id = createAsk({ lane: null, kind: "NOTE", title: firstLine(text), body: text, created_at: now, recipient: "HQ", urgent, by: OWNER });
-  event(OWNER, `told HQ${urgent ? " (urgent)" : ""}: ${text.slice(0, 120)}`);
+  event(OWNER, `told HQ: ${text.slice(0, 120)}`);
   return { queued: true, id };
 }
 

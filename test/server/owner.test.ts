@@ -46,9 +46,9 @@ async function office(owner: string | undefined) {
 describe("HUD_OWNER set", async () => {
   const o = await office("Aleks");
 
-  test("a note reaches HQ under the owner's name, and the log says who told it", async () => {
-    expect((await o.post("/api/notes", { text: "ship it" })).status).toBe(200);
-    expect(await o.sent("ship it")).toContain("agent prompt hq HUD note from Aleks: ship it");
+  test("an urgent note reaches HQ under the owner's name, and the log says who told it", async () => {
+    expect((await o.post("/api/notes", { text: "ship it", urgent: true })).status).toBe(200);
+    expect(await o.sent("ship it")).toContain("agent prompt hq URGENT from Aleks: ship it");
     expect(await o.events()).toContain("Aleks told HQ: ship it");
   });
 
@@ -77,8 +77,8 @@ describe("HUD_OWNER unset", async () => {
   const o = await office(undefined);
 
   test("the note says the owner", async () => {
-    await o.post("/api/notes", { text: "ship it" });
-    expect(await o.sent("ship it")).toContain("agent prompt hq HUD note from the owner: ship it");
+    await o.post("/api/notes", { text: "ship it", urgent: true });
+    expect(await o.sent("ship it")).toContain("agent prompt hq URGENT from the owner: ship it");
     expect(await o.events()).toContain("the owner told HQ: ship it");
     expect((await o.state()).events.some((e: any) => e.who === LEGACY_OWNER_WHO)).toBe(false);
   });
