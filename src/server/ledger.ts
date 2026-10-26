@@ -9,7 +9,7 @@ import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { board } from "./work-board.ts";
 import { parsePr } from "./board.ts";
-import { createAsk, resolveRec } from "./asks.ts";
+import { createAsk, optionsOf, resolveRec } from "./asks.ts";
 import type { Ask } from "./types.ts";
 
 type Item = { ask_id: number; n: number; text: string; pr: string | null; done_at: number | null; done_by: string | null };
@@ -37,7 +37,7 @@ export function updateAsk(id: number, body: any) {
   const ask = openAsk(id);
   const set: string[] = [];
   const values: (string | null)[] = [];
-  const newOpts = body.options === undefined ? null : (Array.isArray(body.options) ? body.options : [body.options]).map(String).filter(Boolean);
+  const newOpts = body.options === undefined ? null : optionsOf(body.options);
   const opts: string[] = newOpts ?? (ask.options ? JSON.parse(ask.options) : []);
   // New options must still hold the recommendation, or come with a new one: a stale HQ PICK would mark nothing.
   if (newOpts && body.recommended === undefined && ask.recommended && !opts.includes(ask.recommended))

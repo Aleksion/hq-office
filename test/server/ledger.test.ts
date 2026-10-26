@@ -166,6 +166,16 @@ describe("server and hud CLI: the ask ledger", () => {
     const after = (await state()).open.find((a: any) => a.id === plain);
     expect([after.options, after.recommended]).toEqual([["Wait", "Drop it"], "Drop it"]);
     await expect(hud("update", String(plain), "--rec", "Ship it")).rejects.toThrow(/is not one of the options/);
+    // Short and hyphenated words are not letters: A is still the first, and a head before a colon names its option.
+    const ab = askId(await hud("ask", "--title", "A-B", "--opt", "Ship today", "--opt", "A-B test first", "--rec", "A"));
+    expect((await state()).open.find((a: any) => a.id === ab).recommended).toBe("Ship today");
+    const yn = ["--opt", "Yes: run it tonight", "--opt", "No: leave it"];
+    const yes = askId(await hud("ask", "--title", "Yes or no", ...yn, "--rec", "Yes"));
+    const first = askId(await hud("ask", "--title", "Yes or no, by letter", ...yn, "--rec", "A"));
+    const s2 = await state();
+    expect([yes, first].map((id) => s2.open.find((a: any) => a.id === id).recommended)).toEqual(["Yes: run it tonight", "Yes: run it tonight"]);
+    // A --rec whose letter disagrees with the option its text names is refused, not read as the text's option.
+    await expect(hud("ask", "--title", "Mixed", ...opts, "--rec", "B: Allow the two, named")).rejects.toThrow(/says B, but its text is option A/);
   });
 
   test("b) a comment shows under its question and never reaches the inbox, the score or the timer", async () => {
