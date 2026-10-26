@@ -23,7 +23,7 @@ const item = (minutesAgo: number, urgent = false) => ({ created_at: Date.now() -
 
 async function run(event: Record<string, unknown>, url = `http://127.0.0.1:${stub.port}`, env: Record<string, string> = {}) {
   const t0 = performance.now();
-  const proc = Bun.spawn([process.execPath, "bin/hq-queue-hook.ts"], { cwd: ROOT, env: { ...process.env, HUD_URL: url, HUD_LEAD: "", ...env }, stdin: new Blob([JSON.stringify(event)]), stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn([process.execPath, "bin/hq-queue-hook.ts"], { cwd: ROOT, env: { ...process.env, HUD_URL: url, HUD_LEAD: "HQ", ...env }, stdin: new Blob([JSON.stringify(event)]), stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   return { out: out.trim(), err, code, ms: performance.now() - t0 };
 }
@@ -60,6 +60,20 @@ test("Stop blocks once with the count, and lets HQ stop when it is already conti
   expect(again).toMatchObject({ out: "", code: 0 });
 });
 
+test("without HUD_LEAD the hook is silent on every event and never asks the server", async () => {
+  items = [item(3, true)];
+  seenUrl = "";
+  for (const hook_event_name of ["UserPromptSubmit", "PostToolUse", "Stop"]) {
+    expect(await run({ hook_event_name, stop_hook_active: false }, undefined, { HUD_LEAD: "" })).toMatchObject({ out: "", err: "", code: 0 });
+  }
+  const unset = { ...process.env } as Record<string, string | undefined>;
+  delete unset.HUD_LEAD;
+  const proc = Bun.spawn([process.execPath, "bin/hq-queue-hook.ts"], { cwd: ROOT, env: { ...unset, HUD_URL: `http://127.0.0.1:${stub.port}` }, stdin: new Blob([JSON.stringify(prompt)]), stdout: "pipe", stderr: "pipe" });
+  expect((await new Response(proc.stdout).text()).trim()).toBe("");
+  expect(await proc.exited).toBe(0);
+  expect(seenUrl).toBe("");
+});
+
 test("an orchestrator's queue is read with HUD_LEAD", async () => {
   items = [item(1)];
   const r = await run(prompt, undefined, { HUD_LEAD: "HQ2" });
@@ -78,7 +92,7 @@ test("a server that is down prints nothing, exits 0 and finishes in under 300 ms
   }
 });
 
-test("a server that hangs is given up on at about 250 ms", async () => {
+test("a server that hangs is given up on at about 150 ms", async () => {
   items = [item(5)];
   delay = 3000;
   try {
