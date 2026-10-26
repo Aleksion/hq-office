@@ -123,11 +123,11 @@ describe("server and hud CLI: the ask ledger", () => {
     const id = askId(await hud("ask", "--lane", "one", "--title", "Which way?", "--body", "Two roads.", "--opt", "Left", "--opt", "Middle", "--opt", "Right", "--rec", "Middle", "--link", "https://example.com/a"));
     const before = (await state()).open.find((a: any) => a.id === id);
     expect((await state()).ledger[id]).toBeUndefined();
-    await hud("update", String(id), "--title", "Which way now?", "--opt", "Left", "--opt", "Right");
+    await hud("update", String(id), "--title", "Which way now?", "--opt", "Left", "--opt", "Middle");
     const s = await state();
     const after = s.open.find((a: any) => a.id === id);
     expect(after.title).toBe("Which way now?");
-    expect(after.options).toEqual(["Left", "Right"]);
+    expect(after.options).toEqual(["Left", "Middle"]);
     expect(after.body).toBe("Two roads.");
     expect(after.recommended).toBe("Middle");
     expect(after.link).toBe("https://example.com/a");
@@ -141,6 +141,31 @@ describe("server and hud CLI: the ask ledger", () => {
     await expect(hud("update", String(id))).rejects.toThrow(/nothing to change/);
     await hud("withdraw", String(id));
     await expect(hud("update", String(id), "--title", "x")).rejects.toThrow(/already withdrawn/);
+  });
+
+  test("a2) --rec is stored as the full option, by letter or by text, and one that names no option is refused", async () => {
+    const opts = ["--opt", "A: Allow the two, named", "--opt", "B: Allow neither"];
+    const rec = async (r: string) => {
+      const id = askId(await hud("ask", "--title", `Rec ${r}`, ...opts, "--rec", r));
+      return (await state()).open.find((a: any) => a.id === id)?.recommended;
+    };
+    expect(await rec("A")).toBe("A: Allow the two, named");
+    expect(await rec("b")).toBe("B: Allow neither");
+    expect(await rec("Allow neither")).toBe("B: Allow neither");
+    expect(await rec("A: Allow the two, named")).toBe("A: Allow the two, named");
+    await expect(hud("ask", "--title", "Rec C", ...opts, "--rec", "C")).rejects.toThrow(/is not one of the options/);
+    await expect(hud("ask", "--title", "Rec none", "--rec", "A")).rejects.toThrow(/no options/);
+    // Options with no letters: A is the first.
+    const plain = askId(await hud("ask", "--title", "Plain", "--opt", "Ship it", "--opt", "Wait", "--rec", "B"));
+    expect((await state()).open.find((a: any) => a.id === plain).recommended).toBe("Wait");
+    // update: --rec resolves against the options it ends up with; new options that drop the recommendation need a new --rec.
+    await hud("update", String(plain), "--rec", "ship it");
+    expect((await state()).open.find((a: any) => a.id === plain).recommended).toBe("Ship it");
+    await expect(hud("update", String(plain), "--opt", "Wait", "--opt", "Drop it")).rejects.toThrow(/not one of the new options/);
+    await hud("update", String(plain), "--opt", "Wait", "--opt", "Drop it", "--rec", "Drop it");
+    const after = (await state()).open.find((a: any) => a.id === plain);
+    expect([after.options, after.recommended]).toEqual([["Wait", "Drop it"], "Drop it"]);
+    await expect(hud("update", String(plain), "--rec", "Ship it")).rejects.toThrow(/is not one of the options/);
   });
 
   test("b) a comment shows under its question and never reaches the inbox, the score or the timer", async () => {

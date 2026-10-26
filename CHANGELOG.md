@@ -5,6 +5,12 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+### Fixed
+
+- **HQ PICK shows on the recommended option.** `--rec` names an option by its letter ("A" for "A: Allow the two")
+  or by its text, and is kept as the full option, so the page marks it. A `--rec` that names no option is refused
+  with the list of options, and changing the options so they no longer hold the recommendation needs a new `--rec`.
+
 ### Added
 
 - **Requests: a lane's ask of HQ is a record that closes when the answer arrives.** A lane files `hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME "text"`; HQ runs `hud req next`, `hud req list` and `hud req answer ID "text"`, which types the answer into the lane's pane and closes the request in one step (if the pane is not reached the request stays open). A BLOCK or QUESTION can carry `--default` and `--by`: at that time it is marked defaulted and the lane goes ahead.

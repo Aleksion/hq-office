@@ -7,8 +7,36 @@ import { secrets } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./herdr.ts";
 
+// --rec names one of the options: the option itself, its letter ("A" for "A: Allow the two"; for options with no
+// letters, A is the first), or its text without the letter. It is stored as the full option, which is what the page
+// marks HQ PICK; a --rec that names no option, or more than one, is refused.
+const LABEL = /^([A-Za-z0-9]{1,2})\s*[:.)\-–]\s*/;
+export function resolveRec(rec: unknown, options: string[]): string | null {
+  const r = String(rec ?? "").trim();
+  if (!r) return null;
+  if (!options.length) throw new Error(`--rec "${r}" has no options to pick from: give them with --opt`);
+  const low = (s: string) => s.trim().toLowerCase();
+  const ways = [
+    (o: string) => o === r,
+    (o: string) => low(o) === low(r),
+    (o: string) => low(o.match(LABEL)?.[1] ?? "") === low(r),
+    (o: string) => low(o.replace(LABEL, "")) === low(r.replace(LABEL, "")),
+  ];
+  for (const way of ways) {
+    const hits = options.filter(way);
+    if (hits.length === 1) return hits[0];
+  }
+  if (/^[A-Za-z]$/.test(r) && !options.some((o) => LABEL.test(o))) {
+    const i = r.toUpperCase().charCodeAt(0) - 65;
+    if (i < options.length) return options[i];
+  }
+  throw new Error(`--rec "${r}" is not one of the options (${options.map((o) => `"${o}"`).join(", ")}): give its letter or its text`);
+}
+
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
+  const options = (body.options ?? []).map(String);
+  const recommended = resolveRec(body.recommended, options);
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const res = db
     .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -17,8 +45,8 @@ export function createAsk(body: any) {
       body.kind ?? "decision",
       body.title,
       body.body ?? null,
-      body.options?.length ? JSON.stringify(body.options) : null,
-      body.recommended ?? null,
+      options.length ? JSON.stringify(options) : null,
+      recommended,
       body.link ?? null,
       body.due ?? null,
       body.created_at ?? Date.now(),
