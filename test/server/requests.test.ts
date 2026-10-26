@@ -158,6 +158,23 @@ test("a request from a name no live agent has still files, with a warning", asyn
   expect(body.warning).toContain("no live herdr agent is named no-such-lane");
 });
 
+// The hourly sweep reads `since` from /api/agents: the real stop time of a lane that is in no list.
+test("the sync records when each agent's status began, and keeps it while the status holds", async () => {
+  agentList("idle");
+  await post("/api/sync", {});
+  const first = (await get("/api/agents")).find((a: any) => a.name === "chat-lane");
+  expect(first).toMatchObject({ machine: "local", pane: "w8:pQ", status: "idle" });
+  await Bun.sleep(30);
+  await post("/api/sync", {});
+  expect((await get("/api/agents")).find((a: any) => a.name === "chat-lane").since).toBe(first.since);
+  agentList("working");
+  await Bun.sleep(30);
+  await post("/api/sync", {});
+  const after = (await get("/api/agents")).find((a: any) => a.name === "chat-lane");
+  expect(after.status).toBe("working");
+  expect(after.since).toBeGreaterThan(first.since);
+});
+
 test("hud files, shows, answers and refuses: the whole loop from the command line", async () => {
   agentList("idle");
   await post("/api/sync", {});

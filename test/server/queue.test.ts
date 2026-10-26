@@ -197,6 +197,18 @@ test("HQ's answer to an owner's note is an HQ update titled with the note, and t
   expect(await ids()).not.toContain(item.id);
 });
 
+test("HQ closes an owner's note that needs no reply: no update, no delivery error", async () => {
+  await post("/api/notes", { text: "fyi: the demo moved to Friday" });
+  const item = (await get("/api/requests")).find((r: any) => r.text.startsWith("fyi: the demo"));
+  const before = (await get("/api/state")).updates.length;
+  const out = await hud("req", "close", String(item.id), "noted");
+  expect(out).toMatchObject({ code: 0, out: `the owner's note #${item.id} closed with no reply` });
+  const state = await get("/api/state");
+  expect(state.updates.length).toBe(before);
+  expect(await ids()).not.toContain(item.id);
+  expect(state.events.some((e: any) => e.text.startsWith(`closed the owner's note #${item.id}`))).toBe(true);
+});
+
 test("an old request number still works: the id falls back to the request it was copied from", async () => {
   const dir = mkdtempSync(join(tmpdir(), "hq-office-oldid-"));
   const script = `

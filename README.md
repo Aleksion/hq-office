@@ -127,19 +127,19 @@ The top bar shows the queue as a label over a value (`HQ QUEUE`, `4 OLDEST 12M 1
 
 ### The hook: the count at every step
 
-`bin/hq-queue-hook.ts` is a Claude Code hook for HQ's own session. It prints one line, `HQ QUEUE 4 · oldest 12m · 1 URGENT`, and nothing when the queue is empty or the server is down. It gives up on the server after 150 ms, always exits 0, and never fails the session. On UserPromptSubmit and PostToolUse the line goes into HQ's context; on Stop it blocks once with the count and "`hud req next` to read", and lets HQ stop when `stop_hook_active` is true, so it never loops. It acts only where `HUD_LEAD` is set, to the name of the queue it shows; with no `HUD_LEAD` it prints nothing and exits 0. It edits no settings. Add the snippet to HQ's own project-level settings file (the `.claude/settings.json` in the folder HQ's session starts in), never to `~/.claude/settings.json`: every lane runs as the same user, so a user-level file would apply to every lane, and each lane's Stop would be blocked with HQ's count and each lane could read and answer HQ's items. The `HUD_LEAD=HQ` in the command is what marks the session as HQ's. Use the path to your copy of the plugin:
+`bin/hq-queue-hook.ts` is a Claude Code hook for HQ's own session. It prints one line, `HQ QUEUE 4 · oldest 12m · 1 URGENT`, and nothing when the queue is empty or the server is down. It gives up on the server after 150 ms, always exits 0, and never fails the session. On UserPromptSubmit and PostToolUse the line goes into HQ's context; on Stop it blocks once with the count and "`hud req next` to read", and lets HQ stop when `stop_hook_active` is true, so it never loops. It acts only where `HUD_LEAD` is set, to the name of the queue it shows; with no `HUD_LEAD` it prints nothing and exits 0. It edits no settings. Start HQ's session with `HUD_LEAD` set, for example `HUD_LEAD=HQ claude`: that is what marks the session as HQ's, and any other session stays silent even where the hook is installed. Then add the snippet to `.claude/settings.local.json` in the folder HQ's session starts in. That file is local and never committed, so it can't reach a lane through the repository. Never add it to `~/.claude/settings.json`: every lane runs as the same user, so a user-level file reaches every lane. Use the path to your copy of the plugin:
 
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "HUD_LEAD=HQ bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "HUD_LEAD=HQ bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "HUD_LEAD=HQ bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }]
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }]
   }
 }
 ```
 
-Set `HUD_URL` in the environment HQ's session runs in if it differs from `http://127.0.0.1:4747`. An orchestrator's queue is the same snippet with its own name in `HUD_LEAD=`.
+Set `HUD_URL` in the environment HQ's session runs in if it differs from `http://127.0.0.1:4747`. An orchestrator's queue is the same snippet in its own folder, with its own name in `HUD_LEAD` when its session starts. If a session's start can't carry the variable, put it in the command instead (`HUD_LEAD=HQ bun ...`); then any session started in that folder runs the hook as HQ.
 
 ## Secrets
 

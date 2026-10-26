@@ -262,7 +262,7 @@ switch (cmd) {
       console.log(out.lane ? `request #${out.id} answered: delivered to ${out.lane} and closed` : `request #${out.id} answered: posted to the owner as an update (FROM HQ and MESSAGES) and closed`);
     } else if (verb === "close" && more[0] && more.length > 1) {
       const out = await call("POST", `/api/requests/${more[0]}/close`, { reason: more.slice(1).join(" ") });
-      console.log(`request #${out.id} closed without delivery: ${out.lane} is gone`);
+      console.log(out.lane ? `request #${out.id} closed without delivery: ${out.lane} is gone` : `the owner's note #${out.id} closed with no reply`);
     } else {
       console.error('usage: hud req next [--lead NAME] | list [--lead NAME] [--all] [--json] | answer ID "text" | close ID "why"');
       process.exit(2);

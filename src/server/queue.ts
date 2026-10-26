@@ -180,8 +180,10 @@ export function closeRequest(id: number, reason: string, now = Date.now()) {
   // The agents table keeps the last sync's answer across a restart; a table with no sync behind it (a first start) proves nothing.
   if (r.lane && agentWhere(r.lane)) throw new Error(`${r.lane} is live: answer it with hud req answer ${id} so the answer reaches its pane`);
   if (r.lane && lastSync.at === 0) throw new Error(`HUD has not listed herdr's agents since it started, so it cannot tell whether ${r.lane} is gone: try again in a minute`);
-  db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ?, acked_at = ?, last_error = ? WHERE id = ?").run(text, now, now, `not delivered: no live agent named ${r.lane}`, r.id);
-  event("hq", `closed request #${r.id} from ${r.lane}, which is gone: ${text.slice(0, 120)}`, r.lane);
+  // The owner's note has no pane to deliver to: closing it is HQ saying it needs no reply.
+  const why = r.lane ? `not delivered: no live agent named ${r.lane}` : null;
+  db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ?, acked_at = ?, last_error = ? WHERE id = ?").run(text, now, now, why, r.id);
+  event("hq", r.lane ? `closed request #${r.id} from ${r.lane}, which is gone: ${text.slice(0, 120)}` : `closed the owner's note #${r.id} with no reply: ${text.slice(0, 120)}`, r.lane);
   return { id: r.id, lane: r.lane };
 }
 
