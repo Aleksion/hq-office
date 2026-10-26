@@ -133,6 +133,27 @@ The WORK tab lists every piece of work in flight: an issue key, its pull request
 
 PR facts come from the `gh` CLI. The server caches them and refreshes them every 10 minutes while anything is open, and when HQ runs `hud board` if the cache is over a minute old. Page loads never call GitHub.
 
+## Conference rooms
+
+A piece of work with an owner can get a conference room: one place where you talk straight to the lane that owns it (usually a manager or a lead) or to any lane in it, and where that lane keeps the concrete context of the problem. Think of it as the work's project folder. HQ opens one, and the owning lane keeps it current:
+
+```sh
+hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   # again: change or reopen it
+hud room brief SLUG --body B          # the pinned brief, in markdown, replaced as a whole (or piped on stdin)
+hud room artifact SLUG --title T --url U            # a Claude artifact link (recognised by its address) or any link
+hud room artifact SLUG --title T --file PATH        # an image or any file, uploaded (25 MB at most)
+hud room say SLUG TEXT [--as LANE] [--reply ID]     # write in the thread (as the owning lane unless --as)
+hud room read SLUG [--since ID] [--wait] [--json]   # your messages; --wait blocks until a new one, like hud wait
+hud room list [--all] [--json]
+hud room archive SLUG
+```
+
+The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. Open one to see its lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief, the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files) and the thread. Write in the box under the thread, with images as anywhere else. TO picks the lane: the owner by default, or any lane in the room; REPLY on a lane's message answers it and addresses that lane. While a room is open, Tell HQ steps aside; it is back when you leave the room.
+
+What you write is typed into that lane's terminal through herdr, naming the room and telling it to answer with `hud room say` and to keep the brief and artifacts current. Each message shows DELIVERED, or AWAY · KEPT when the lane is not there: a kept message stays in the thread and is typed into the lane once, when herdr sees it again (RETRY appears if herdr refused one). Uploaded files are served sandboxed, so a file a lane uploads can show but never run a script.
+
+In the office, a glass-walled conference room sits in the bottom-left corner. For five minutes after a room's last message, its lanes that are not busy elsewhere (not working at a desk, not queued with a question, not away) walk to its table and sit there, then go back.
+
 ## Changing a question in place
 
 HQ keeps one question per thing by changing it instead of withdrawing and reposting it:

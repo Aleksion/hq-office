@@ -51,7 +51,7 @@ function roomFrame() {
 }
 // What changes the picture between its own steps wakes the room at once.
 let drawnHover = null;
-function wake() {
+export function wake() {
   clearTimeout(frameTimer);
   frameTimer = null;
   frameNext = 0;

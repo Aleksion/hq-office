@@ -194,7 +194,7 @@ document.addEventListener("click", (e) => {
 });
 
 // The preview: the image as large as the screen allows, a close button, and a tap anywhere else closes it.
-function openPreview(src, name) {
+export function openPreview(src, name) {
   let d = $("imgPreview");
   if (!d) {
     d = document.createElement("dialog");
@@ -220,7 +220,7 @@ if (!CSS.supports("field-sizing", "content")) {
 
 // Drop or paste an image into any text box: it joins that box's tray.
 const imageFiles = (dt) => [...(dt?.files ?? [])].filter((f) => typeOf(f).startsWith("image/"));
-const boxKey = (el) => (el.closest?.("[data-rbox]") ? "reply" : el.closest?.("[data-ask]")?.dataset.ask ?? "note");
+const boxKey = (el) => el.closest?.("[data-composer]")?.dataset.composer ?? (el.closest?.("[data-rbox]") ? "reply" : el.closest?.("[data-ask]")?.dataset.ask ?? "note");
 const boxOf = (key) => document.querySelector(`[data-composer="${CSS.escape(String(key))}"]`);
 const clearDropping = () => document.querySelectorAll(".dropping").forEach((el) => el.classList.remove("dropping"));
 document.addEventListener("dragover", (e) => {

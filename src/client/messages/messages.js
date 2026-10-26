@@ -8,13 +8,14 @@ import { renderBelow } from "../questions/questions.js";
 import { renderWork } from "../work-board/work-board.js";
 import { on } from "../core/bus.js";
 import { clearImages, composer, hasImages, notReady, withImages } from "../images/images.js";
+import { emit } from "../core/bus.js";
 
 // QUESTIONS and MESSAGES share the question column; one shows at a time. The choice is remembered in this browser.
 // MESSAGES is one thread, oldest at the top: HQ's updates and your notes, by time. A reply is an ordinary note
 // that starts with  re: #u12 ("first words of the parent")  (u = from HQ, n = your note), so the server needs
 // nothing new and HQ reads what the reply answers.
 const REF = /^re: #([un])(\d+)(?: \("([^"\n]*)"\))?[ \t]*/;
-export let qTab = (() => { try { const t = localStorage.getItem("hq-qtab"); return t === "messages" || t === "work" ? t : "questions"; } catch { return "questions"; } })();
+export let qTab = (() => { try { const t = localStorage.getItem("hq-qtab"); return ["messages", "work", "rooms"].includes(t) ? t : "questions"; } catch { return "questions"; } })();
 export let replyTo = null, replyText = "", msgStick = true;
 // The open reply, put back after the page reloads (questions/drafts.js keeps it with the other drafts).
 export function setReply(to, text) { replyTo = to; replyText = text; }
@@ -35,6 +36,7 @@ export function setQTab(t) {
   renderQTabs();
   if (t === "messages") renderMsgs(); else renderBelow();
   renderWork();
+  emit("qtab", t); // ROOMS (rooms/) draws itself when it is shown
   if (!was) return;
   const now = wrap.getBoundingClientRect();
   if (was.bottom <= 0) scrollBy(0, now.bottom - was.bottom);
@@ -50,6 +52,7 @@ export function renderQTabs() {
   $("hud").hidden = qTab !== "questions";
   $("msgs").hidden = qTab !== "messages";
   $("work").hidden = qTab !== "work";
+  $("rooms").hidden = qTab !== "rooms"; // its count is set by rooms/
   if (!S) return;
   const n = S.open.length, u = S.updatesUnread ?? 0;
   $("qtCount").hidden = !n;

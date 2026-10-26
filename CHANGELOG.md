@@ -3,7 +3,36 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.9.0] - 2026-10-26
+
+### Added
+
+- **Conference rooms: talk straight to the lane that owns a piece of work.** HQ opens a room for a piece of work
+  with `hud room create SLUG --title T --owner LANE` (members at any level, issues and PRs too). The owning lane
+  keeps a pinned brief in markdown (`hud room brief`) and a shelf of artifacts (`hud room artifact`: Claude
+  artifacts, links, images and files) current, so the room is the work's project folder: open it for the concrete
+  context of that problem.
+- **A ROOMS tab** next to WORK, counting rooms with new messages. The list shows each room's owner and level, the
+  state of its work on the board and its last activity. An open room shows its lanes with their level and status,
+  its issues and PRs with their board state, the brief, the shelf as cards, and the thread. Write to the owning
+  lane or pick another lane in the room with TO, attach images as anywhere else, and REPLY to a lane's message.
+  Works on a phone: the thread opens at its newest message, scrolls inside itself and keeps your place when
+  something new lands.
+- **Your message reaches the lane itself.** It is typed into that lane's terminal through herdr, with how to
+  answer (`hud room say`) and a reminder to keep the brief and artifacts current. A message for a lane that is away
+  stays in the thread as AWAY · KEPT and is typed in once, when the lane is back. Lanes read your messages with
+  `hud room read SLUG [--since ID] [--wait]`.
+- **A conference room in the office.** Glass walls, a table and six chairs in the bottom-left corner. While a room
+  is talking (five minutes after its last message), its lanes that are not busy elsewhere walk over and sit at the
+  table.
+- The HQ guide tells HQ that work with an owning lane can get a room, kept current by that lane.
+
+### Changed
+
+- The question column's tabs tighten to fit four on a narrow column or a phone, and scroll sideways rather than ever
+  widening the page.
+- With 22 or more lanes, the fourth row of desks starts beside the conference room (from x 9), so the office holds
+  24 desks instead of 28.
 
 ## [0.8.3] - 2026-10-26
 

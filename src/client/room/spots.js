@@ -1,7 +1,10 @@
 // The room's layout in tiles: desks, the queue, HQ, the couch, the break room.
+import { inConference } from "./conference.js";
+
 // layout, in tiles
+// The fourth row's first four desks would stand in the conference room: that row starts at x 9.
 export const SEATS = [];
-for (let row = 0; row < 4; row++) for (let col = 0; col < 7; col++) SEATS.push({ x: 1 + col * 2, y: 4 + row * 3 });
+for (let row = 0; row < 4; row++) for (let col = 0; col < 7; col++) if (!inConference(1 + col * 2, 4 + row * 3)) SEATS.push({ x: 1 + col * 2, y: 4 + row * 3 });
 export const QUEUE = [];
 for (let k = 0; k < 8; k++) QUEUE.push({ x: 20, y: 4 + k });
 for (let k = 0; k < 8; k++) QUEUE.push({ x: 21.2, y: 4 + k });

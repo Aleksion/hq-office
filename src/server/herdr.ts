@@ -132,19 +132,25 @@ function tellBlocked(lane: Lane) {
   notifyHq(`Lane ${lane.name} is blocked on a prompt in herdr (${lane.machine}, ${lane.pane}): ${lane.prompt.split("\n").join(" / ")}`);
 }
 
-// The owner's answers reach HQ the moment they are sent: typed into HQ's session, with a one-line reminder to reply
-// through the HUD (the owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out).
-const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";
-export function notifyHq(text: string) {
-  // The answer is already saved; a herdr that cannot even start must not turn it into an error for the page.
+// Types text into an agent's session through herdr (on another machine with `machine`). The one way the server
+// prompts an agent: HQ (notifyHq) and a lane in a conference room (rooms.ts). It never throws: what it says is saved
+// first, and a herdr that cannot even start must not turn that into an error for the page. Resolves once herdr is done.
+export function promptAgent(name: string, text: string, machine?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+  const on = machine && machine !== LOCAL ? ["--machine", machine] : [];
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn([HERDR, "agent", "prompt", HQ_AGENT, withHint(text)], { stdout: "ignore", stderr: "pipe" });
+    proc = Bun.spawn([HERDR, ...on, "agent", "prompt", name, text], { stdout: "ignore", stderr: "pipe" });
   } catch (e) {
-    event("hud", `could not reach HQ: ${(e as Error).message}`);
-    return;
+    return Promise.resolve({ ok: false, error: (e as Error).message });
   }
-  proc.exited.then(async (code) => {
-    if (code !== 0) event("hud", `could not reach HQ: ${(await new Response(proc.stderr).text()).trim() || `exit ${code}`}`);
+  return proc.exited.then(async (code) => (code === 0 ? { ok: true as const } : { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` }));
+}
+
+// The owner's answers reach HQ the moment they are sent: typed into HQ's session, with a one-line reminder to reply
+// through the HUD (the owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out).
+export const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";
+export function notifyHq(text: string) {
+  promptAgent(HQ_AGENT, withHint(text)).then((r) => {
+    if (!r.ok) event("hud", `could not reach HQ: ${r.error}`);
   });
 }

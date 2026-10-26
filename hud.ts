@@ -33,6 +33,8 @@
 //   hud pause ISSUE REASON...  /  hud resume ISSUE deliberately on hold, so it is not called stalled
 //   hud board [--json]                            blocked on a prompt, then stalled, first; refreshes GitHub if the cache is over a minute old
 //   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
+// conference rooms: one per piece of work, where the owner talks straight to the lane that owns it (see roomCmd below)
+//   hud room create|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";
 
@@ -200,8 +202,11 @@ switch (cmd) {
   case "guide":
     console.log(GUIDE);
     break;
+  case "room":
+    await roomCmd(argv);
+    break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|guide");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 
@@ -267,6 +272,124 @@ async function secret(args: string[]) {
       }
       break;
     }
+    default:
+      usage();
+  }
+}
+
+// ---- conference rooms (hud room ...): the brief, the shelf and the thread of one piece of work ----
+
+// (Function declarations, not constants: the switch above runs before any constant down here exists.)
+function roomUsage() {
+  return `usage:
+  hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   (again: change or reopen it)
+  hud room brief SLUG --body B [--as LANE]           the pinned brief, replaced as a whole (or from stdin)
+  hud room artifact SLUG --title T (--url U | --file PATH) [--kind claude-artifact|link|image|file] [--as LANE]
+  hud room say SLUG TEXT [--as LANE] [--reply ID]    write in the thread (as the owning lane unless --as)
+  hud room read SLUG [--since ID] [--wait] [--json]  the owner's messages; --wait blocks until a new one
+  hud room list [--all] [--json]
+  hud room archive SLUG`;
+}
+
+// Text from an argument, else from stdin when it is piped.
+async function textArg(given: string | undefined) {
+  if (given !== undefined) return given;
+  return process.stdin.isTTY ? "" : (await Bun.stdin.text()).replace(/\r?\n$/, "");
+}
+
+function ago(t: number) {
+  const m = Math.floor((Date.now() - t) / 60_000);
+  return m < 1 ? "now" : m < 60 ? `${m}m ago` : m < 2880 ? `${Math.floor(m / 60)}h ${m % 60}m ago` : `${Math.floor(m / 1440)}d ago`;
+}
+
+async function roomCmd(args: string[]) {
+  const bools = new Set(args.filter((a) => ["--json", "--wait", "--all"].includes(a)));
+  const { flags: f, rest: r, one: o } = parse(args.filter((a) => !bools.has(a)));
+  const [verb, slugRaw, ...words] = r;
+  const slug = (slugRaw ?? "").toLowerCase();
+  const path = `/api/rooms/${encodeURIComponent(slug)}`;
+  const usage = () => {
+    console.error(roomUsage());
+    process.exit(2);
+  };
+  if (verb !== "list" && !slug) usage();
+  switch (verb) {
+    case "create": {
+      const out = await call("POST", "/api/rooms", { slug, title: o("title"), owner: o("owner"), members: f.member ?? [], issues: f.issue ?? [], prs: f.pr ?? [] });
+      console.log(`room ${out.slug} ${out.created ? "created" : "updated"}`);
+      break;
+    }
+    case "brief": {
+      const body = await textArg(o("body"));
+      await call("POST", `${path}/brief`, { body, as: o("as") });
+      console.log(body.trim() ? `brief of ${slug} set` : `brief of ${slug} cleared`);
+      break;
+    }
+    case "artifact": {
+      const file = o("file");
+      if (!!file === !!o("url")) usage();
+      if (file) {
+        const blob = Bun.file(file);
+        if (!(await blob.exists())) {
+          console.error(`no file ${file}`);
+          process.exit(1);
+        }
+        const name = file.split("/").pop()!;
+        const q = new URLSearchParams({ name, title: o("title") ?? name, ...(o("kind") ? { kind: o("kind")! } : {}), ...(o("as") ? { as: o("as")! } : {}) });
+        const res = await fetch(`${BASE}${path}/files?${q}`, { method: "POST", headers: { "content-type": blob.type || "application/octet-stream", "x-hud": "1" }, body: blob });
+        const out = await res.json();
+        if (!res.ok) {
+          console.error(out.error ?? res.statusText);
+          process.exit(1);
+        }
+        console.log(`artifact #${out.id} (${out.kind}) on ${slug}: ${BASE}${out.url}`);
+      } else {
+        const out = await call("POST", `${path}/artifacts`, { title: o("title"), url: o("url"), kind: o("kind"), as: o("as") });
+        console.log(`artifact #${out.id} on ${slug}`);
+      }
+      break;
+    }
+    case "say": {
+      const out = await call("POST", `${path}/say`, { text: await textArg(words.length ? words.join(" ") : undefined), as: o("as"), reply: o("reply") });
+      console.log(`message #${out.id} in ${slug}`);
+      break;
+    }
+    case "read": {
+      let since = o("since");
+      for (;;) {
+        const q = new URLSearchParams({ ...(since ? { since } : {}), ...(bools.has("--wait") ? { wait: "240" } : {}) });
+        const out = await call("GET", `${path}/read?${q}`);
+        if (bools.has("--wait") && !out.messages.length) {
+          since = String(out.since);
+          continue;
+        }
+        if (bools.has("--json")) console.log(JSON.stringify(out, null, 2));
+        else {
+          if (!out.messages.length) console.log(`no messages from the owner in ${slug} after #${out.since}`);
+          for (const m of out.messages) console.log(`#${m.id} ${new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} owner -> ${m.to}${m.reply ? ` (re #${m.reply})` : ""}: ${m.text}`);
+          console.log(`next: hud room read ${slug} --since ${out.last}${bools.has("--wait") ? " --wait" : ""}`);
+        }
+        break;
+      }
+      break;
+    }
+    case "list": {
+      const rooms = await call("GET", `/api/rooms${bools.has("--all") ? "?all=1" : ""}`);
+      if (bools.has("--json")) {
+        console.log(JSON.stringify(rooms, null, 2));
+        break;
+      }
+      if (!rooms.length) console.log("no rooms yet: hud room create SLUG --title T --owner LANE");
+      for (const x of rooms) {
+        const work = [...x.issues, ...x.prs.map((p: string) => `#${p.split("#").pop()}`)].join(" ");
+        console.log(`${x.slug}${x.archivedAt ? " (archived)" : ""}  "${x.title}"  owner ${x.owner}${x.members.length ? `  members ${x.members.join(", ")}` : ""}${work ? `  work ${work}` : ""}  ${x.artifacts} artifacts  last ${ago(x.lastAt)}${x.unread ? `  ${x.unread} unread by the owner` : ""}`);
+      }
+      break;
+    }
+    case "archive":
+      await call("POST", `${path}/archive`, {});
+      console.log(`room ${slug} archived`);
+      break;
     default:
       usage();
   }

@@ -1,6 +1,7 @@
 // Furniture that blocks walking, and paths around it.
 import { H, W } from "./canvas.js";
 import { SEATS } from "./spots.js";
+import { CONF_BLOCKED } from "./conference.js";
 
 // Furniture a worker cannot walk through, in tiles. Desks count only while they are drawn.
 const FURNITURE = [];
@@ -8,6 +9,7 @@ for (let x = 17; x <= 22; x++) for (const y of [2, 3, 12, 13]) FURNITURE.push([x
 FURNITURE.push([16, 4], [16, 5], [23, 5], [23, 6], [0, 2], [14, 2], [15, 15]); // HQ terminal, coffee machine, plants
 for (const x of [20, 21, 22]) FURNITURE.push([x, 14]); // the snack table
 FURNITURE.push([23, 14], [23, 15]); // the kitchen coffee machine
+FURNITURE.push(...CONF_BLOCKED); // the conference room's glass walls and table
 let blocked = new Set();
 const tileKey = (x, y) => `${x},${y}`;
 export function rebuildBlocked(n) {
