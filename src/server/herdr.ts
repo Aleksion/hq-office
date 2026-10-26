@@ -4,8 +4,8 @@ import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { bump } from "./push.ts";
 import { event } from "./events.ts";
-import { withHint } from "../hq-guide.ts";
 import { UNREAD, promptIn } from "./prompt.ts";
+import { checkHq, notifyHq } from "./hq-link.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
@@ -47,10 +47,13 @@ async function readPane(machine: string, pane: string, blocked: boolean): Promis
 export async function syncHerdr() {
   const errors: string[] = [];
   const seen = new Map<string, { machine: string; agent: any }>();
+  let local: any[] | null = null;
   await Promise.all(
     MACHINES.map(async (machine) => {
       try {
-        for (const agent of await herdrList(machine)) {
+        const agents = await herdrList(machine);
+        if (machine === LOCAL) local = agents;
+        for (const agent of agents) {
           if (agent.name) seen.set(agent.name, { machine, agent });
         }
       } catch (e) {
@@ -121,6 +124,9 @@ export async function syncHerdr() {
     .filter(([name]) => !known.has(name))
     .map(([name, { machine, agent }]) => ({ name, machine, status: agent.agent_status }));
   lastSync = { at: now, errors };
+  // HQ is typed into on this machine: check it there even when this machine's lanes are not tracked.
+  if (!MACHINES.includes(LOCAL)) local = await herdrList(LOCAL).catch((e) => (errors.push(`${LOCAL}: ${(e as Error).message}`), null));
+  checkHq(local, errors.find((e) => e.startsWith(`${LOCAL}:`))?.slice(LOCAL.length + 2));
   for (const lane of nowBlocked) tellBlocked(lane);
   if (changed) bump();
 }
@@ -146,11 +152,6 @@ export function promptAgent(name: string, text: string, machine?: string | null)
   return proc.exited.then(async (code) => (code === 0 ? { ok: true as const } : { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` }));
 }
 
-// The owner's answers reach HQ the moment they are sent: typed into HQ's session, with a one-line reminder to reply
-// through the HUD (the owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out).
+// The agent the owner's answers and notes are typed into, with a one-line reminder to reply through the HUD (the
+// owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out). The sending, and holding, is hq-link.ts.
 export const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";
-export function notifyHq(text: string) {
-  promptAgent(HQ_AGENT, withHint(text)).then((r) => {
-    if (!r.ok) event("hud", `could not reach HQ: ${r.error}`);
-  });
-}

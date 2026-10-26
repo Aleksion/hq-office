@@ -4,7 +4,7 @@ import { HOST, LEGACY_OWNER_WHO, OWNER, PORT, TRUSTED_ORIGINS } from "./config.t
 import { handle } from "./router.ts";
 import { json } from "./json.ts";
 import { bump, secrets } from "./push.ts";
-import { notifyHq } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
 import { answerWithSecrets } from "./asks.ts";
 import { isSecretPath, originAllowed, secretGuard, secretRoute } from "./secrets.ts";
 

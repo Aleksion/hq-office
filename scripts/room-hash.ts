@@ -224,8 +224,8 @@ export async function spawnServer(opts: { cwd: string; env: Record<string, strin
 export async function startServer(dir: string, extraEnv: Record<string, string> = {}) {
   const data = mkdtempSync(join(tmpdir(), "hq-office-pixels-"));
   const herdr = join(data, "herdr");
-  // A herdr that knows two agents: one working, one idle. Everything else it is asked succeeds quietly.
-  writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[{"name":"golf","agent_status":"working","pane_id":"p1","agent":"claude"},{"name":"alpha","agent_status":"idle","pane_id":"p2","agent":"claude"}]}}' ;;\n  *) exit 0 ;;\nesac\n`);
+  // A herdr that knows HQ and two agents: one working, one idle. Everything else it is asked succeeds quietly.
+  writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[{"name":"hq","agent_status":"idle","pane_id":"p0","agent":"claude"},{"name":"golf","agent_status":"working","pane_id":"p1","agent":"claude"},{"name":"alpha","agent_status":"idle","pane_id":"p2","agent":"claude"}]}}' ;;\n  *) exit 0 ;;\nesac\n`);
   chmodSync(herdr, 0o755);
   // PIXEL_OWNER names the owner on both sides, for a base whose default hero carried a fixed name instead of HUD_OWNER.
   const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_OWNER: process.env.PIXEL_OWNER || "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", ...extraEnv };

@@ -3,6 +3,22 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] - 2026-10-26
+
+### Fixed
+
+- **The page says at once when HQ isn't receiving.** Every sync (every 20 seconds) checks that an agent with HQ's
+  name is in herdr and can take input. When it isn't (herdr dropped the name after a restart or resume, HQ is stopped
+  at a permission prompt, or herdr does not answer), a red **HQ ISN'T RECEIVING** strip at the top says why and since
+  when, before you write into the void. The tab title says it too, and Tell HQ's box tells you that what you send is kept.
+- **Nothing for HQ is lost.** Notes, answers and other messages for HQ that cannot be typed in are held and marked
+  **HELD** in red, not "not picked up yet". They are listed under the strip, and sent in the order you wrote them the
+  moment HQ can take them, each marked with when it was written. Anything HQ already read with `hud inbox` is not
+  sent again.
+- **One click to fix it.** When herdr dropped the name but HQ's last pane still holds an agent, **NAME** gives that
+  pane HQ's name back (`herdr agent rename`) and sends what was held. **CHECK NOW** checks again without waiting for
+  the next sync.
+
 ## [0.9.0] - 2026-10-26
 
 ### Added

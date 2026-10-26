@@ -61,13 +61,20 @@ export function renderLog() {
   renderFeed();
   const n = S.notes[0];
   setHTML($("lastNote"), n
-    ? `<b>LAST ${clock(n.at)}</b>${esc(n.text)} <span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span>`
+    ? `<b>LAST ${clock(n.at)}</b>${esc(n.text)} ${noteMark(n)}`
     : `<span style="color:var(--muted)">Nothing sent yet today.</span>`);
+}
+// Something HQ could not take yet (S.hq.held, see hq-link): said in red, not as "not picked up yet".
+const held = (ref) => (S.hq?.held ?? []).some((h) => h.ref === ref);
+const HELD = `<span style="color:var(--red)">· HELD: HQ isn't receiving</span>`;
+function noteMark(n) {
+  if (!n.acked_at && held(`note:${n.id}`)) return HELD;
+  return `<span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span>`;
 }
 function logRows() {
   // One list, newest first: your notes and HQ's answers interleaved by time.
-  const notes = S.notes.slice(0, 5).map((n) => ({ at: n.at, html: `<div><b>${clock(n.at)} YOU</b>${clipText(n.text, `n${n.id}`)} <span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span></div>` }));
-  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${linkify(a.title)} → <strong>${clipText(a.answer, `a${a.id}`)}</strong> <span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span></div>` }));
+  const notes = S.notes.slice(0, 5).map((n) => ({ at: n.at, html: `<div><b>${clock(n.at)} YOU</b>${clipText(n.text, `n${n.id}`)} ${noteMark(n)}</div>` }));
+  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${linkify(a.title)} → <strong>${clipText(a.answer, `a${a.id}`)}</strong> ${held(`ask:${a.id}`) && !a.acked_at ? HELD : `<span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span>`}</div>` }));
   const rows = [...notes, ...answered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
   return rows.map((r) => r.html).join("") || `<div style="color:var(--muted)">Nothing yet today.</div>`;
 }

@@ -5,7 +5,7 @@ import { db } from "./db.ts";
 import type { Ask } from "./types.ts";
 import { secrets } from "./push.ts";
 import { event } from "./events.ts";
-import { notifyHq } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
 
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
@@ -34,7 +34,7 @@ export function answerAsk(id: number, answer: string) {
   if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
   db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ? WHERE id = ?").run(answer, Date.now(), id);
   event(OWNER, `answered "${ask.title}": ${answer}`, ask.lane);
-  notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`);
+  notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`, `ask:${id}`);
 }
 
 // An ask that requests secrets is answered with their values: each one goes to the secret store, and the
