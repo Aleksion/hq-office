@@ -5,6 +5,20 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-26
+
+### Fixed
+
+- **A lane stuck at a prompt in herdr is no longer invisible.** When a lane's agent stops at a permission prompt
+  (Claude's "Do you want to proceed?") or a question (Codex's question picker), herdr reports it as blocked, and the
+  lane now reads **BLOCKED ON A PROMPT** everywhere: a red bubble over its worker at its desk, a red BLOCKED count in
+  the top bar (only while there is one; click it to open that lane), the worker card with what the agent asks (the
+  question and its options) and the machine and pane to go and answer it in, the work item at the very top of the
+  WORK board with the prompt as its reason, and first in `hud board`, which also lists blocked lanes with no
+  tracked work. A blocked lane is blocked before anything else, even with a question of yours open on it.
+- **HQ is told when a lane gets stuck at a prompt**, once per prompt: "Lane L is blocked on a prompt in herdr
+  (machine, pane): ...". It clears when the lane moves on. `HUD_HQ_BLOCKED=0` turns the message off.
+
 ## [0.8.2] - 2026-10-25
 
 ### Fixed

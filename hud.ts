@@ -31,7 +31,7 @@
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
 //   hud pause ISSUE REASON...  /  hud resume ISSUE deliberately on hold, so it is not called stalled
-//   hud board [--json]                            stalled first; refreshes GitHub if the cache is over a minute old
+//   hud board [--json]                            blocked on a prompt, then stalled, first; refreshes GitHub if the cache is over a minute old
 //   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";

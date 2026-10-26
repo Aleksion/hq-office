@@ -167,6 +167,7 @@ Set these in `config.env`. An empty value means the default.
 | --- | --- | --- |
 | `HUD_HQ_AGENT` | `hq` | herdr agent name of your HQ lane. Answers and notes are typed into it. |
 | `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
+| `HUD_HQ_BLOCKED` | on | `0` stops telling HQ when a lane's agent becomes blocked on a prompt in herdr (the page still shows it). |
 | `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |
 | `HUD_OWNER` | empty | Your name: on the desk sign, on the default hero, and in the notes and answers HQ is sent. Empty means "the owner" (and "YOU" on the hero). |
 | `HUD_PORT` | `4747` | Port the server listens on. |

@@ -10,7 +10,10 @@ export const laneWorking = (lane: Lane | null | undefined) => !!lane && (lane.he
 
 // An open ask waits on the owner, but a lane can hold a parked question and work on at once: only a lane that is
 // not working reads needs_you. The state's `asks` count still shows the question on a working lane.
+// A lane blocked on a prompt in herdr (lane.prompt, set by the sync) is blocked before anything else: nothing moves
+// until someone answers it in its pane.
 export function laneStatus(lane: Lane, openByLane: Map<string, number>, now: number): string {
+  if (lane.prompt) return "blocked";
   if (openByLane.get(lane.name) && !laneWorking(lane)) return "needs_you";
   if (lane.phase === "done" || lane.phase === "parked") return lane.phase;
   if (lane.phase === "waiting") return "waiting";

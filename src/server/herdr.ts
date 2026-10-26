@@ -5,6 +5,7 @@ import type { Lane } from "./types.ts";
 import { bump } from "./push.ts";
 import { event } from "./events.ts";
 import { withHint } from "../hq-guide.ts";
+import { UNREAD, promptIn } from "./prompt.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
@@ -23,19 +24,24 @@ async function herdrList(machine: string): Promise<any[]> {
 // a status bar with "← 1 agent" or "1 shell, 1 monitor", or a running subagent listed as "◯ general-purpose  <task>  34m 0s".
 const BG = /(←\s*\d+\s+agents?|\d+\s+shells?(?:,\s*\d+\s+monitors?)?(?:\s+still running)?|\d+\s+monitors?|monitors?\s+still running)/i;
 const SUBAGENT = /^\s*◯\s+([\w.-]+)\s/m;
-async function backgroundWork(machine: string, pane: string): Promise<string | null> {
-  const args = machine === LOCAL ? [HERDR, "pane", "read", pane, "--lines", "10"] : [HERDR, "--machine", machine, "pane", "read", pane, "--lines", "10"];
+// One pane read for a lane that is not working: what still runs in the background (the last 10 lines, as before),
+// and the prompt it waits on, if any (the last 30 lines; see prompt.ts).
+async function readPane(machine: string, pane: string, blocked: boolean): Promise<{ bg: string | null; prompt: string | null }> {
+  const args = machine === LOCAL ? [HERDR, "pane", "read", pane, "--lines", "30"] : [HERDR, "--machine", machine, "pane", "read", pane, "--lines", "30"];
+  let out = "";
   try {
     const proc = Bun.spawn(args, { stdout: "pipe", stderr: "ignore" });
     const timer = setTimeout(() => proc.kill(), 8_000);
-    const out = await new Response(proc.stdout).text();
+    out = await new Response(proc.stdout).text();
     clearTimeout(timer);
     await proc.exited;
-    const sub = out.match(SUBAGENT)?.[1];
-    return out.match(BG)?.[1].replace(/\s+/g, " ") ?? (sub ? `subagent ${sub} running` : null);
   } catch {
-    return null;
+    return { bg: null, prompt: blocked ? UNREAD : null };
   }
+  const tail = out.replace(/\n+$/, "").split("\n").slice(-10).join("\n");
+  const sub = tail.match(SUBAGENT)?.[1];
+  const bg = tail.match(BG)?.[1].replace(/\s+/g, " ") ?? (sub ? `subagent ${sub} running` : null);
+  return { bg, prompt: promptIn(out, blocked) ?? (blocked ? UNREAD : null) };
 }
 
 export async function syncHerdr() {
@@ -59,14 +65,19 @@ export async function syncHerdr() {
   // that the status does not know, such as "paused", also falls through to HQ's turn), agent not working, and no
   // open question waiting on the owner.
   const asking = new Set((db.query("SELECT DISTINCT lane FROM asks WHERE status = 'open' AND lane IS NOT NULL").all() as { lane: string }[]).map((r) => r.lane));
-  const bg = new Map<string, string | null>();
+  // A lane herdr reports blocked (at an approval or question UI) is read whatever its phase or asks: the read gives
+  // the excerpt of what it asks. A working agent's pane is never read.
+  const pane = new Map<string, { bg: string | null; prompt: string | null }>();
   await Promise.all(
     lanes.map(async (lane) => {
       const hit = seen.get(lane.name);
-      if (!hit || hit.agent.agent_status === "working" || ["done", "parked", "waiting"].includes(lane.phase) || asking.has(lane.name)) return;
-      bg.set(lane.name, await backgroundWork(hit.machine, hit.agent.pane_id));
+      if (!hit || hit.agent.agent_status === "working") return;
+      const blocked = hit.agent.agent_status === "blocked";
+      if (!blocked && (["done", "parked", "waiting"].includes(lane.phase) || asking.has(lane.name))) return;
+      pane.set(lane.name, await readPane(hit.machine, hit.agent.pane_id, blocked));
     }),
   );
+  const nowBlocked: Lane[] = [];
   let changed = false;
   // One transaction for the whole sync: one write to disk instead of one per lane, three times a minute.
   db.transaction(() => {
@@ -76,7 +87,7 @@ export async function syncHerdr() {
         // Only call a lane gone when its machine answered.
         const machineAnswered = !errors.some((e) => e.startsWith(`${lane.machine}:`));
         if (machineAnswered && lane.herdr !== "gone") {
-          db.query("UPDATE lanes SET herdr = 'gone', herdr_since = ? WHERE name = ?").run(now, lane.name);
+          db.query("UPDATE lanes SET herdr = 'gone', herdr_since = ?, prompt = NULL WHERE name = ?").run(now, lane.name);
           changed = true;
         }
         continue;
@@ -88,9 +99,19 @@ export async function syncHerdr() {
         ).run(status, status, now, hit.agent.pane_id, hit.machine, hit.agent.agent, lane.name);
         changed = true;
       }
-      const work = bg.get(lane.name) ?? null;
+      const work = pane.get(lane.name)?.bg ?? null;
       if (work !== (lane.bg ?? null)) {
         db.query("UPDATE lanes SET bg = ? WHERE name = ?").run(work, lane.name);
+        changed = true;
+      }
+      // The prompt it waits on: set while it shows, cleared the moment the lane moves on.
+      // Read again here, not from the list above: two syncs can overlap (the timer and `hud sync`), and only the
+      // one that writes the change tells HQ.
+      const prompt = pane.get(lane.name)?.prompt ?? null;
+      const was = (db.query("SELECT prompt FROM lanes WHERE name = ?").get(lane.name) as { prompt: string | null } | null)?.prompt ?? null;
+      if (prompt !== was) {
+        db.query("UPDATE lanes SET prompt = ? WHERE name = ?").run(prompt, lane.name);
+        if (prompt && !was) nowBlocked.push({ ...lane, machine: hit.machine, pane: hit.agent.pane_id, prompt });
         changed = true;
       }
       db.query("UPDATE lanes SET herdr_seen = ? WHERE name = ?").run(now, lane.name);
@@ -100,7 +121,15 @@ export async function syncHerdr() {
     .filter(([name]) => !known.has(name))
     .map(([name, { machine, agent }]) => ({ name, machine, status: agent.agent_status }));
   lastSync = { at: now, errors };
+  for (const lane of nowBlocked) tellBlocked(lane);
   if (changed) bump();
+}
+
+// HQ hears of a block once, when it starts; the same block never again until it clears. HUD_HQ_BLOCKED=0: never.
+function tellBlocked(lane: Lane) {
+  event("herdr", `blocked on a prompt: ${lane.prompt.split("\n").join(" / ")}`, lane.name);
+  if (process.env.HUD_HQ_BLOCKED === "0" || lane.name === HQ_AGENT) return;
+  notifyHq(`Lane ${lane.name} is blocked on a prompt in herdr (${lane.machine}, ${lane.pane}): ${lane.prompt.split("\n").join(" / ")}`);
 }
 
 // The owner's answers reach HQ the moment they are sent: typed into HQ's session, with a one-line reminder to reply
