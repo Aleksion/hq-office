@@ -160,6 +160,7 @@ export async function seedFrame(post: Post, data: string, base: string) {
     const opt = q.opts[q.rec];
     const { id } = await must("/api/asks", {
       lane: q.pm === "HQ" ? null : q.pm,
+      ...(q.project ? { room: q.project } : {}), // the project the prototype tags it with; the one without a project names no room
       kind: q.t === "x" || q.t === "s" ? "action" : "decision",
       title: q.title,
       body: [q.means, q.why, q.bg].filter(Boolean).join("\n\n"),

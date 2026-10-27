@@ -9,7 +9,9 @@ const lane = (name: string, status = "moving", floor = "hq", extra: object = {})
 const room = (slug: string, owner: string, extra: object = {}) => ({ slug, title: slug.toUpperCase(), owner, members: [], issues: [], prs: [], createdAt: 1, archivedAt: null, ...extra });
 const S: any = {
   lanes: [lane("pm", "moving", "hq", { issue: "REL-1 REL-2", pr: "12, acme-example/app#7" }), lane("api"), lane("web", "blocked"), lane("solo")],
-  open: [{ id: 1, lane: "api", title: "Ship?", created_at: 5 }],
+  // api's second question names no room, so it is not the project's; the third names the room but is deferred.
+  open: [{ id: 1, lane: "api", room: "release", title: "Ship?", created_at: 5 }, { id: 2, lane: "api", room: null, title: "Unnamed", created_at: 6 }, { id: 4, lane: null, room: "release", title: "From HQ", created_at: 7 }],
+  deferred: [{ id: 3, lane: "api", room: "release", title: "Later", created_at: 8 }],
   rooms: [room("release", "pm", { members: ["api", "web"], issues: ["REL-1"], prs: ["acme-example/app#7"] }), room("old", "pm", { archivedAt: 9 }), room("other", "web")],
   board: { items: [{ issue: "REL-1", state: "ci", why: "a check is running", prs: [{ key: "acme-example/app#7", state: "OPEN", ci: "running", draft: false }] }] },
 };
@@ -37,14 +39,22 @@ describe("links on a question", () => {
 });
 
 describe("the project panel's data", () => {
-  test("state, who is on it and the linked work with its board state; no questions, since a question has no room yet", () => {
+  test("state, open calls, who is on it and the linked work with its board state", () => {
     const v = projectView(S, CONFIG, "release")!;
     expect(v.state).toBe("waiting");
-    expect(v).not.toHaveProperty("calls");
+    expect(v.calls.map((a: any) => a.id)).toEqual([1, 4]);
+    expect(Object.keys(v).sort()).toEqual(["calls", "color", "floor", "issues", "lanes", "name", "prs", "room", "state"]);
     expect(v.lanes.map((l: any) => [l.name, l.owner, l.help])).toEqual([["pm", true, null], ["api", false, null], ["web", false, "blocked"]]);
     expect(v.issues[0]).toMatchObject({ key: "REL-1", board: { state: "ci" } });
     expect(v.prs[0]).toMatchObject({ key: "acme-example/app#7", num: "7", pr: { state: "OPEN" }, board: { issue: "REL-1" } });
     expect(v.floor).toBe("hq");
+  });
+
+  test("a room no question names has no open calls, and its state is not red", () => {
+    const v = projectView(S, CONFIG, "other")!;
+    expect(v.calls).toEqual([]);
+    expect(v.state).toBe("blocked"); // its owner, web, is blocked
+    expect(projectView({ ...S, open: [] }, CONFIG, "release")!.state).toBe("blocked"); // with no question naming it, release is its blocked member, web, and not red
   });
 
   test("no panel for a room that is archived or does not exist", () => {

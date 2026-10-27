@@ -1,5 +1,5 @@
 // RUNDOWN, in Chrome, at 1440 and 390: the button in the stage bar opens a panel over the room that lists each floor's
-// projects with their state, owner and brief, and no count of questions; a scope lists one floor; it takes turns with the other panels;
+// projects with their state, owner, open calls and brief; a scope lists one floor; it takes turns with the other panels;
 // Escape closes it before the scope; it never covers or pushes away an open question. On an office with one floor the
 // bar holds RUNDOWN alone. Needs Chrome (CHROME_BIN); skipped without it. Written for the other machine's Chrome run.
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -56,7 +56,7 @@ afterAll(async () => {
 for (const [width, height] of SIZES) {
   const at = `${width}`;
 
-  test.skipIf(!chromeFound)(`${at}: RUNDOWN is closed until opened, then lists every floor's projects with state, owner and brief, and no count`, async () => {
+  test.skipIf(!chromeFound)(`${at}: RUNDOWN is closed until opened, then lists every floor's projects with state, owner, open calls and brief`, async () => {
     await open(general.base, width, height);
     await until(`document.querySelectorAll("#hud .ask").length === ${Object.values(FACTS.waiting).reduce((a, b) => a + b, 0)}`);
     expect(await panelOpen()).toBe(false);
@@ -71,7 +71,9 @@ for (const [width, height] of SIZES) {
     // a project with no brief shows none: no placeholder line
     await until(`document.querySelectorAll("#rundownPanel .rbrief").length === 3`);
     expect((await projects()).map((p) => p.brief)).toEqual([FACTS.briefs.release, null, FACTS.briefs.recon, FACTS.briefs.pipeline, null]);
-    expect(list.map((p) => p.calls)).toEqual([null, null, null, null, null]);
+    // only the questions that name a project count: release and outbound have one each; "The pipeline moved" is asked by a member of outbound and names no room
+    const slugs = FACTS.rooms.hq.concat(FACTS.rooms.fin, FACTS.rooms.sales);
+    expect(list.map((p) => p.calls)).toEqual(slugs.map((s) => (FACTS.roomCalls[s] ? `${FACTS.roomCalls[s]} OPEN CALL` : null)));
     expect(list.map((p) => p.room)).toEqual(["#room/release", "#room/web-fix", "#room/recon", "#room/pipeline", "#room/outbound"]);
     expect(await ev(`document.querySelector("#rundownBtn").getAttribute("aria-pressed")`)).toBe("true");
     // the explanatory words stay out of it

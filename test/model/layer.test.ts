@@ -19,7 +19,9 @@ const S: any = {
     lane("pm"), lane("web", "blocked"), lane("ops", "needs_you"), lane("idle", "hq_turn"),
     lane("g", "hq_turn", "g", true), lane("g-pm", "moving", "g"), lane("g-books", "stale", "g"), lane("g-eng", "blocked", "g"),
   ],
-  open: [{ id: 1, lane: "ops", created_at: 1 }],
+  // ops waits on you with two questions: one names room "a", one names none (so it belongs to no project).
+  open: [{ id: 1, lane: "ops", room: "a", created_at: 1 }, { id: 2, lane: "ops", room: null, created_at: 2 }],
+  deferred: [{ id: 3, lane: "ops", room: "a", created_at: 3 }],
   rooms: [],
   board: { items: [] },
 };
@@ -99,9 +101,26 @@ describe("which projects hang on which floor", () => {
 describe("a frame's colour is its project's state", () => {
   const item = (state: string, extra: object = {}) => ({ issue: "X-1", prs: [{ key: "9" }], state, ...extra });
 
-  test("a question of the room's lanes waits on you: red, over everything else", () => {
-    const r = room("a", "pm", { members: ["ops", "web"] });
+  test("a question that names the room waits on you: red, over everything else", () => {
+    const r = room("a", "pm", { members: ["web"] });
     expect(projectState({ ...S, rooms: [r] }, r)).toBe("waiting");
+  });
+
+  // Red means "a question about this project waits on you", so a room lane waiting on you with no question that names
+  // the room leaves the frame whatever else it was: moving, blocked or stalled.
+  test("a lane waiting on you without a question naming the room does not turn the frame red", () => {
+    const noRoomQuestion = { ...S, open: S.open.filter((a: any) => a.room !== "a") };
+    expect(projectState(noRoomQuestion, room("a", "pm", { members: ["ops"] }))).toBe("moving");
+    expect(projectState(noRoomQuestion, room("a", "ops"))).toBe("moving");
+    expect(projectState(noRoomQuestion, room("a", "pm", { members: ["ops", "web"] }))).toBe("blocked");
+    expect(projectState(noRoomQuestion, room("a", "pm", { members: ["ops", "g-books"] }))).toBe("stalled");
+    expect(projectState({ ...noRoomQuestion, board: { items: [item("ci")] } }, room("a", "pm", { members: ["ops"], issues: ["X-1"] }))).toBe("ci");
+  });
+
+  test("a question naming another room, or a deferred one, does not turn the frame red", () => {
+    const other = { ...S, open: [{ id: 5, lane: "pm", room: "b", created_at: 1 }], deferred: [] };
+    expect(projectState(other, room("a", "pm"))).toBe("moving");
+    expect(projectState({ ...S, open: [] }, room("a", "pm"))).toBe("moving"); // the deferred one stays out of S.open
   });
 
   test("blocked beats stalled beats CI beats moving", () => {
@@ -125,17 +144,38 @@ describe("a frame's colour is its project's state", () => {
     expect(projectState({ ...S, open: [] }, room("h", "idle", { members: ["ghost"] }))).toBe("moving");
   });
 
-  test("frames carry the colour of their state and draw no count: a question belongs to a lane, not to a room", () => {
+  test("frames carry the colour of their state and the questions that name the room, and say so", () => {
     const r = room("a", "pm", { members: ["ops"] });
     const f = frames({ ...S, rooms: [r, room("b", "web")] }, "hq");
     expect(f).toEqual([
-      { slug: "a", title: "A", state: "waiting", color: PROJECT_COLORS.waiting },
-      { slug: "b", title: "B", state: "blocked", color: PROJECT_COLORS.blocked },
+      { slug: "a", title: "A", state: "waiting", color: PROJECT_COLORS.waiting, calls: 1 },
+      { slug: "b", title: "B", state: "blocked", color: PROJECT_COLORS.blocked, calls: 0 },
     ]);
-    expect(f.map(frameName)).toEqual(["A: WAITING ON YOU", "B: BLOCKED AT A PROMPT"]);
-    expect(roomCalls(S, r).map((a: any) => a.id)).toEqual([1]);
+    expect(f.map(frameName)).toEqual(["A: WAITING ON YOU, 1 for you", "B: BLOCKED AT A PROMPT"]);
     expect(new Set(Object.values(PROJECT_COLORS)).size).toBe(Object.keys(PROJECT_COLORS).length);
     expect(PROJECT_COLORS.blocked).toBe(HELP_COLORS.blocked);
+  });
+});
+
+describe("a project's questions", () => {
+  test("only open questions that name the room count: not its lanes' unnamed ones, not another room's, not a deferred one", () => {
+    const r = room("a", "pm", { members: ["ops"] });
+    const asks = [
+      { id: 1, lane: "ops", room: "a" }, { id: 2, lane: "ops", room: null }, { id: 3, lane: "pm", room: "b" },
+      { id: 4, lane: null, room: "a" }, { id: 5, lane: "pm" },
+    ];
+    expect(roomCalls({ ...S, open: asks, deferred: [{ id: 6, lane: "ops", room: "a" }] }, r).map((a: any) => a.id)).toEqual([1, 4]);
+    expect(roomCalls({ ...S, open: [] }, r)).toEqual([]);
+  });
+
+  test("the frame, its name and its colour agree with the count", () => {
+    const r = room("a", "pm", { members: ["ops"] });
+    for (const [open, n] of [[[], 0], [[{ id: 1, lane: "ops", room: "a" }], 1], [[{ id: 1, lane: "ops", room: "a" }, { id: 2, lane: null, room: "a" }], 2]] as const) {
+      const [f] = frames({ ...S, open, rooms: [r] }, "hq");
+      expect(f.calls).toBe(n);
+      expect(f.state === "waiting").toBe(n > 0);
+      expect(frameName(f).endsWith(`, ${n} for you`)).toBe(n > 0);
+    }
   });
 });
 

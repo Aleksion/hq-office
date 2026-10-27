@@ -56,6 +56,11 @@ export const FACTS = {
   // (an issue and a pull request, both on its owner's lane too), a brief and one thing on its shelf.
   rooms: { hq: ["release", "web-fix"], fin: ["recon"], sales: ["pipeline", "outbound"] },
   roomStates: { release: "waiting", "web-fix": "blocked", recon: "stalled", pipeline: "moving", outbound: "waiting" } as Record<string, string>,
+  // The questions that name each project (`, N for you` on its frame, the count tag, RUNDOWN's tag and the panel's OPEN CALLS).
+  // A project turns red only for these. "The pipeline moved" is asked by sales-pm, a member of `outbound`, and names no room:
+  // it is in the open count and nowhere on a frame.
+  roomCalls: { release: 1, "web-fix": 0, recon: 0, pipeline: 0, outbound: 1 } as Record<string, number>,
+  unnamed: ["sales-pm", "The pipeline moved"],
   // The briefs the fixture pins, by project. The others have none, and RUNDOWN shows them without one.
   briefs: { release: "Cut the branch, tag it, and tell the owner when the checks are green.", recon: "Close March: match every invoice to a payment, then list what is left.", pipeline: "Review the open deals and name the three that need the owner." } as Record<string, string>,
   release: { title: "Ship the release", owner: "hq-pm", members: ["hq-api", "hq-web"], issue: "REL-1", pr: "acme-example/app#12", shelf: "Release checklist" },
@@ -115,12 +120,7 @@ async function openOffice(opts: { general?: boolean; frame?: boolean }, data: st
   for (const l of lanes) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.name, ...(l.issue ? { issue: l.issue, pr: l.pr } : {}) });
   // Parents first in the lists above, so each parent is registered before its reports.
   const ask = (lane: string | null, kind: string, title: string, extra: object = {}) => post("/api/asks", { lane, kind, title, ...extra });
-  await ask("hq-pm", "decision", FACTS.asks.hq[1], { body: "Two ways to go.", options: ["Ship it", "Hold"], recommended: "Ship it" });
-  await ask("hq-ops", "action", "Approve the vendor contract");
-  await ask(null, "info", "The weekly numbers are in");
-  await post("/api/updates", { lane: "hq-pm", title: "The release branch is cut", body: "Tests are green." });
-  await post("/api/updates", { lane: null, title: "Nothing is on fire" });
-  await post("/api/notes", { text: "Keep going." });
+  // The rooms come first: a question names its room only if the room is open.
   const R = FACTS.release;
   await post("/api/rooms", { slug: "release", title: R.title, owner: R.owner, members: R.members, issues: [R.issue], prs: [R.pr] });
   await post("/api/rooms/release/brief", { body: FACTS.briefs.release });
@@ -132,9 +132,17 @@ async function openOffice(opts: { general?: boolean; frame?: boolean }, data: st
     await post("/api/rooms", { slug: "pipeline", title: "Pipeline review", owner: "sales-lead" });
     await post("/api/rooms/pipeline/brief", { body: FACTS.briefs.pipeline });
     await post("/api/rooms", { slug: "outbound", title: "Outbound calls", owner: "sales-outb", members: ["sales-pm"] });
+  }
+  await ask("hq-pm", "decision", FACTS.asks.hq[1], { body: "Two ways to go.", options: ["Ship it", "Hold"], recommended: "Ship it", room: "release" });
+  await ask("hq-ops", "action", "Approve the vendor contract");
+  await ask(null, "info", "The weekly numbers are in");
+  await post("/api/updates", { lane: "hq-pm", title: "The release branch is cut", body: "Tests are green." });
+  await post("/api/updates", { lane: null, title: "Nothing is on fire" });
+  await post("/api/notes", { text: "Keep going." });
+  if (general) {
     await ask("fin-audit", "decision", FACTS.asks.fin[1], { options: ["Yes", "No"], recommended: "Yes" });
-    await ask("sales-outb", "decision", FACTS.asks.sales[1], { options: ["I take it", "Hand it over"], recommended: "Hand it over" });
-    await ask("sales-pm", "info", "The pipeline moved");
+    await ask("sales-outb", "decision", FACTS.asks.sales[1], { options: ["I take it", "Hand it over"], recommended: "Hand it over", room: "outbound" });
+    await ask(FACTS.unnamed[0], "info", FACTS.unnamed[1]);
     await post("/api/updates", { lane: "fin-books", title: "March is reconciled", body: "Two invoices are left." });
     await post("/api/updates", { lane: "sales-pm", title: "Two calls booked" });
   }

@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { on } from "../../src/client/core/bus.js";
 import { closePanel, openPanel, showPanel } from "../../src/client/core/panel.js";
-import { briefExcerpt, escapeAction, rundown } from "../../src/client/core/floors.js";
+import { briefExcerpt, escapeAction, frames, projectView, rundown } from "../../src/client/core/floors.js";
 
 const lane = (name: string, status: string, floor: string, extra: object = {}) => ({ name, floor, heads: false, status, title: name, ...extra });
 const room = (slug: string, owner: string, createdAt: number, extra: object = {}) => ({ slug, title: slug.toUpperCase(), owner, members: [], issues: [], prs: [], createdAt, archivedAt: null, ...extra });
@@ -14,7 +14,9 @@ const S: any = {
     lane("fin", "hq_turn", "fin", { heads: true }), lane("recon", "stale", "fin"),
     lane("sales", "hq_turn", "sales", { heads: true }), lane("outb", "needs_you", "sales"), lane("lead", "moving", "sales"),
   ],
-  open: [{ id: 1, lane: "outb", title: "Take the call?", created_at: 5 }],
+  // outb's second question names no room, so it is not the project's; lead's names "pipeline" but is deferred.
+  open: [{ id: 1, lane: "outb", room: "outbound", title: "Take the call?", created_at: 5 }, { id: 2, lane: "outb", room: null, title: "Unnamed", created_at: 6 }],
+  deferred: [{ id: 3, lane: "lead", room: "pipeline", title: "Later", created_at: 7 }],
   rooms: [
     room("release", "pm", 1, { last: { id: 4, at: 8, who: "pm", to: null, text: "Branch cut." }, lastAt: 8 }), room("web-fix", "web", 2),
     room("recon", "recon", 3), room("old", "recon", 4, { archivedAt: 9 }),
@@ -32,17 +34,28 @@ describe("RUNDOWN's entries", () => {
     expect(r.map((f: any) => f.projects.map((p: any) => p.slug))).toEqual([["release", "web-fix"], ["recon"], ["pipeline", "outbound"]]);
   });
 
-  test("a project carries its state, owner and brief, and no count of questions; one with no brief has none", () => {
+  test("a project carries its state, owner, open calls and brief; one with no brief has none", () => {
     const r = rundown(S, ALL, BRIEFS);
     const by = Object.fromEntries(r.flatMap((f: any) => f.projects).map((p: any) => [p.slug, p]));
-    expect(by.release).toMatchObject({ title: "RELEASE", owner: "pm", state: "moving", name: "MOVING", brief: "Cut the branch. Tag it." });
+    expect(by.release).toMatchObject({ title: "RELEASE", owner: "pm", state: "moving", name: "MOVING", calls: 0, brief: "Cut the branch. Tag it." });
     expect(by["web-fix"]).toMatchObject({ state: "blocked", brief: null });
     expect(by.recon).toMatchObject({ state: "stalled", brief: "Close March." });
-    expect(by.outbound).toMatchObject({ state: "waiting", brief: null });
-    expect(Object.keys(by.outbound).sort()).toEqual(["at", "brief", "color", "last", "name", "owner", "slug", "state", "title"]); // nothing else, so no count by any name
+    expect(by.outbound).toMatchObject({ state: "waiting", calls: 1, brief: null });
+    expect(by.pipeline).toMatchObject({ state: "moving", calls: 0 }); // a deferred question is not counted
+    expect(Object.keys(by.outbound).sort()).toEqual(["at", "brief", "calls", "color", "last", "name", "owner", "slug", "state", "title"]);
     expect(by.pipeline.brief).toBeNull(); // not fetched yet: nothing stands in for it
     expect(by.release).toMatchObject({ last: { who: "pm", to: null, text: "Branch cut." }, at: 8 });
     expect(by["web-fix"]).toMatchObject({ last: null, at: 2 }); // no thread yet: it moved when it was made
+  });
+
+  test("a frame, RUNDOWN and the project panel give a project the same number of questions", () => {
+    const more = { ...S, open: [...S.open, { id: 4, lane: null, room: "outbound", title: "From HQ", created_at: 9 }, { id: 5, lane: "lead", room: "pipeline", title: "Pipeline?", created_at: 9 }] };
+    const rundownCalls = Object.fromEntries(rundown(more, ALL, {}).flatMap((f: any) => f.projects).map((p: any) => [p.slug, p.calls]));
+    const frameCalls = Object.fromEntries(["hq", "fin", "sales"].flatMap((f) => frames(more, f)).map((f: any) => [f.slug, f.calls]));
+    const panelCalls = Object.fromEntries(Object.keys(rundownCalls).map((slug) => [slug, projectView(more, {}, slug)!.calls.length]));
+    expect(rundownCalls).toEqual({ release: 0, "web-fix": 0, recon: 0, pipeline: 1, outbound: 2 });
+    expect(frameCalls).toEqual(rundownCalls);
+    expect(panelCalls).toEqual(rundownCalls);
   });
 
   test("a floor lists who needs help there, worst first, and its general only when it is not simply idle", () => {

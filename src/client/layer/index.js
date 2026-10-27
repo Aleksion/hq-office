@@ -73,7 +73,7 @@ function draw(L) {
   const sprites = floor.positions(), at = new Map(sprites.map((p) => [p.name, p]));
   const agents = marked.map((m) => ({ ...m, ...(m.head ? TERMINAL : at.get(m.lane)) })).filter((m) => m.sx !== undefined);
   const marks = placeMarks({ agents, sprites, labels: floor.labels(), zoomedIn });
-  const key = JSON.stringify([live, wall.map((f) => [f.slug, f.title, f.state]), marks.map((m) => [m.lane, m.state, m.box.x, m.box.y])]);
+  const key = JSON.stringify([live, wall.map((f) => [f.slug, f.title, f.state, f.calls]), marks.map((m) => [m.lane, m.state, m.box.x, m.box.y])]);
   if (key === L.key) return;
   L.key = key;
   const g = L.ovl.getContext("2d"), k = L.ovl.width / RW;
@@ -87,7 +87,7 @@ function draw(L) {
   const buttons = !live ? [] : [
     ...wall.map((f) => {
       const name = frameName(f);
-      return { box: frameBox(f), html: `<button class="hit frame" type="button" data-project="${esc(f.slug)}" aria-label="${esc(name)}" title="${esc(name)}"></button>` };
+      return { box: frameBox(f), html: `<button class="hit frame" type="button" data-project="${esc(f.slug)}" aria-label="${esc(name)}" title="${esc(name)}">${f.calls ? `<span class="tag count">${f.calls}</span>` : ""}</button>` };
     }),
     ...marks.map((m) => {
       const name = `${m.lane}: ${HELP_NAMES[m.state]}`;

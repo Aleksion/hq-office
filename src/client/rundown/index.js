@@ -35,7 +35,7 @@ const briefs = briefLoader(async (slug) => {
 
 const dots = (help) => help.map((h) => `<i class="dot" style="background:${HELP_COLORS[h.state]}" title="${esc(h.lane)}"></i>`).join("");
 const lastLine = (l) => `<p class="rlast"><b>${l.who === "owner" ? `YOU → ${esc(l.to)}` : esc(l.who)}</b> ${esc(l.text)}</p>`;
-const project = (p) => `<div class="rproj"><div class="rhead"><b>${esc(p.title)}</b><span class="tag st" style="background:${p.color}">${esc(p.name)}</span><span class="tag lane">${esc(p.owner)}</span><span class="timer" data-since="${p.at}"></span></div>${p.last ? lastLine(p.last) : ""}${p.brief ? `<p class="rbrief">${esc(p.brief)}</p>` : ""}<div class="racts"><button class="btn" type="button" data-project="${esc(p.slug)}">PROJECT</button><a class="btn go" href="#room/${esc(p.slug)}">ROOM</a></div></div>`;
+const project = (p) => `<div class="rproj"><div class="rhead"><b>${esc(p.title)}</b><span class="tag st" style="background:${p.color}">${esc(p.name)}</span>${p.calls ? `<span class="tag count">${p.calls} OPEN CALL${p.calls > 1 ? "S" : ""}</span>` : ""}<span class="tag lane">${esc(p.owner)}</span><span class="timer" data-since="${p.at}"></span></div>${p.last ? lastLine(p.last) : ""}${p.brief ? `<p class="rbrief">${esc(p.brief)}</p>` : ""}<div class="racts"><button class="btn" type="button" data-project="${esc(p.slug)}">PROJECT</button><a class="btn go" href="#room/${esc(p.slug)}">ROOM</a></div></div>`;
 
 function render() {
   room.classList.toggle("rundown-open", open);

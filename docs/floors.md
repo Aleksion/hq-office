@@ -55,8 +55,15 @@ lives in a `.scene` with the layer beside it, with one floor too: that is the on
   spot clear of every name label, sprite, bubble, wall piece and other marker (`layer/place.js`; the label boxes come from
   `room/scene.js` `labelBox`, which measures them the way `drawLabel` draws them). With no clear spot there is no marker.
 - **Frames** (`floorRooms`, `projectState`): each open project (a conference room) hangs on the wall of its owner's
-  floor, oldest first, at most seven, coloured by its state: a question of its lanes waits on you, blocked, stalled, CI
-  running, else moving. There is no progress bar because there is no progress data.
+  floor, oldest first, at most seven, coloured by its state: a question about the project waits on you, blocked,
+  stalled, CI running, else moving. There is no progress bar because there is no progress data.
+- **A project's questions** (`roomCalls`) are the open questions that name its room (`hud ask --room SLUG`); a deferred
+  question is not counted, and a question of the room's lanes that names no room is not the project's. The frame
+  (`, N for you` in its name and a count tag), RUNDOWN (`N OPEN CALLS`) and the project panel (OPEN CALLS) all count with
+  this one function. Red means "a question about this project waits on you": `projectState` counts waiting only from
+  `roomCalls` and from linked work waiting on the owner (`BOARD_STATE.owner`), so a room lane waiting on you without a
+  question that names the room leaves the frame its other state (the NEED HELP strip and the markers still show the
+  lane). Blocked, stalled and CI still come from the room's lanes and the board.
 - **Buttons.** Zoomed in, a marker is a button that chooses its agent and a frame is a button for its project. Zoomed
   out, a click anywhere on a floor zooms in, so the layer is a picture only.
 - **NEED HELP** (`help/`, `helpStrip`) is a strip between the floor and the worker card: the agents in scope that need
@@ -68,7 +75,8 @@ lives in a `.scene` with the layer beside it, with one floor too: that is the on
 ## Projects, links and the way into rooms
 
 A frame on the wall, a question's PROJECT tag or `showPanel("project", { slug })` opens the project panel (`project/`,
-`projectView`) over the room, in the accounts panel's pattern: its state, ROOM, PULL REQUESTS with their board state, ARTIFACTS (fetched from `GET /api/rooms/<slug>`) and
+`projectView`) over the room, in the accounts panel's pattern: its state, OPEN CALLS (a click chooses the agent and
+closes the panel), ROOM, PULL REQUESTS with their board state, ARTIFACTS (fetched from `GET /api/rooms/<slug>`) and
 WHO IS ON IT. Panels over the room take turns through `core/panel.js` and the `"panel"` bus event: opening one closes
 the other, and Escape closes the open panel before it steps the scope out (`escapeAction`).
 

@@ -136,20 +136,20 @@ for (const [width, height] of SIZES) {
   const frameLabels = (id: string) => ev(`[...document.querySelectorAll('.layer[data-floor="${id}"] .hit.frame')].map((b) => b.getAttribute("aria-label"))`) as Promise<string[]>;
   const panelHeads = () => ev(`[...document.querySelectorAll("#projectPanel .pgrp h3")].map((h) => h.textContent)`);
 
-  test.skipIf(!chromeFound)(`${at}: each frame names its project and state, and a frame opens the project panel without hiding a question`, async () => {
+  test.skipIf(!chromeFound)(`${at}: each frame names its project, state and the questions about it, and a frame opens the project panel without hiding a question`, async () => {
     await open(general.base, width, height);
     await until(`document.querySelectorAll(".building .tile").length === 3`);
     await click(`.tile[data-floor="hq"] .tlabel`);
     await until(`document.querySelectorAll('.layer[data-floor="hq"] .hit.frame').length === 2`);
-    expect(await frameLabels("hq")).toEqual(["Ship the release: WAITING ON YOU", "Fix the web build: BLOCKED AT A PROMPT"]);
-    expect(await ev(`document.querySelectorAll(".layer .hit.frame .count").length`)).toBe(0);
+    expect(await frameLabels("hq")).toEqual(["Ship the release: WAITING ON YOU, 1 for you", "Fix the web build: BLOCKED AT A PROMPT"]);
+    // the count tag is on the counted frame alone, and says the same number as the name
+    expect(await ev(`[...document.querySelectorAll('.layer[data-floor="hq"] .hit.frame')].map((b) => b.querySelector(".tag.count")?.textContent ?? null)`)).toEqual([String(FACTS.roomCalls.release), null]);
     await click(`.layer[data-floor="hq"] .hit.frame[data-project="release"]`);
     await until(`!!document.querySelector("#projectPanel h2")`);
     expect(await ev(`document.querySelector("#projectPanel h2").textContent`)).toBe(FACTS.release.title);
     expect(await ev(`document.querySelector("#projectPanel .tag.st").textContent`)).toBe("WAITING ON YOU");
     await until(`document.querySelectorAll("#projectPanel .shelfc").length === 1`);
-    expect(await panelHeads()).toEqual(["ROOM", "PULL REQUESTS · 1", "ARTIFACTS · 1", "WHO IS ON IT"]);
-    expect(await ev(`document.querySelectorAll("#projectPanel button.lrow, #projectPanel .count").length`)).toBe(0);
+    expect(await panelHeads()).toEqual(["OPEN CALLS · 1", "ROOM", "PULL REQUESTS · 1", "ARTIFACTS · 1", "WHO IS ON IT"]);
     expect(await ev(`[...document.querySelectorAll("#projectPanel .pgrp:last-child .lrow b")].map((b) => b.textContent)`)).toEqual([FACTS.release.owner, ...FACTS.release.members]);
     expect(await ev(`document.querySelector("#projectPanel a.btn").getAttribute("href")`)).toBe("#room/release");
     expect(await ev(`document.querySelector("#projectPanel .shelfc").textContent`)).toContain(FACTS.release.shelf);
@@ -157,13 +157,16 @@ for (const [width, height] of SIZES) {
     expect(await ev(`(() => { const p = document.getElementById("projectPanel").getBoundingClientRect(), r = document.querySelector(".room").getBoundingClientRect(), h = document.getElementById("hud").getBoundingClientRect(); const apart = r.left >= h.right - 1 || r.top >= h.bottom - 1; return p.left >= r.left - 1 && p.right <= r.right + 1 && apart; })()`)).toBe(true);
     expect(await ev(`document.querySelectorAll("#hud .ask").length`)).toBe(FACTS.waiting.hq);
     expect(await ev(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
-    await click(`#projectPanel [data-project-close]`);
+    // an open call chooses its agent and gets the panel out of the way of the question
+    await click(`#projectPanel .pgrp button.lrow`);
     await until(`!document.querySelector("#projectPanel h2")`);
+    expect(await scopeOf()).toMatchObject({ floor: "hq", agent: "hq-pm" });
     // the other floor's frames
     await click(".stagebar [data-building]");
     await click(`.tile[data-floor="sales"] .tlabel`);
     await until(`document.querySelectorAll('.layer[data-floor="sales"] .hit.frame').length === 2`);
-    expect(await frameLabels("sales")).toEqual(["Pipeline review: MOVING", "Outbound calls: WAITING ON YOU"]);
+    expect(await frameLabels("sales")).toEqual(["Pipeline review: MOVING", "Outbound calls: WAITING ON YOU, 1 for you"]);
+    expect(await ev(`[...document.querySelectorAll('.layer[data-floor="sales"] .hit.frame')].map((b) => b.querySelector(".tag.count")?.textContent ?? null)`)).toEqual([null, String(FACTS.roomCalls.outbound)]);
   }, 60_000);
 
   test.skipIf(!chromeFound)(`${at}: panels over the room take turns, and Escape closes the panel before the scope`, async () => {
