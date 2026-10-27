@@ -48,7 +48,7 @@ export function updateAsk(id: number, body: any) {
     if (body[f] === undefined) continue;
     let v: string | null;
     if (f === "options") {
-      const opts = (Array.isArray(body.options) ? body.options : [body.options]).map(String).filter(Boolean);
+      const opts = (Array.isArray(body.options) ? body.options : [body.options]).map((o: unknown) => String(o).trim()).filter(Boolean);
       v = opts.length ? JSON.stringify(opts) : null;
     } else v = String(body[f]).trim() || null;
     if (f === "title" && !v) throw new Error("title cannot be empty");

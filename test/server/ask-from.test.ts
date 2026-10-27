@@ -31,3 +31,9 @@ test("--from must name a lane HQ knows: a typo is refused, not shown as handed i
   expect(r.err).toContain("no lane named biling-lead");
   expect((await o.state()).open.map((q: any) => q.title)).not.toContain("From a typo");
 });
+
+test("--from hq is no handoff: HQ files its own questions", async () => {
+  const r = await hud("ask", "--title", "From HQ itself", "--from", "hq");
+  expect(r.code).toBe(0);
+  expect((await o.state()).open.find((q: any) => q.title === "From HQ itself").handed_by).toBeNull();
+});

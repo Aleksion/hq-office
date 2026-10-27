@@ -7,13 +7,16 @@ import type { Ask } from "./types.ts";
 import { bump, secrets } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
+import { underHq } from "../lane-tree.ts";
 
 // The owner's rule (#242): every ask carries the agent's pick and why. A decision with options and no --rec, or a --rec
 // that is not one of its options, is refused (either way the owner would see no HQ PICK), with the command to send
 // instead. The why has no field of its own: it goes in the body, and is not checked. The rule is for what agents file,
 // so the routes behind hud ask and hud update apply it; the server's own questions (claude-accounts.ts) have no agent to
 // pick.
-const q = (v: string) => JSON.stringify(v);
+// Shell-quoted, so a line copied from a refusal passes each value as it was: single quotes keep newlines, $ and backticks
+// literal (double quotes would expand $HOME and run a backticked command); a ' inside is closed, escaped and reopened.
+const q = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
 const listOf = (v: unknown) => (v == null ? [] : Array.isArray(v) ? v : [v]).map((o) => String(o).trim()).filter(Boolean);
 const hhmm = (at: number) => { const d = new Date(at); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 type Fix = { how: string; example: string };
@@ -57,15 +60,27 @@ export function refuseMissingPickAfter(id: number, body: any) {
   const options = listOf(body.options !== undefined ? body.options : JSON.parse(ask.options ?? "[]"));
   refuse(ask.kind, options, body.recommended !== undefined ? body.recommended : ask.recommended, (pick) => ({
     how: `set --rec on question ${id} to the option you recommend, and say why with hud comment`,
-    example: `hud update ${id} ${body.options !== undefined ? options.map((o) => `--opt ${q(o)} `).join("") : ""}--rec ${q(pick)} && hud comment ${id} ${q(`I recommend ${pick} because ...`)}`,
+    // Nothing of the refused edit was applied, so the example carries all of it again, with the pick added.
+    example: [
+      `hud update ${id}`,
+      body.title !== undefined ? `--title ${q(String(body.title))}` : "",
+      body.body !== undefined ? `--body ${q(String(body.body))}` : "",
+      ...(body.options !== undefined ? options.map((o) => `--opt ${q(o)}`) : []),
+      `--rec ${q(pick)}`,
+      body.link !== undefined ? `--link ${q(String(body.link))}` : "",
+      body.lane !== undefined ? `--lane ${q(String(body.lane))}` : "",
+      `&& hud comment ${id} ${q(`I recommend ${pick} because ...`)}`,
+    ].filter(Boolean).join(" "),
   }));
 }
 
-// hud ask --from LANE: the lane that handed the question in must be one HQ knows, as --as is for a comment.
+// hud ask --from LANE: the lane that handed the question in must be one HQ knows, as --as is for a comment. HQ files its
+// own questions, so --from hq is no handoff.
 function handedBy(from: unknown) {
-  const lane = String(from ?? "").trim();
-  if (lane && !db.query("SELECT 1 FROM lanes WHERE name = ?").get(lane)) throw new Error(`no lane named ${lane}: --from names the lane that handed the question in`);
-  return lane || null;
+  if (underHq(from)) return null;
+  const lane = String(from).trim();
+  if (!db.query("SELECT 1 FROM lanes WHERE name = ?").get(lane)) throw new Error(`no lane named ${lane}: --from names the lane that handed the question in`);
+  return lane;
 }
 
 export function createAsk(body: any) {
@@ -79,8 +94,8 @@ export function createAsk(body: any) {
       body.kind ?? "decision",
       body.title,
       body.body ?? null,
-      body.options?.length ? JSON.stringify(body.options) : null,
-      body.recommended ?? null,
+      listOf(body.options).length ? JSON.stringify(listOf(body.options)) : null, // stored as compared: trimmed
+      String(body.recommended ?? "").trim() || null,
       body.link ?? null,
       body.due ?? null,
       body.created_at ?? Date.now(),
