@@ -15,8 +15,6 @@
 .pgrp h3 { margin: 0; font: 8px/1 var(--pixel); color: var(--muted); }
 .pgrp .btn.go { justify-self: start; min-height: 36px; text-decoration: none; }
 .pgrp .lrow { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 150px) auto; gap: 4px 10px; align-items: center; width: 100%; padding: 5px 8px; border: 2px solid #e2e2ee; border-radius: 6px; background: #fff; text-align: left; font-size: 13px; color: inherit; }
-.pgrp button.lrow { cursor: pointer; }
-.pgrp button.lrow:hover { border-color: var(--edge-2); }
 .pgrp .lrow b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
 .pgrp .lrow .d { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #3a3a52; }
 .pgrp .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; box-shadow: 0 0 0 2px var(--ink); }

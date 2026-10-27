@@ -74,7 +74,8 @@ export async function startFloors(opts: { general?: boolean; frame?: boolean } =
   chmodSync(gh, 0o755);
   writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[${agents}]}}' ;;\n  *"pane read w1:p${blocked}"*) cat "${data}/pane.txt" ;;\nesac\nexit 0\n`);
   chmodSync(herdr, 0o755);
-  const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_GH_BIN: gh, HUD_OWNER: "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq" };
+  const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_GH_BIN: gh, HUD_OWNER: "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", HOME: data };
+  // HOME is the data dir too, so nothing done on the page (making an account's home) reaches the real one.
   // The frame's office is on two machines, with stand-ins for what the server reads there.
   if (opts.frame) {
     const stubs = frameStubs(data, join(data, "pane.txt"));
@@ -84,10 +85,16 @@ export async function startFloors(opts: { general?: boolean; frame?: boolean } =
   const { base } = server;
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
   const stop = async () => { await server.stop(); rmSync(data, { recursive: true, force: true }); };
+  // FACTS describe the default office, not the frame's: frame mode returns none.
   if (opts.frame) {
-    for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: l.machine, title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });
-    await seedFrame(post, data, base);
-    return { base, post, facts: FACTS, stop };
+    try {
+      for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: l.machine, title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });
+      await seedFrame(post, data, base);
+    } catch (e) {
+      await stop(); // no server left listening and no data dir left behind
+      throw e;
+    }
+    return { base, post, stop };
   }
 
   for (const l of lanes) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.name, ...(l.issue ? { issue: l.issue, pr: l.pr } : {}) });
@@ -120,6 +127,7 @@ export async function startFloors(opts: { general?: boolean; frame?: boolean } =
   if (general) {
     // The stalled lane: idle in herdr for longer than the server's 15 minutes. Only this fixture's own throwaway database.
     const db = new Database(join(data, "hud.db"));
+    db.exec("PRAGMA busy_timeout = 5000;"); // the server may still be writing after the sync
     db.query("UPDATE lanes SET herdr_since = ? WHERE name = ?").run(Date.now() - 40 * 60_000, FACTS.stalled);
     db.close();
     await post("/api/lanes", { name: FACTS.stalled, note: "waiting for a reply" }); // a write, so the page's next state carries it

@@ -1,5 +1,5 @@
 // RUNDOWN: a brief the owner can go to. A button in the stage bar opens a panel over the room that lists, for each floor in
-// scope, who needs help there and each open project with its state, owner, open calls, last line, time and brief (core/floors.js rundown).
+// scope, who needs help there and each open project with its state, owner, last line, time and brief (core/floors.js rundown).
 // The briefs are fetched when the panel opens, for the projects that have one. It takes turns with the other panels over the
 // room ("panel"), and Escape, its button or BACK TO THE ROOM close it. It never covers the questions.
 import { on } from "../core/bus.js";

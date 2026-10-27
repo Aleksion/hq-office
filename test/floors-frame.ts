@@ -204,6 +204,7 @@ export async function seedFrame(post: Post, data: string, base: string) {
   // would hang by name), each Claude lane is on its account, the stalled lanes have been idle 40 minutes, and the question that came back from a deferral came
   // back a minute ago.
   const db = new Database(join(data, "hud.db"));
+  db.exec("PRAGMA busy_timeout = 5000;"); // the server may still be writing after the sync
   DATA.PROJECTS.forEach((p: any, i: number) => db.query("UPDATE rooms SET created_at = ? WHERE slug = ?").run(now - (DATA.PROJECTS.length - i) * MIN, p.id));
   for (const l of frameLanes().filter((l) => l.stalled)) db.query("UPDATE lanes SET herdr_since = ? WHERE name = ?").run(now - 40 * MIN, l.name);
   for (const l of frameLanes().filter((l) => l.account !== "codex")) db.query("INSERT INTO lane_accounts (lane, account, moved_at) VALUES (?, ?, ?)").run(l.name, l.account, now);
@@ -215,7 +216,9 @@ export async function seedFrame(post: Post, data: string, base: string) {
 // What the prototype's owner sent, newest first (its SENT, beside the data block): time, to whom, the text.
 const SENT = [["17:31", "HQ", "Where are we with the meetings?"], ["16:40", "SALES", "Fund A first. Anything that blocks their paid decision goes to HQ today."], ["14:02", "PEOPLE", "Hold the founding engineer role open until I’ve seen the three."]];
 
-// The prototype's data block, as its page evaluates it (generated from snap-f8b/floors.html; do not edit by hand).
+// The prototype's data block, as its page evaluates it: made by running snap-f8b/floors.html's script from `const NOW` up to
+// `const SENT` and printing NOW, FLOORS, LANES, PROJECTS, RICH, EXTRA, DEFERRED, ANSWERED, ROOMS and UPDATES as JSON. Remake it
+// the same way rather than editing it by hand.
 const DATA: any = {
  "NOW": 1060,
  "FLOORS": {

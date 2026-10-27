@@ -39,7 +39,7 @@ describe("RUNDOWN's entries", () => {
     expect(by["web-fix"]).toMatchObject({ state: "blocked", brief: null });
     expect(by.recon).toMatchObject({ state: "stalled", brief: "Close March." });
     expect(by.outbound).toMatchObject({ state: "waiting", brief: null });
-    expect(Object.values(by).some((p: any) => "calls" in p)).toBe(false);
+    expect(Object.keys(by.outbound).sort()).toEqual(["at", "brief", "color", "last", "name", "owner", "slug", "state", "title"]); // nothing else, so no count by any name
     expect(by.pipeline.brief).toBeNull(); // not fetched yet: nothing stands in for it
     expect(by.release).toMatchObject({ last: { who: "pm", to: null, text: "Branch cut." }, at: 8 });
     expect(by["web-fix"]).toMatchObject({ last: null, at: 2 }); // no thread yet: it moved when it was made

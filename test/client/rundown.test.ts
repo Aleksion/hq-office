@@ -1,5 +1,5 @@
 // RUNDOWN, in Chrome, at 1440 and 390: the button in the stage bar opens a panel over the room that lists each floor's
-// projects with their state, owner, open calls and brief; a scope lists one floor; it takes turns with the other panels;
+// projects with their state, owner and brief, and no count of questions; a scope lists one floor; it takes turns with the other panels;
 // Escape closes it before the scope; it never covers or pushes away an open question. On an office with one floor the
 // bar holds RUNDOWN alone. Needs Chrome (CHROME_BIN); skipped without it. Written for the other machine's Chrome run.
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -56,7 +56,7 @@ afterAll(async () => {
 for (const [width, height] of SIZES) {
   const at = `${width}`;
 
-  test.skipIf(!chromeFound)(`${at}: RUNDOWN is closed until opened, then lists every floor's projects with state, owner, open calls and brief`, async () => {
+  test.skipIf(!chromeFound)(`${at}: RUNDOWN is closed until opened, then lists every floor's projects with state, owner and brief, and no count`, async () => {
     await open(general.base, width, height);
     await until(`document.querySelectorAll("#hud .ask").length === ${Object.values(FACTS.waiting).reduce((a, b) => a + b, 0)}`);
     expect(await panelOpen()).toBe(false);

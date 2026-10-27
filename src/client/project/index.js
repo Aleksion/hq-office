@@ -1,6 +1,6 @@
-// The project panel: one project (a conference room) as a glance, over the room in the accounts panel's place. Its state, the
-// questions of its lanes that wait on you, a way into its room, its pull requests with their board state, what is on its
-// shelf, and who is on it. A frame on the wall, a question's PROJECT tag or a link opens it ("panel", "project", { slug });
+// The project panel: one project (a conference room) as a glance, over the room in the accounts panel's place. Its state, a way
+// into its room, its pull requests with their board state, what is on its shelf, and who is on it. A frame on the wall, a
+// question's PROJECT tag or a link opens it ("panel", "project", { slug });
 // another panel opening, Escape or BACK TO THE ROOM closes it. It never covers the questions.
 import { emit, on } from "../core/bus.js";
 import { CONFIG, S } from "../core/state.js";
