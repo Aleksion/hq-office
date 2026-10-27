@@ -17,6 +17,9 @@
 .rhead { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; min-width: 0; }
 .rhead b { min-width: 0; overflow-wrap: anywhere; font-weight: 800; font-size: 13px; }
 .rhead .tag.st { color: #fff; }
+.rhead .timer { margin-left: auto; font: 8px/1 var(--pixel); color: var(--muted); }
+.rlast { margin: 0; font-size: 13px; color: #3a3a52; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rlast b { margin-right: 4px; font: 7px/1 var(--pixel); color: var(--ink); }
 .rbrief { margin: 0; color: #3a3a52; font: 13px/1.4 var(--text); overflow-wrap: anywhere; }
 .racts { display: flex; gap: 8px; flex-wrap: wrap; }
 .racts .btn { min-height: 36px; text-decoration: none; }

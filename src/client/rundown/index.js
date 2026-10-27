@@ -1,5 +1,5 @@
 // RUNDOWN: a brief the owner can go to. A button in the stage bar opens a panel over the room that lists, for each floor in
-// scope, who needs help there and each open project with its state, owner, open calls and brief (core/floors.js rundown).
+// scope, who needs help there and each open project with its state, owner, open calls, last line, time and brief (core/floors.js rundown).
 // The briefs are fetched when the panel opens, for the projects that have one. It takes turns with the other panels over the
 // room ("panel"), and Escape, its button or BACK TO THE ROOM close it. It never covers the questions.
 import { on } from "../core/bus.js";
@@ -7,7 +7,7 @@ import { S } from "../core/state.js";
 import { closePanel, showPanel } from "../core/panel.js";
 import { view } from "../core/scope.js";
 import { HELP_COLORS, floorTagShown, rundown } from "../core/floors.js";
-import { esc, setHTML } from "../core/format.js";
+import { dur, esc, setHTML } from "../core/format.js";
 
 const room = document.querySelector(".room");
 const panel = document.createElement("section");
@@ -42,7 +42,8 @@ async function fetchBrief(slug, rev) {
 }
 
 const dots = (help) => help.map((h) => `<i class="dot" style="background:${HELP_COLORS[h.state]}" title="${esc(h.lane)}"></i>`).join("");
-const project = (p) => `<div class="rproj"><div class="rhead"><b>${esc(p.title)}</b><span class="tag st" style="background:${p.color}">${esc(p.name)}</span>${p.calls ? `<span class="tag count">${p.calls} OPEN CALL${p.calls > 1 ? "S" : ""}</span>` : ""}<span class="tag lane">${esc(p.owner)}</span></div>${p.brief ? `<p class="rbrief">${esc(p.brief)}</p>` : ""}<div class="racts"><button class="btn" type="button" data-project="${esc(p.slug)}">PROJECT</button><a class="btn go" href="#room/${esc(p.slug)}">ROOM</a></div></div>`;
+const lastLine = (l) => `<p class="rlast"><b>${l.who === "owner" ? `YOU → ${esc(l.to)}` : esc(l.who)}</b> ${esc(l.text)}</p>`;
+const project = (p) => `<div class="rproj"><div class="rhead"><b>${esc(p.title)}</b><span class="tag st" style="background:${p.color}">${esc(p.name)}</span>${p.calls ? `<span class="tag count">${p.calls} OPEN CALL${p.calls > 1 ? "S" : ""}</span>` : ""}<span class="tag lane">${esc(p.owner)}</span><span class="timer" data-since="${p.at}">${dur(Date.now() - p.at)}</span></div>${p.last ? lastLine(p.last) : ""}${p.brief ? `<p class="rbrief">${esc(p.brief)}</p>` : ""}<div class="racts"><button class="btn" type="button" data-project="${esc(p.slug)}">PROJECT</button><a class="btn go" href="#room/${esc(p.slug)}">ROOM</a></div></div>`;
 
 function render() {
   room.classList.toggle("rundown-open", open);
