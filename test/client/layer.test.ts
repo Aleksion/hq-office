@@ -66,9 +66,9 @@ afterAll(async () => {
 
 for (const [width, height] of SIZES) {
   const at = `${width}`;
-  // Who needs help, by floor, worst first. The generals are idle in herdr with nothing asked of them, which the page reads
-  // as waiting on HQ, so each head is marked at its terminal.
-  const MARKS = { hq: [FACTS.blocked, "hq-ops"], fin: [FACTS.stalled, "fin"], sales: ["sales-outb", "sales"] } as Record<string, string[]>;
+  // Who needs help, by floor, worst first. The generals are idle in herdr with nothing asked of them: waiting on HQ, a
+  // general's normal state, so neither is marked at its terminal (core/floors.js generalNeedsHelp).
+  const MARKS = { hq: [FACTS.blocked, "hq-ops"], fin: [FACTS.stalled], sales: ["sales-outb"] } as Record<string, string[]>;
 
   test.skipIf(!chromeFound)(`${at}: zoomed out, every floor hangs its projects and marks everyone who needs help, with no buttons`, async () => {
     await open(general.base, width, height);
@@ -97,7 +97,7 @@ for (const [width, height] of SIZES) {
     const frame = await ev(`document.querySelector('.layer[data-floor="fin"] .hit.frame').getAttribute("aria-label")`);
     expect(frame).toBe("Reconcile March: STALLED");
     // zoomed in a worker waiting on you keeps main's own "!" and gets no second sign: only blocked and stalled are marked
-    expect(await ev(`[...document.querySelectorAll('.layer[data-floor="fin"] .hit.agent')].map((b) => b.dataset.state + ":" + b.dataset.select)`)).toEqual([`stalled:${FACTS.stalled}`, "hq:fin"]);
+    expect(await ev(`[...document.querySelectorAll('.layer[data-floor="fin"] .hit.agent')].map((b) => b.dataset.state + ":" + b.dataset.select)`)).toEqual([`stalled:${FACTS.stalled}`]);
     expect((await ev(KEEP_OFF("fin"))) as any[]).toEqual(MARKS.fin.map((lane) => ({ lane, over: 0 })));
     // the legend names the two new signs
     expect(await ev(`document.querySelector(".room .legend").textContent`)).toMatch(/BLOCKED.*STALLED/);
@@ -110,7 +110,7 @@ for (const [width, height] of SIZES) {
   test.skipIf(!chromeFound)(`${at}: NEED HELP lists the scope's agents, a row chooses its agent, and nobody needing help reads 0 and is disabled`, async () => {
     await open(general.base, width, height);
     await until(`document.querySelectorAll(".building .tile").length === 3 && !!document.querySelector(".needhelp .lrow")`);
-    // unscoped: every worker that needs help, worst first (heads are marked at their terminal, not listed)
+    // unscoped: every agent that needs help, worst first (the idle generals wait on HQ, which is no call for help)
     expect(await ev(`document.querySelector(".needhelp h3").textContent`)).toBe("4 NEED HELP");
     expect(await ev(`[...document.querySelectorAll(".needhelp .lrow")].map((r) => r.dataset.select)`)).toEqual([FACTS.blocked, "hq-ops", "sales-outb", FACTS.stalled]);
     // it sits between the floor and the worker card, and nothing is pushed off the page sideways

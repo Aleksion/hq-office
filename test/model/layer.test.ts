@@ -5,7 +5,7 @@ import { setS } from "../../src/client/core/state.js";
 import { allFloors, chooseAgent, scope, setFloor } from "../../src/client/core/scope.js";
 import { KEEP_CLEAR, MARK_SIZE, RH, RW, TERMINAL, WALL, figure, frameBox, frameSlots, meets, placeMarks } from "../../src/client/layer/place.js";
 import {
-  FRAMES_MAX, HELP_COLORS, PROJECT_COLORS, floorRooms, frames, helpMarks, helpStrip, needHelp, projectState, roomCalls,
+  FRAMES_MAX, HELP_COLORS, PROJECT_COLORS, floorLabel, floorRooms, frames, helpMarks, helpStrip, needHelp, projectState, roomCalls,
 } from "../../src/client/core/floors.js";
 
 const store = new Map<string, string>();
@@ -30,18 +30,31 @@ describe("who gets a marker", () => {
 
   test("zoomed out, every agent that needs help, worst first", () => {
     expect(who("hq", false)).toEqual(["web:blocked", "ops:waiting", "idle:hq"]);
-    expect(who("g", false)).toEqual(["g-eng:blocked", "g-books:stalled", "g:hq:head"]);
+    expect(who("g", false)).toEqual(["g-eng:blocked", "g-books:stalled"]);
   });
 
   test("zoomed in, only blocked and stalled workers, so a worker waiting on you or HQ does not get a second sign", () => {
     expect(who("hq", true)).toEqual(["web:blocked"]);
-    expect(who("g", true)).toEqual(["g-eng:blocked", "g-books:stalled", "g:hq:head"]);
+    expect(who("g", true)).toEqual(["g-eng:blocked", "g-books:stalled"]);
   });
 
-  test("the head at the terminal is marked in any help state, and a head that needs nothing is not", () => {
-    expect(who("g", true)).toContain("g:hq:head");
-    const calm = { ...S, lanes: S.lanes.map((l: any) => (l.name === "g" ? { ...l, status: "moving" } : l)) };
-    expect(helpMarks(calm, "g", false).map((m: any) => m.lane)).not.toContain("g");
+  // A general idle at its terminal waits on HQ: that is its normal state, not a call for help.
+  test("the general at the terminal is marked when blocked, waiting on you or stalled, never for waiting on HQ", () => {
+    for (const zoomedIn of [true, false]) {
+      expect(who("g", zoomedIn).some((m) => m.startsWith("g:"))).toBe(false);
+      for (const [status, state] of [["blocked", "blocked"], ["needs_you", "waiting"], ["stale", "stalled"]]) {
+        const s = { ...S, lanes: S.lanes.map((l: any) => (l.name === "g" ? { ...l, status } : l)) };
+        expect(helpMarks(s, "g", zoomedIn).find((m: any) => m.lane === "g")).toMatchObject({ state, head: true });
+      }
+    }
+  });
+
+  test("a blocked general also gets a NEED HELP row and a dot on its floor's tile; an idle one gets neither", () => {
+    const blocked = { ...S, lanes: S.lanes.map((l: any) => (l.name === "g" ? { ...l, status: "blocked" } : l)) };
+    expect(needHelp(blocked, { floor: "g", agent: null }).map((r: any) => r.lane)).toContain("g");
+    expect(floorLabel(blocked, "g").help.map((r: any) => r.lane)).toContain("g");
+    expect(needHelp(S, { floor: "g", agent: null }).map((r: any) => r.lane)).not.toContain("g");
+    expect(floorLabel(S, "g").help.map((r: any) => r.lane)).not.toContain("g");
   });
 
   test("a blocked general shows on its floor: a marker at its terminal, zoomed in and zoomed out", () => {

@@ -132,9 +132,14 @@ const HELP = { blocked: "blocked", needs_you: "waiting", stale: "stalled", hq_tu
 export const helpState = (lane) => HELP[lane.status] ?? null;
 const HELP_ORDER = ["blocked", "waiting", "stalled", "hq"];
 // The lanes in scope that need help, worst first, then by name.
+// A floor's general waits on HQ whenever it is idle, which is its normal state: it needs help only when it is blocked,
+// waiting on the owner or stalled. Then it counts as any agent does: a NEED HELP row, a dot on its floor's tile, and a
+// marker at its terminal.
+const generalNeedsHelp = (l) => ["blocked", "waiting", "stalled"].includes(helpState(l));
+const needsHelp = (l) => (l.heads ? generalNeedsHelp(l) : !!helpState(l));
 export function needHelp(S, view) {
   return lanesOf(S)
-    .filter((l) => !l.heads && helpState(l) && inScope(S, { lane: l.name }, view))
+    .filter((l) => needsHelp(l) && inScope(S, { lane: l.name }, view))
     .sort((a, b) => HELP_ORDER.indexOf(helpState(a)) - HELP_ORDER.indexOf(helpState(b)) || a.name.localeCompare(b.name))
     .map((l) => ({ lane: l.name, state: helpState(l) }));
 }
@@ -149,11 +154,11 @@ export function helpStrip(S, view) {
 export const HELP_NAMES = { blocked: "BLOCKED AT A PROMPT", waiting: "WAITING ON YOU", stalled: "STALLED", hq: "WAITING ON HQ" };
 // Who gets a marker on a floor, worst first. Zoomed out, every agent that needs help: the names are too small to read
 // there, so the marker is the signal. Zoomed in, the room already shows a "!" over a worker waiting on you and a "?"
-// over one waiting on HQ, so only what it cannot tell apart is marked: blocked at a prompt, and stalled. The head at
-// the terminal has no bubble of its own, so it is marked in any help state.
+// over one waiting on HQ, so only what it cannot tell apart is marked: blocked at a prompt, and stalled. The general at
+// the terminal has no bubble of its own, so it is marked whenever it needs help (generalNeedsHelp), at either zoom.
 export function helpMarks(S, floor, zoomedIn) {
   return lanesOf(S)
-    .filter((l) => floorOf(l) === floor && helpState(l) && (!zoomedIn || l.heads || ["blocked", "stalled"].includes(helpState(l))))
+    .filter((l) => floorOf(l) === floor && needsHelp(l) && (!zoomedIn || l.heads || ["blocked", "stalled"].includes(helpState(l))))
     .map((l) => ({ lane: l.name, state: helpState(l), head: !!l.heads }))
     .sort((a, b) => HELP_ORDER.indexOf(a.state) - HELP_ORDER.indexOf(b.state) || a.lane.localeCompare(b.lane));
 }
