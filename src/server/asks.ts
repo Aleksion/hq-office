@@ -157,6 +157,9 @@ export function deferAsk(id: number, until: unknown) {
   if (until !== null && (typeof until !== "number" || !Number.isFinite(until) || until <= now)) throw new Error("until is a time in the future, in milliseconds since the epoch, or null to bring the question back now");
   const at = until === null ? now : (until as number);
   db.query("UPDATE asks SET defer_until = ? WHERE id = ?").run(at, id);
+  // The bank's record: a deferral still running ends now, and a new one runs until its time.
+  db.query("UPDATE ask_defers SET to_at = ? WHERE ask_id = ? AND to_at > ?").run(now, id, now);
+  if (until !== null) db.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (?, ?, ?)").run(id, now, at);
   const from = ask.lane ? ` (${ask.lane})` : "";
   if (until === null) {
     event(OWNER, `brought back "${ask.title}"`, ask.lane);
