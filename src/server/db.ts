@@ -27,3 +27,7 @@ if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) 
 // floors v4 G2: who wrote a comment (NULL = HQ, as every row made before the column) and the lane it is addressed to (NULL = HQ).
 if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "author")) db.exec("ALTER TABLE ask_comments ADD COLUMN author TEXT");
 if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "to_lane")) db.exec("ALTER TABLE ask_comments ADD COLUMN to_lane TEXT");
+// floors v4 G2: how an owner's comment to a lane reached it (NULL for a comment to HQ: the outbox holds those; else sending, sent
+// or failed) and why it failed.
+if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "delivery")) db.exec("ALTER TABLE ask_comments ADD COLUMN delivery TEXT");
+if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "error")) db.exec("ALTER TABLE ask_comments ADD COLUMN error TEXT");
