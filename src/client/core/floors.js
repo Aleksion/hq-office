@@ -144,6 +144,59 @@ export function helpStrip(S, view) {
   return { count: rows.length, rows, disabled: !rows.length };
 }
 
+// ---- the layer: markers beside the agents that need help, project frames on the wall, and the NEED HELP strip ----
+
+export const HELP_NAMES = { blocked: "BLOCKED AT A PROMPT", waiting: "WAITING ON YOU", stalled: "STALLED", hq: "WAITING ON HQ" };
+// Who gets a marker on a floor, worst first. Zoomed out, every agent that needs help: the names are too small to read
+// there, so the marker is the signal. Zoomed in, the room already shows a "!" over a worker waiting on you and a "?"
+// over one waiting on HQ, so only what it cannot tell apart is marked: blocked at a prompt, and stalled. The head at
+// the terminal has no bubble of its own, so it is marked in any help state.
+export function helpMarks(S, floor, zoomedIn) {
+  return lanesOf(S)
+    .filter((l) => floorOf(l) === floor && helpState(l) && (!zoomedIn || l.heads || ["blocked", "stalled"].includes(helpState(l))))
+    .map((l) => ({ lane: l.name, state: helpState(l), head: !!l.heads }))
+    .sort((a, b) => HELP_ORDER.indexOf(a.state) - HELP_ORDER.indexOf(b.state) || a.lane.localeCompare(b.lane));
+}
+
+// A project is a conference room (S.rooms). It hangs on the floor of its owner's lane, and a lane that is gone, or HQ
+// itself, is HQ's floor. Archived rooms are not on the wall.
+export const roomLanes = (room) => [room.owner, ...(room.members ?? [])];
+const boardItems = (S, room) => (S.board?.items ?? []).filter((i) => room.issues?.includes(i.issue) || i.prs?.some((p) => room.prs?.includes(p.key)));
+// The open asks of the room's lanes.
+export const roomCalls = (S, room) => S.open.filter((a) => a.lane && roomLanes(room).includes(a.lane));
+const BOARD_STATE = { owner: "waiting", blocked: "blocked", stalled: "stalled", ci: "ci" };
+const PROJECT_ORDER = ["waiting", "blocked", "stalled", "ci"];
+// The colour of a project's state: the help colours for the three that need someone, blue while CI runs, green when it moves.
+export const PROJECT_COLORS = { waiting: HELP_COLORS.waiting, blocked: HELP_COLORS.blocked, stalled: HELP_COLORS.stalled, ci: "#3c6fd6", moving: "#2f9e57" };
+export const PROJECT_NAMES = { waiting: "WAITING ON YOU", blocked: "BLOCKED AT A PROMPT", stalled: "STALLED", ci: "WAITING ON CI", moving: "MOVING" };
+// The most urgent thing about a project: a question of its lanes waits on you, then a lane blocked at a prompt, then
+// stalled (a lane idle too long, or its work on the board), then CI running, else it moves.
+export function projectState(S, room) {
+  const found = new Set();
+  for (const name of roomLanes(room)) {
+    const l = lanesOf(S).find((x) => x.name === name), h = l && helpState(l);
+    if (h && h !== "hq") found.add(h);
+  }
+  if (roomCalls(S, room).length) found.add("waiting");
+  for (const i of boardItems(S, room)) if (BOARD_STATE[i.state]) found.add(BOARD_STATE[i.state]);
+  return PROJECT_ORDER.find((s) => found.has(s)) ?? "moving";
+}
+export const FRAMES_MAX = 7;
+// The open rooms that hang on a floor: oldest first, at most seven (the wall has seven places).
+export function floorRooms(S, floor) {
+  return (S.rooms ?? [])
+    .filter((r) => !r.archivedAt && floorOfLane(S, r.owner) === floor)
+    .sort((a, b) => a.createdAt - b.createdAt || a.slug.localeCompare(b.slug))
+    .slice(0, FRAMES_MAX);
+}
+// A floor's frames, in wall order: the room, its state and colour, and how many questions of its lanes wait on you.
+export function frames(S, floor) {
+  return floorRooms(S, floor).map((r) => {
+    const state = projectState(S, r);
+    return { slug: r.slug, title: r.title, state, color: PROJECT_COLORS[state], calls: roomCalls(S, r).length };
+  });
+}
+
 // A scope that still holds: a lane that is gone drops the agent, a floor that is gone zooms out, an agent's floor is
 // where the agent is, and one floor has no floor scope. SHOW ALL means nothing with nothing scoped.
 export function normalizeScope(S, scope) {
