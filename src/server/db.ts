@@ -24,6 +24,8 @@ if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c)
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "defer_until")) db.exec("ALTER TABLE asks ADD COLUMN defer_until INTEGER");
 // floors v4 G3: the lane that handed a question in (hud ask --from LANE); NULL when none did.
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "handed_by")) db.exec("ALTER TABLE asks ADD COLUMN handed_by TEXT");
+// floors: the room (its slug) a question is about, set by hud ask --room; NULL when it names none. Never inferred from the lane.
+if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "room")) db.exec("ALTER TABLE asks ADD COLUMN room TEXT");
 // floors v4 G2: who wrote a comment (NULL = HQ, as every row made before the column) and the lane it is addressed to (NULL = HQ).
 if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "author")) db.exec("ALTER TABLE ask_comments ADD COLUMN author TEXT");
 if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "to_lane")) db.exec("ALTER TABLE ask_comments ADD COLUMN to_lane TEXT");
