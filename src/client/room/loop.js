@@ -1,6 +1,8 @@
 // The frame loop: a frame only when something visible changes (beat.js), paused only while hidden.
 import { emit, on } from "../core/bus.js";
 import { S } from "../core/state.js";
+import { terminalName } from "../core/floors.js";
+import { FLOOR } from "./here.js";
 import { hovered, selected } from "./input.js";
 import { SC, TS, ctx, cv, px } from "./canvas.js";
 import { drawSprite } from "./sprites.js";
@@ -24,7 +26,9 @@ let frameNext = 0;
 let walked = false;
 // The office rests while something covers it: a conference room opened on the stage (rooms/) says so on the bus.
 let covered = false;
-const roomVisible = () => document.visibilityState === "visible" && !covered;
+// The floor in view draws; one out of sight rests (floors/ says which).
+let shown = true;
+const roomVisible = () => document.visibilityState === "visible" && !covered && shown;
 function scheduleFrame() {
   if (!roomVisible()) {
     clearTimeout(frameTimer);
@@ -60,6 +64,7 @@ function wake() {
   scheduleFrame();
 }
 on("state", wake);
+export function showRoom(v) { shown = !!v; wake(); }
 on("stage", (shown) => { covered = shown !== "office"; wake(); });
 on("settings", wake); // PERFORMANCE switches at once
 window.addEventListener("focus", wake);
@@ -100,7 +105,7 @@ function drawScene(now, dt) {
     drawEventCounter(now);
     drawLabel("YOU", 20 * TS, 3 * TS + 10, true);
     drawSprite(hqPal(), 16 * TS, 5 * TS - 6, "up", 0);
-    drawLabel("HQ", 16 * TS + 8, 5 * TS + 10, true);
+    drawLabel(terminalName(S, FLOOR), 16 * TS + 8, 5 * TS + 10, true);
 
     const list = [...workers.values()];
     for (const w of list) if (w.brain) idleBrain(w, now, list);

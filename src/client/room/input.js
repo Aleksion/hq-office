@@ -33,12 +33,19 @@ export function select(name, jump) {
   }
 }
 
-// Desktop: the canvas is as big as the room box allows, keeping its 3:2 shape, so the page never scrolls.
+// Desktop: the canvas is as big as the room box allows, keeping its 3:2 shape, so the page never scrolls. A floor
+// that is shown in a box of its own is fitted to that box instead (fitTo); null gives it back to the rule below.
 const roomBox = cv.parentElement, roomLegend = roomBox.querySelector(".legend");
+let own = null;
+export function fitTo(box) {
+  own = box;
+  fitRoom();
+}
 function fitRoom() {
+  if (own) { cv.style.width = Math.max(1, Math.floor(Math.min(own.width, (own.height * W) / H))) + "px"; return; }
   if (!matchMedia("(min-width: 1151px)").matches) { cv.style.width = ""; return; }
   const w = roomBox.clientWidth - 16;
-  const h = roomBox.clientHeight - 16 - roomLegend.offsetHeight;
+  const h = roomBox.clientHeight - 16 - (roomLegend?.offsetHeight ?? 0);
   cv.style.width = Math.max(160, Math.floor(Math.min(w, (h * W) / H))) + "px";
 }
 new ResizeObserver(fitRoom).observe(roomBox);
