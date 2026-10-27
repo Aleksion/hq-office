@@ -42,8 +42,8 @@ export const PANELS = [
   [["machines"], () => renderMachines()],
   [["open", "lanes"], () => renderHud()], // a lane that changes floor changes its questions' tags and the scope
   [["lanes", "open", "config"], () => renderCard()],
-  [["notes", "answered", "updates", "updatesUnread", "lanes", "secrets", "secretsLost", "hq"], () => renderLog()],
-  [["open", "updatesUnread", "lanes", "board"], () => renderQTabs()],
+  [["notes", "answered", "updates", "updatesUnread", "updatesUnreadByLane", "lanes", "secrets", "secretsLost", "hq"], () => renderLog()],
+  [["open", "updatesUnread", "updatesUnreadByLane", "lanes", "board"], () => renderQTabs()],
   [["board", "open"], () => renderWork()],
-  [["updates", "notes", "lanes"], () => renderMsgs()],
+  [["updates", "updatesUnreadByLane", "notes", "lanes"], () => renderMsgs()],
 ];
