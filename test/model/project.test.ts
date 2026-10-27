@@ -92,3 +92,39 @@ describe("Escape", () => {
     for (const busy of ["stage", "settings", "dialog", "typing"]) expect(escapeAction(scoped, { ...idle, panel: true, [busy]: true })).toBeNull();
   });
 });
+
+describe("the project panel's shelf", () => {
+  const { shelfLoader } = require("../../src/client/project/shelf.js");
+  const settle = () => new Promise((r) => setTimeout(r, 5));
+
+  test("a failing fetch is asked once per room revision, kept as failed, and asked again on a new revision or a reset", async () => {
+    let calls = 0, renders = 0;
+    let r = { slug: "release", rev: 1 }; // the room as the page has it now
+    const s: any = shelfLoader(async () => { calls++; throw new Error("503"); }, () => { renders++; s.of(r); }); // changed() renders, as the panel does
+    expect(s.of(r)).toMatchObject({ list: null, failed: false });
+    await settle();
+    expect(s.of(r)).toMatchObject({ list: null, failed: true });
+    expect([calls, renders]).toEqual([1, 1]); // the render after the failure does not ask again
+    r = { ...r, rev: 2 };
+    s.of(r);
+    await settle();
+    expect([calls, renders]).toEqual([2, 2]);
+    s.reset();
+    s.of(r);
+    await settle();
+    expect(calls).toBe(3);
+  });
+
+  test("a fetched list is kept, and stays shown while the next revision loads", async () => {
+    let calls = 0;
+    const s = shelfLoader(async () => [{ title: `a${++calls}` }], () => {});
+    s.of({ slug: "release", rev: 1 });
+    await settle();
+    expect(s.of({ slug: "release", rev: 1 }).list).toEqual([{ title: "a1" }]);
+    expect(s.of({ slug: "release", rev: 2 }).list).toEqual([{ title: "a1" }]);
+    await settle();
+    expect(s.of({ slug: "release", rev: 2 }).list).toEqual([{ title: "a2" }]);
+    expect(s.of({ slug: "other", rev: 1 })).toMatchObject({ list: null });
+    expect(calls).toBe(3);
+  });
+});
