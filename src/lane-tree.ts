@@ -42,7 +42,7 @@ export const HQ_FLOOR = "hq";
 export function floorsOf(lanes: { name: string; parent?: string | null }[]) {
   const tree = laneTree(lanes);
   const heads = new Set<string>();
-  for (const t of tree.values()) if (t.depth >= 3 && !underHq(t.path[0])) heads.add(t.path[0]);
+  for (const t of tree.values()) if (t.depth >= 3) heads.add(t.path[0]);
   const out = new Map<string, { floor: string; heads: boolean }>();
   for (const l of lanes) {
     const top = tree.get(l.name)!.path[0] ?? l.name;

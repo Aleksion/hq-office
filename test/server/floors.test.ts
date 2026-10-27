@@ -43,7 +43,9 @@ describe("floorsOf", () => {
     expect(Object.keys(floors([L("a", "b"), L("b", "a")])).sort()).toEqual(["a", "b"]);
   });
 
-  test("a lane named hq never heads a floor", () => {
+  // The server stores --parent hq as no parent, so no lane reports to a lane named hq; even rows that say so land on
+  // HQ's floor, whose id is hq.
+  test("a lane named hq is on HQ's floor", () => {
     expect(floors([L("hq"), L("m", "hq"), L("n", "m"), L("o", "n")]).hq).toBe("hq");
   });
 });
@@ -72,5 +74,16 @@ describe("floor and heads in /api/state", () => {
     const lanes = (await (await fetch(`${server.base}/api/state`)).json()).lanes as any[];
     const by = Object.fromEntries(lanes.map((l) => [l.name, [l.floor, l.heads]]));
     expect(by).toEqual({ gen: ["gen", true], mid: ["gen", false], eng: ["gen", false], solo: ["hq", false] });
+  });
+
+  // A general's name is its floor's id in /floor/<id>/...: "." or ".." there would load another floor's copy.
+  test("a lane cannot be named . or ..", async () => {
+    for (const name of [".", "..", " .. "]) {
+      const res = await lane(name);
+      expect(res.status).not.toBe(200);
+      expect(((await res.json()) as any).error).toContain("a lane cannot be named");
+    }
+    const lanes = (await (await fetch(`${server.base}/api/state`)).json()).lanes as any[];
+    expect(lanes.map((l) => l.name.trim())).not.toContain("..");
   });
 });

@@ -35,6 +35,8 @@ function load(id) {
   loading.add(id);
   copyCanvas(id);
   import(`/floor/${encodeURIComponent(id)}/src/client/room/floor.js`).then(({ floor }) => {
+    // A path the browser resolves elsewhere (an id of "..") would hand back another floor's copy: not this floor.
+    if (floor.id !== id) throw new Error(`the copy at /floor/${id}/ is the ${floor.id} floor`);
     floors.set(id, floor);
     floor.onWorker(worker);
     floor.stage(stageShown);
