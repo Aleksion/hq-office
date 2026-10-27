@@ -134,7 +134,7 @@ describe("a question's OPEN LINK", () => {
   test("only for a web address; nothing for any other link a question stored before the server refused them", () => {
     expect(openLinkHTML({ link: "https://example.com/a?b=1&c" })).toContain('href="https://example.com/a?b=1&amp;c"');
     expect(openLinkHTML({ link: "HTTP://example.com" })).toContain("OPEN LINK");
-    for (const link of ["javascript:void(0)", " javascript:void(0)", "data:text/html,x", "ftp://example.com", "example.com", "", null]) expect(openLinkHTML({ link })).toBe("");
+    for (const link of ["javascript:void(0)", " javascript:void(0)", "javascript:alert('https://x')", "data:text/html,x", "ftp://example.com", "example.com", "", null]) expect(openLinkHTML({ link })).toBe("");
   });
 });
 
