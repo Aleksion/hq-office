@@ -9,6 +9,7 @@ import { $ } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { floor as hq } from "../room/floor.js";
 import { chooseAgent, outOne, scope, setFloor } from "../core/scope.js";
+import { closePanel, openPanel } from "../core/panel.js";
 import { HQ, escapeAction, floorList, floorOfLane, floorsInView, stageBar, stageMode } from "../core/floors.js";
 import { arrange, barEl, boxes, build, built, canvasRect, copyCanvas, dismantle, gridEl, moving, paintLabels, paintMode, room } from "./building.js";
 import { floors, register } from "./registry.js";
@@ -112,8 +113,10 @@ document.addEventListener("keydown", (e) => {
     settings: !$("settings").hidden,
     dialog: !!document.querySelector("dialog[open]"),
     typing: !!f?.matches?.("input, textarea, select, [contenteditable]"),
+    panel: openPanel() !== null,
   };
-  if (escapeAction(scope(), busy) !== "out") return;
+  const action = escapeAction(scope(), busy);
+  if (!action) return;
   e.preventDefault();
-  outOne();
+  if (action === "panel") closePanel(); else outOne();
 }, true);

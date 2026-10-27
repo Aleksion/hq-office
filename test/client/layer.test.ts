@@ -1,4 +1,4 @@
-// The layer over the room, in Chrome, on the floors fixture (test/floors-fixture.ts) at 1440 and at 390: project frames on
+// The layer over the room and the project panel, in Chrome, on the floors fixture (test/floors-fixture.ts) at 1440 and at 390: project frames on
 // the wall, markers beside the agents that need help, the NEED HELP strip under the floor, and the two new legend rows.
 // With one floor the room is in a scene of its own and the page is otherwise today's. Needs Chrome (CHROME_BIN); skipped
 // without it. Written against the fixture's FACTS; not yet run.
@@ -131,6 +131,95 @@ for (const [width, height] of SIZES) {
     // the questions are as many and as easy to reach as before
     expect(await ev(`(() => { const a = document.querySelector("#hud .ask"), h = document.getElementById("hud").getBoundingClientRect(); return !!a && a.getBoundingClientRect().top >= h.top - 1; })()`)).toBe(true);
   }, 60_000);
+
+  // ---- U11: the project panel, links on a question, and more ways into rooms ----
+  const frameLabels = (id: string) => ev(`[...document.querySelectorAll('.layer[data-floor="${id}"] .hit.frame')].map((b) => b.getAttribute("aria-label"))`) as Promise<string[]>;
+  const panelHeads = () => ev(`[...document.querySelectorAll("#projectPanel .pgrp h3")].map((h) => h.textContent)`);
+
+  test.skipIf(!chromeFound)(`${at}: each frame names its project and state, and a frame opens the project panel without hiding a question`, async () => {
+    await open(general.base, width, height);
+    await until(`document.querySelectorAll(".building .tile").length === 3`);
+    await click(`.tile[data-floor="hq"] .tlabel`);
+    await until(`document.querySelectorAll('.layer[data-floor="hq"] .hit.frame').length === 2`);
+    expect(await frameLabels("hq")).toEqual(["Ship the release: WAITING ON YOU, 1 for you", "Fix the web build: BLOCKED AT A PROMPT"]);
+    await click(`.layer[data-floor="hq"] .hit.frame[data-project="release"]`);
+    await until(`!!document.querySelector("#projectPanel h2")`);
+    expect(await ev(`document.querySelector("#projectPanel h2").textContent`)).toBe(FACTS.release.title);
+    expect(await ev(`document.querySelector("#projectPanel .tag.st").textContent`)).toBe("WAITING ON YOU");
+    await until(`document.querySelectorAll("#projectPanel .shelfc").length === 1`);
+    expect(await panelHeads()).toEqual(["OPEN CALLS · 1", "ROOM", "PULL REQUESTS · 1", "ARTIFACTS · 1", "WHO IS ON IT"]);
+    expect(await ev(`[...document.querySelectorAll("#projectPanel .pgrp:last-child .lrow b")].map((b) => b.textContent)`)).toEqual([FACTS.release.owner, ...FACTS.release.members]);
+    expect(await ev(`document.querySelector("#projectPanel a.btn").getAttribute("href")`)).toBe("#room/release");
+    expect(await ev(`document.querySelector("#projectPanel .shelfc").textContent`)).toContain(FACTS.release.shelf);
+    // it is over the room, not over the questions: the panel lies inside the room, which does not meet the question list
+    expect(await ev(`(() => { const p = document.getElementById("projectPanel").getBoundingClientRect(), r = document.querySelector(".room").getBoundingClientRect(), h = document.getElementById("hud").getBoundingClientRect(); const apart = r.left >= h.right - 1 || r.top >= h.bottom - 1; return p.left >= r.left - 1 && p.right <= r.right + 1 && apart; })()`)).toBe(true);
+    expect(await ev(`document.querySelectorAll("#hud .ask").length`)).toBe(FACTS.waiting.hq);
+    expect(await ev(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
+    // an open call chooses its agent and gets the panel out of the way of the question
+    await click(`#projectPanel .pgrp button.lrow`);
+    await until(`!document.querySelector("#projectPanel h2")`);
+    expect(await scopeOf()).toMatchObject({ floor: "hq", agent: "hq-pm" });
+    // the other floor's frames
+    await click(".stagebar [data-building]");
+    await click(`.tile[data-floor="sales"] .tlabel`);
+    await until(`document.querySelectorAll('.layer[data-floor="sales"] .hit.frame').length === 2`);
+    expect(await frameLabels("sales")).toEqual(["Pipeline review: MOVING", "Outbound calls: WAITING ON YOU, 1 for you"]);
+  }, 60_000);
+
+  test.skipIf(!chromeFound)(`${at}: panels over the room take turns, and Escape closes the panel before the scope`, async () => {
+    await open(general.base, width, height);
+    await until(`document.querySelectorAll(".building .tile").length === 3`);
+    await click(`#hud .ask[data-lane="hq-pm"] .tag.lane`);
+    await until(`document.querySelector(".scopechip")?.textContent === "HQ FLOOR › hq-pm ✕"`);
+    await click(`#accounts`);
+    await until(`document.querySelector(".room").classList.contains("accounts-open")`);
+    // a project opening closes ACCOUNTS
+    await click(`#hud .ask[data-lane="hq-pm"] .tag.project`);
+    await until(`!!document.querySelector("#projectPanel h2")`);
+    expect(await ev(`document.querySelector(".room").classList.contains("accounts-open")`)).toBe(false);
+    // and ACCOUNTS opening closes the project
+    await click(`#accounts`);
+    await until(`document.querySelector(".room").classList.contains("accounts-open")`);
+    expect(await ev(`!!document.querySelector("#projectPanel h2")`)).toBe(false);
+    // Escape: the panel first, then the agent, then the floor
+    await click(`#hud .ask[data-lane="hq-pm"] .tag.project`);
+    await until(`!!document.querySelector("#projectPanel h2")`);
+    await press("Escape");
+    await until(`!document.querySelector("#projectPanel h2")`);
+    expect(await scopeOf()).toEqual({ floor: "hq", agent: "hq-pm", all: false });
+    await press("Escape");
+    await until(`document.querySelector(".scopechip")?.textContent === "HQ FLOOR ✕"`);
+    await press("Escape");
+    await until(`document.querySelector(".room").dataset.stage === "out"`);
+    // Escape with ACCOUNTS open closes ACCOUNTS and leaves the scope
+    await click(`.tile[data-floor="fin"] .tlabel`);
+    await click(`#accounts`);
+    await until(`document.querySelector(".room").classList.contains("accounts-open")`);
+    await press("Escape");
+    await until(`!document.querySelector(".room").classList.contains("accounts-open")`);
+    expect(await scopeOf()).toEqual({ floor: "fin", agent: null, all: false });
+  }, 60_000);
+
+  test.skipIf(!chromeFound)(`${at}: a question links to its project, room, issue and pull request; a lane with none shows none`, async () => {
+    await open(general.base, width, height);
+    await until(`document.querySelectorAll("#hud .ask").length === 6`);
+    const tags = (lane: string) => ev(`[...document.querySelectorAll('#hud .ask[data-lane="${lane}"] .meta .tag')].map((t) => t.className.replace("tag ", "").split(" ")[0] + ":" + t.textContent)`) as Promise<string[]>;
+    const pm = await tags("hq-pm");
+    expect(pm).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "room:ROOM", `key:${FACTS.release.issue}`, "pr:#12"]));
+    expect((await tags("hq-ops")).filter((t) => /^(project|room|key|pr):/.test(t))).toEqual([]);
+    // the links sit in the meta row, and the question's title and options are still there
+    expect(await ev(`document.querySelector('#hud .ask[data-lane="hq-pm"] h3') !== null && document.querySelectorAll('#hud .ask[data-lane="hq-pm"] .opt').length`)).toBe(2);
+    // ROOM goes to the conference room; the project panel's OPEN THE ROOM does too, and the panel closes behind it
+    await click(`#hud .ask[data-lane="hq-pm"] a.tag.room`);
+    await until(`location.hash === "#room/release" && !document.getElementById("roomView").hidden`);
+    await ev(`history.replaceState(null, "", location.pathname); dispatchEvent(new HashChangeEvent("hashchange"))`);
+    await until(`document.getElementById("roomView").hidden`);
+    await click(`#hud .ask[data-lane="hq-pm"] .tag.project`);
+    await until(`!!document.querySelector("#projectPanel a.btn")`);
+    await click(`#projectPanel a.btn`);
+    await until(`location.hash === "#room/release" && !document.getElementById("roomView").hidden`);
+    expect(await ev(`document.querySelector(".room").classList.contains("project-open")`)).toBe(false);
+  }, 60_000);
 }
 
 test.skipIf(!chromeFound)("one floor: the room sits in a scene of its own, the layer hangs the projects and marks the agents, and the page has no building", async () => {
@@ -151,6 +240,22 @@ test.skipIf(!chromeFound)("one floor: the room sits in a scene of its own, the l
     const r = (await ev(`(() => { const c = document.getElementById("room").getBoundingClientRect(), a = document.querySelector(".room").getBoundingClientRect(); return { ratio: c.width / c.height, inside: c.left >= a.left && c.right <= a.right && c.top >= a.top && c.bottom <= a.bottom }; })()`)) as { ratio: number; inside: boolean };
     expect(Math.abs(r.ratio - 1.5) / 1.5).toBeLessThan(0.03);
     expect(r.inside).toBe(true);
+  }
+  expect(errors).toEqual([]);
+}, 60_000);
+
+test.skipIf(!chromeFound)("one floor: a frame opens the project panel, and Escape closes the panel with nothing scoped", async () => {
+  for (const [width, height] of SIZES) {
+    await open(single.base, width, height);
+    await until(`document.querySelectorAll('.layer[data-floor="hq"] .hit.frame').length === ${FACTS.rooms.hq.length}`);
+    await click(`.layer[data-floor="hq"] .hit.frame[data-project="web-fix"]`);
+    await until(`document.querySelector("#projectPanel h2")?.textContent === "Fix the web build"`);
+    expect(await ev(`document.querySelector("#projectPanel .tag.st").textContent`)).toBe("BLOCKED AT A PROMPT");
+    expect(await ev(`!!document.querySelector("#projectPanel .floortag")`)).toBe(false);
+    await press("Escape");
+    await until(`!document.querySelector("#projectPanel h2")`);
+    expect(await scopeOf()).toEqual({ floor: null, agent: null, all: false });
+    expect(await ev(`document.querySelectorAll("#hud .ask").length`)).toBe(3);
   }
   expect(errors).toEqual([]);
 }, 60_000);

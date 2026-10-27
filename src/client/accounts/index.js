@@ -5,6 +5,7 @@ import { $, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { esc, setClass, setHTML } from "../core/format.js";
 import { post } from "../core/net.js";
+import { closePanel, showPanel } from "../core/panel.js";
 
 const KEY = "hq.accounts.open";
 let open = false;
@@ -26,8 +27,14 @@ room.append(panel);
 function setOpen(v) {
   open = v;
   try { localStorage.setItem(KEY, v ? "1" : "0"); } catch {}
+  if (v) showPanel("accounts"); else closePanel("accounts");
   render();
 }
+// Panels over the room take turns: another one opening, or Escape, closes this one.
+on("panel", (id) => {
+  if (open && id !== "accounts") setOpen(false);
+});
+if (open) showPanel("accounts");
 box.addEventListener("click", () => setOpen(!open));
 
 const pct = (w) => (w ? `${w.left}%` : "-");

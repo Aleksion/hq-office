@@ -63,6 +63,18 @@ lives in a `.scene` with the layer beside it, with one floor too: that is the on
   disabled. The strip follows the scope and never changes it: every row's lane is on the scoped floor.
 - The legend gains BLOCKED and STALLED rows. Heads are marked at their terminal but not listed in NEED HELP.
 
+## Projects, links and the way into rooms
+
+A frame on the wall, a question's PROJECT tag or `showPanel("project", { slug })` opens the project panel (`project/`,
+`projectView`) over the room, in the accounts panel's pattern: its state, OPEN CALLS (a click chooses the agent and
+closes the panel), ROOM, PULL REQUESTS with their board state, ARTIFACTS (fetched from `GET /api/rooms/<slug>`) and
+WHO IS ON IT. Panels over the room take turns through `core/panel.js` and the `"panel"` bus event: opening one closes
+the other, and Escape closes the open panel before it steps the scope out (`escapeAction`).
+
+A question shows, in its meta row, PROJECT and ROOM for each open project its lane is in, and its lane's issue and pull
+requests (`askLinks`). ROOM, and the panel's OPEN THE ROOM, are `#room/SLUG`, the address the ROOMS tab already uses;
+the ROOMS tab stays.
+
 ## Decisions the code carries
 
 - **Everything follows the scope** (the owner, on the phone tabs: "When I click a floor everything is scoped to that

@@ -1,0 +1,14 @@
+// The links on a question, as tags for its meta row: the open projects its lane is in (PROJECT opens the project panel,
+// ROOM goes to the conference room) and its lane's issue and pull requests. Nothing for a lane that has none (core/floors.js).
+import { esc } from "../core/format.js";
+import { askLinks } from "../core/floors.js";
+import { CONFIG } from "../core/state.js";
+
+const tag = (cls, href, text) => (href ? `<a class="tag ${cls}" href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>` : `<span class="tag ${cls}">${esc(text)}</span>`);
+
+export function linksHTML(S, ask) {
+  const { projects, issues, prs } = askLinks(S, CONFIG, ask);
+  return projects.map((p) => `<button class="tag project" type="button" data-project="${esc(p.slug)}" title="${esc(p.title)}">PROJECT · ${esc(p.title)}</button><a class="tag room" href="#room/${esc(p.slug)}">ROOM</a>`).join("")
+    + issues.map((i) => tag("key", i.href, i.key)).join("")
+    + prs.map((p) => tag("pr", p.href, `#${p.num}`)).join("");
+}

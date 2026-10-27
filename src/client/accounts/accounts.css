@@ -7,7 +7,7 @@
 .accounts { position: absolute; inset: 0; z-index: 3; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 14px; align-content: start; padding: 10px; background: #1b1d2c; border-radius: 6px; }
 @media (max-width: 1150px) {
   .accounts { position: static; inset: auto; overflow: visible; padding: 2px; }
-  .room.accounts-open > canvas, .room.accounts-open > .legend { display: none; }
+  .room.accounts-open > canvas, .room.accounts-open > .scene, .room.accounts-open > .building, .room.accounts-open > .legend { display: none; }
 }
 .ahdr { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ahdr h2 { margin: 0; color: #f8f8f0; font: 12px/1 var(--pixel); }

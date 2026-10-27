@@ -9,6 +9,7 @@ import { renderSecretTimes } from "../secrets/secrets.js";
 import { clearImages, composer, hasImages, imageKeys } from "../images/images.js";
 import { counts, inScope, jumpAsk, nothingLine, othersLine } from "../core/floors.js";
 import { floorTagHTML } from "../floors/tag.js";
+import { linksHTML } from "./links.js";
 import { setQTab } from "../messages/messages.js";
 import { scope, toggleAll, view } from "../core/scope.js";
 
@@ -55,7 +56,7 @@ export function renderHud() {
     const opts = a.options.map((o) => `<button class="opt ${d.opt === o ? "sel" : ""}" data-opt="${esc(o)}">${esc(o)}${a.recommended === o ? ` <span class="pick">HQ PICK</span>` : ""}</button>`).join("");
     return `<article class="box ask" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
       <div class="meta">${floorTagHTML(S, a)}
-        ${a.lane ? `<button class="tag lane" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : ""}
+        ${a.lane ? `<button class="tag lane" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : ""}${linksHTML(S, a)}
         <span class="tag ${esc(kind)}">${esc(kind.toUpperCase())}</span>
         ${want.length ? `<span class="tag secret">SECRETS</span>` : ""}
         ${a.link ? `<a class="tag" href="${esc(a.link)}" target="_blank" rel="noopener">OPEN LINK</a>` : ""}

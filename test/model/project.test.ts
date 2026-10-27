@@ -1,6 +1,8 @@
 // The project panel's data, the links on a question, panels over the room taking turns, and what Escape closes first
 // (src/client/core/floors.js and panel.js). No browser.
 import { describe, expect, test } from "bun:test";
+import { on } from "../../src/client/core/bus.js";
+import { closePanel, openPanel, showPanel } from "../../src/client/core/panel.js";
 import { askLinks, escapeAction, issueLink, prLink, projectView } from "../../src/client/core/floors.js";
 
 const lane = (name: string, status = "moving", floor = "hq", extra: object = {}) => ({ name, floor, heads: false, status, title: `${name} title`, ...extra });
@@ -49,6 +51,30 @@ describe("the project panel's data", () => {
     expect(projectView(S, CONFIG, "old")).toBeNull();
     expect(projectView(S, CONFIG, "nope")).toBeNull();
     expect(projectView({ ...S, rooms: undefined }, CONFIG, "release")).toBeNull();
+  });
+});
+
+describe("panels over the room take turns", () => {
+  // Two panels as the page writes them: each closes when another opens.
+  const make = (id: string) => {
+    const p = { id, open: false };
+    on("panel", (now: string | null) => { if (p.open && now !== id) p.open = false; });
+    return { p, show: () => { p.open = true; showPanel(id); } };
+  };
+  const a = make("accounts"), b = make("project");
+
+  test("opening one closes the other, so only one is ever open", () => {
+    a.show();
+    expect([a.p.open, b.p.open, openPanel()]).toEqual([true, false, "accounts"]);
+    b.show();
+    expect([a.p.open, b.p.open, openPanel()]).toEqual([false, true, "project"]);
+  });
+
+  test("closing a panel that is not the open one leaves the open one; closing with no id closes whichever", () => {
+    closePanel("accounts");
+    expect([b.p.open, openPanel()]).toEqual([true, "project"]);
+    closePanel();
+    expect([b.p.open, openPanel()]).toEqual([false, null]);
   });
 });
 
