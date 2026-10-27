@@ -168,7 +168,7 @@ describe("a project's questions", () => {
     expect(roomCalls({ ...S, open: [] }, r)).toEqual([]);
   });
 
-  test("the frame, its name and its colour agree with the count", () => {
+  test("the count and the name agree; red means something waits on you: a question, or a board item with no count", () => {
     const r = room("a", "pm", { members: ["ops"] });
     for (const [open, n] of [[[], 0], [[{ id: 1, lane: "ops", room: "a" }], 1], [[{ id: 1, lane: "ops", room: "a" }, { id: 2, lane: null, room: "a" }], 2]] as const) {
       const [f] = frames({ ...S, open, rooms: [r] }, "hq");
@@ -176,6 +176,10 @@ describe("a project's questions", () => {
       expect(f.state === "waiting").toBe(n > 0);
       expect(frameName(f).endsWith(`, ${n} for you`)).toBe(n > 0);
     }
+    // its linked work waits on you on the board: red, with no question to count
+    const linked = room("b", "pm", { issues: ["X-1"] });
+    const [f] = frames({ ...S, open: [], rooms: [linked], board: { items: [{ issue: "X-1", prs: [], state: "owner" }] } }, "hq");
+    expect([f.state, f.calls, frameName(f)]).toEqual(["waiting", 0, "B: WAITING ON YOU"]);
   });
 });
 

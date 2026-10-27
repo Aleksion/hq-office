@@ -39,7 +39,8 @@ test("an unknown room or an archived one refuses the ask with a reason, and file
   expect(unknown.code).toBe(1);
   expect(unknown.err).toContain("no room no-such-room");
   expect(unknown.err).toContain("hud room create no-such-room");
-  expect((await hud("room", "create", "old-one", "--title", "Old", "--owner", "app-lane")).code).toBe(0);
+  expect((await hud("lane", "refused-lane")).code).toBe(0);
+  expect((await hud("room", "create", "old-one", "--title", "Old", "--owner", "refused-lane")).code).toBe(0);
   expect((await hud("room", "archive", "old-one")).code).toBe(0);
   const archived = await hud("ask", "--title", "In the past", "--room", "old-one");
   expect(archived.code).toBe(1);
@@ -53,11 +54,13 @@ test("an unknown room or an archived one refuses the ask with a reason, and file
 });
 
 test("hud update --room sets, changes and clears it, and refuses a room that is not open; moving the question keeps it", async () => {
-  expect((await hud("room", "create", "second", "--title", "Second", "--owner", "app-lane")).code).toBe(0);
+  expect((await hud("lane", "update-lane")).code).toBe(0);
+  for (const slug of ["first", "second", "gone"]) expect((await hud("room", "create", slug, "--title", slug, "--owner", "update-lane")).code).toBe(0);
+  expect((await hud("room", "archive", "gone")).code).toBe(0);
   const id = Number((await hud("ask", "--title", "Settable", "--kind", "action")).out.match(/ask #(\d+)/)![1]);
   expect((await asked("Settable")).room).toBeNull();
-  expect((await hud("update", String(id), "--room", "launch")).code).toBe(0);
-  expect((await asked("Settable")).room).toBe("launch");
+  expect((await hud("update", String(id), "--room", "first")).code).toBe(0);
+  expect((await asked("Settable")).room).toBe("first");
   expect((await hud("update", String(id), "--room", "second")).code).toBe(0);
   expect((await asked("Settable")).room).toBe("second");
   // A title edit leaves the room; a move to another lane leaves it too.
@@ -66,9 +69,9 @@ test("hud update --room sets, changes and clears it, and refuses a room that is 
   expect((await hud("update", String(id), "--lane", "other-lane")).code).toBe(0);
   const moved = await asked("Settable, edited");
   expect([moved.lane, moved.room]).toEqual(["other-lane", "second"]);
-  const refused = await hud("update", String(id), "--room", "old-one");
+  const refused = await hud("update", String(id), "--room", "gone");
   expect(refused.code).toBe(1);
-  expect(refused.err).toContain("room old-one is archived");
+  expect(refused.err).toContain("room gone is archived");
   expect((await asked("Settable, edited")).room).toBe("second");
   expect((await hud("update", String(id), "--room", "")).code).toBe(0);
   expect((await asked("Settable, edited")).room).toBeNull();

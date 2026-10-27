@@ -111,7 +111,13 @@ async function openOffice(opts: { general?: boolean; frame?: boolean }, data: st
   const server = await spawnServer({ cwd: ROOT, env });
   started(server);
   const { base } = server;
-  const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
+  // A refused write fails the fixture: a question it meant to file must not go missing and show up later as a wrong count.
+  const post = async (path: string, body: object) => {
+    const r = await fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) });
+    const reply = await r.json();
+    if (!r.ok || reply?.error) throw new Error(`${path}: ${reply?.error ?? r.status}`);
+    return reply;
+  };
   // FACTS describe the default office, not the frame's: frame mode returns none.
   if (opts.frame) {
     for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: l.machine, title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });

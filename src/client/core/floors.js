@@ -178,10 +178,11 @@ const PROJECT_ORDER = ["waiting", "blocked", "stalled", "ci"];
 // The colour of a project's state: the help colours for the three that need someone, blue while CI runs, green when it moves.
 export const PROJECT_COLORS = { waiting: HELP_COLORS.waiting, blocked: HELP_COLORS.blocked, stalled: HELP_COLORS.stalled, ci: "#3c6fd6", moving: "#2f9e57" };
 export const PROJECT_NAMES = { waiting: "WAITING ON YOU", blocked: "BLOCKED AT A PROMPT", stalled: "STALLED", ci: "WAITING ON CI", moving: "MOVING" };
-// The most urgent thing about a project: a question about it waits on you (roomCalls, or its linked work waiting on
-// you on the board), then a lane blocked at a prompt, then stalled (a lane idle too long, or its work on the board),
-// then CI running, else it moves. Red means "a question about this project waits on you", so the colour and the count
-// never disagree: a room lane waiting on you without a question that names the room leaves the project its other state.
+// The most urgent thing about a project: something about it waits on you (a question that names its room, or its linked
+// work waiting on you on the board), then a lane blocked at a prompt, then stalled (a lane idle too long, or its work on
+// the board), then CI running, else it moves. Red means "something about this project waits on you": a question, which
+// the count shows, or a board item, which it does not, so a red frame can read 0. A room lane waiting on you without a
+// question that names the room leaves the project its other state.
 export function projectState(S, room) {
   const found = new Set();
   for (const name of roomLanes(room)) {

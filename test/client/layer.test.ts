@@ -161,7 +161,7 @@ for (const [width, height] of SIZES) {
     await click(`#projectPanel [data-open-ask]`);
     await until(`!document.querySelector("#projectPanel h2")`);
     expect(await scopeOf()).toMatchObject({ floor: "hq", agent: "hq-pm" });
-    expect(await ev(`document.querySelector("#hud .ask.flash h3")?.textContent`)).toBe(FACTS.asks.hq[1]);
+    await until(`[...document.querySelectorAll("#hud .ask.flash h3")].some((h) => h.textContent === ${JSON.stringify(FACTS.asks.hq[1])})`);
     // HQ's own call has no lane: its row opens that question too, on HQ's floor with no agent chosen
     await click(`.layer[data-floor="hq"] .hit.frame[data-project="release"]`);
     await until(`document.querySelectorAll("#projectPanel [data-open-ask]").length === ${FACTS.roomCalls.release}`);
