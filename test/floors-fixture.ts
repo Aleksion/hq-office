@@ -5,6 +5,7 @@
 //
 //   from a test:  const office = await startFloors();  ...  office.base, office.post(path, body), await office.stop()
 //   by hand:      bun test/floors-fixture.ts [--one]   prints the address and runs until Ctrl-C
+//   --frame:      the signed design's own office instead (test/floors-frame.ts), for frame pairs with the prototype
 //
 // The floors, by what the lane rule makes of the tree (src/lane-tree.ts): a lane under HQ heads a floor when something
 // sits two levels below it.
@@ -17,6 +18,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnServer } from "../scripts/room-hash.ts";
+import { frameBlocked, frameLanes, seedFrame } from "./floors-frame.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -59,13 +61,13 @@ export const FACTS = {
   release: { title: "Ship the release", owner: "hq-pm", members: ["hq-api", "hq-web"], issue: "REL-1", pr: "acme-example/app#12", shelf: "Release checklist" },
 };
 
-export async function startFloors(opts: { general?: boolean } = {}) {
+export async function startFloors(opts: { general?: boolean; frame?: boolean } = {}) {
   const general = opts.general ?? true;
-  const lanes = general ? [...HQ_LANES, ...GENERAL_LANES] : HQ_LANES;
+  const lanes: Lane[] = opts.frame ? frameLanes() : general ? [...HQ_LANES, ...GENERAL_LANES] : HQ_LANES;
   const data = mkdtempSync(join(tmpdir(), "hq-floors-fixture-"));
   const herdr = join(data, "herdr");
   const agents = lanes.map((l, i) => `{"name":"${l.name}","agent_status":"${l.herdr}","pane_id":"w1:p${i}","agent":"claude"}`).join(",");
-  const blocked = lanes.findIndex((l) => l.name === FACTS.blocked);
+  const blocked = lanes.findIndex((l) => l.name === (opts.frame ? frameBlocked() : FACTS.blocked));
   writeFileSync(join(data, "pane.txt"), "│ Bash command\n│   rm -rf build\n│   Remove the build folder\n│ Do you want to proceed?\n│ ❯ 1. Yes\n│   2. No, and tell Claude what to do differently (esc)\n");
   const gh = join(data, "gh"); // a stand-in, so the work board never runs the real one
   writeFileSync(gh, "#!/bin/sh\nexit 1\n");
@@ -76,6 +78,12 @@ export async function startFloors(opts: { general?: boolean } = {}) {
   const server = await spawnServer({ cwd: ROOT, env });
   const { base } = server;
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
+  const stop = async () => { await server.stop(); rmSync(data, { recursive: true, force: true }); };
+  if (opts.frame) {
+    for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });
+    await seedFrame(post, data);
+    return { base, post, facts: FACTS, stop };
+  }
 
   for (const l of lanes) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.name, ...(l.issue ? { issue: l.issue, pr: l.pr } : {}) });
   // Parents first in the lists above, so each parent is registered before its reports.
@@ -111,11 +119,11 @@ export async function startFloors(opts: { general?: boolean } = {}) {
     db.close();
     await post("/api/lanes", { name: FACTS.stalled, note: "waiting for a reply" }); // a write, so the page's next state carries it
   }
-  return { base, post, facts: FACTS, stop: async () => { await server.stop(); rmSync(data, { recursive: true, force: true }); } };
+  return { base, post, facts: FACTS, stop };
 }
 
 if (import.meta.main) {
-  const office = await startFloors({ general: !process.argv.includes("--one") });
+  const office = await startFloors({ general: !process.argv.includes("--one"), frame: process.argv.includes("--frame") });
   console.log(`floors fixture on ${office.base}`);
   process.on("SIGINT", async () => { await office.stop(); process.exit(0); });
   await new Promise(() => {});
