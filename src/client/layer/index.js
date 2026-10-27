@@ -58,7 +58,7 @@ function make(floor) {
   ro.observe(floor.canvas);
   ro.observe(scene);
   fit();
-  return { floor, box, ovl, hits, key: null, fit };
+  return { floor, box, ovl, hits, key: null, hitsHtml: "", fit };
 }
 
 // A floor's layer, painted again only when what it shows changes: the frames and their states, who is marked and where,
@@ -71,8 +71,8 @@ function draw(L) {
   const wall = frames(S, floor.id).map((f, i) => ({ ...f, ...slots[i] }));
   const marked = helpMarks(S, floor.id, zoomedIn);
   const sprites = floor.positions(), at = new Map(sprites.map((p) => [p.name, p]));
-  const heads = marked.map((m) => ({ ...m, ...(m.head ? TERMINAL : at.get(m.lane)) })).filter((m) => m.sx !== undefined);
-  const marks = placeMarks({ heads, sprites, labels: floor.labels(), zoomedIn });
+  const agents = marked.map((m) => ({ ...m, ...(m.head ? TERMINAL : at.get(m.lane)) })).filter((m) => m.sx !== undefined);
+  const marks = placeMarks({ agents, sprites, labels: floor.labels(), zoomedIn });
   const key = JSON.stringify([live, wall.map((f) => [f.slug, f.title, f.state, f.calls]), marks.map((m) => [m.lane, m.state, m.box.x, m.box.y])]);
   if (key === L.key) return;
   L.key = key;
@@ -82,14 +82,27 @@ function draw(L) {
   L.box.dataset.marks = marks.map((m) => m.lane).join(" ");
   wall.forEach((f) => drawFrame(g, k, f));
   marks.forEach((m) => drawMark(g, k, m));
-  // Buttons only where a click is wanted: zoomed in, on the floor the page shows.
-  L.hits.innerHTML = !live ? "" : wall.map((f) => {
-    const name = `${f.title}: ${PROJECT_NAMES[f.state]}${f.calls ? `, ${f.calls} for you` : ""}`;
-    return `<button class="hit frame" type="button" data-project="${esc(f.slug)}" style="${place(frameBox(f))}" aria-label="${esc(name)}" title="${esc(name)}">${f.calls ? `<span class="tag count">${f.calls}</span>` : ""}</button>`;
-  }).join("") + marks.map((m) => {
-    const name = `${m.lane}: ${HELP_NAMES[m.state]}`;
-    return `<button class="hit agent" type="button" data-select="${esc(m.lane)}" data-state="${m.state}" style="${place(m.box)}" aria-label="${esc(name)}" title="${esc(name)}"></button>`;
-  }).join("");
+  // Buttons only where a click is wanted: zoomed in, on the floor the page shows. They are made again only when which buttons
+  // there are or what they say changes; a marked agent walking only moves its button, so a click, hover or focus survives it.
+  const buttons = !live ? [] : [
+    ...wall.map((f) => {
+      const name = `${f.title}: ${PROJECT_NAMES[f.state]}${f.calls ? `, ${f.calls} for you` : ""}`;
+      return { box: frameBox(f), html: `<button class="hit frame" type="button" data-project="${esc(f.slug)}" aria-label="${esc(name)}" title="${esc(name)}">${f.calls ? `<span class="tag count">${f.calls}</span>` : ""}</button>` };
+    }),
+    ...marks.map((m) => {
+      const name = `${m.lane}: ${HELP_NAMES[m.state]}`;
+      return { box: m.box, html: `<button class="hit agent" type="button" data-select="${esc(m.lane)}" data-state="${m.state}" aria-label="${esc(name)}" title="${esc(name)}"></button>` };
+    }),
+  ];
+  const html = buttons.map((b) => b.html).join("");
+  if (html !== L.hitsHtml) {
+    L.hits.innerHTML = html;
+    L.hitsHtml = html;
+  }
+  [...L.hits.children].forEach((el, i) => {
+    const style = place(buttons[i].box);
+    if (el.getAttribute("style") !== style) el.setAttribute("style", style);
+  });
 }
 
 onFloor((floor) => {

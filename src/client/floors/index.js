@@ -112,7 +112,8 @@ document.addEventListener("keydown", (e) => {
     stage,
     settings: !$("settings").hidden,
     dialog: !!document.querySelector("dialog[open]"),
-    typing: !!f?.matches?.("input, textarea, select, [contenteditable]"),
+    // A reply box keeps Escape for itself while anything in it has focus, its buttons too: it closes first.
+    typing: !!f?.matches?.("input, textarea, select, [contenteditable]") || !!f?.closest?.("[data-rbox]"),
     panel: openPanel() !== null,
   };
   const action = escapeAction(scope(), busy);

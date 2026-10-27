@@ -49,10 +49,10 @@ function spotsFor(mode) {
   return list;
 }
 
-// A marker for each agent in `heads` ({ lane, state, sx, sy }: its sprite's corner), at the nearest spot that is clear of:
-// every label (`labels`, boxes), every sprite and bubble (`sprites`, corners), the head at the terminal, the wall pieces,
+// A marker for each agent in `agents` ({ lane, state, sx, sy }: its sprite's corner), at the nearest spot that is clear of:
+// every label (`labels`, boxes), every sprite and bubble (`sprites`, corners), the general at the terminal, the wall pieces,
 // the room's edge and the markers already placed. An agent with no clear spot gets no marker; the NEED HELP rows list it.
-export function placeMarks({ heads, sprites = [], labels = [], zoomedIn }) {
+export function placeMarks({ agents, sprites = [], labels = [], zoomedIn }) {
   const mode = zoomedIn ? "in" : "out", { w, h } = MARK_SIZE[mode], spots = spotsFor(mode);
   const avoid = [
     ...labels,
@@ -61,10 +61,10 @@ export function placeMarks({ heads, sprites = [], labels = [], zoomedIn }) {
   ];
   const clear = (b) => b.x >= 0 && b.y >= 0 && b.x + b.w <= RW && b.y + b.h <= RH && !avoid.some((a) => meets(a, b)) && !placed.some((p) => meets(p.box, b));
   const placed = [];
-  for (const head of heads) {
+  for (const a of agents) {
     for (const s of spots) {
-      const box = { x: head.sx + s.dx, y: head.sy + s.dy, w, h };
-      if (clear(box)) { placed.push({ ...head, box }); break; }
+      const box = { x: a.sx + s.dx, y: a.sy + s.dy, w, h };
+      if (clear(box)) { placed.push({ ...a, box }); break; }
     }
   }
   return placed;

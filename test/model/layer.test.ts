@@ -67,7 +67,7 @@ describe("who gets a marker", () => {
     for (const zoomedIn of [true, false]) {
       const marks = helpMarks(blocked, "g", zoomedIn);
       expect(marks.find((m: any) => m.lane === "g")).toMatchObject({ state: "blocked", head: true });
-      const placed = placeMarks({ heads: marks.filter((m: any) => m.head).map((m: any) => ({ ...m, ...TERMINAL })), zoomedIn });
+      const placed = placeMarks({ agents: marks.filter((m: any) => m.head).map((m: any) => ({ ...m, ...TERMINAL })), zoomedIn });
       expect(placed).toHaveLength(1);
       expect(Math.abs(placed[0].box.x - TERMINAL.sx) < 40 && Math.abs(placed[0].box.y - TERMINAL.sy) < 40).toBe(true);
     }
@@ -166,7 +166,7 @@ describe("the NEED HELP strip in a scope", () => {
 
 describe("where frames and markers may go", () => {
   const wall = KEEP_CLEAR.map(([x, y, w, h]) => ({ x, y, w, h }));
-  const head = (sx: number, sy: number, lane = "a", state = "blocked") => ({ lane, state, sx, sy });
+  const agent = (sx: number, sy: number, lane = "a", state = "blocked") => ({ lane, state, sx, sy });
 
   test("seven frames hang on the wall, none over a window, the sign, the counter or the terminal, none over another", () => {
     expect(frameSlots(9)).toHaveLength(WALL.length);
@@ -180,27 +180,27 @@ describe("where frames and markers may go", () => {
   });
 
   test("a marker sits beside its agent: zoomed in a small one, zoomed out a bigger one", () => {
-    const [near] = placeMarks({ heads: [head(100, 100)], zoomedIn: true });
+    const [near] = placeMarks({ agents: [agent(100, 100)], zoomedIn: true });
     expect(near.box).toMatchObject(MARK_SIZE.in);
     expect(Math.abs(near.box.x - 100) < 24 && Math.abs(near.box.y - 100) < 24).toBe(true);
-    const [big] = placeMarks({ heads: [head(100, 100)], zoomedIn: false });
+    const [big] = placeMarks({ agents: [agent(100, 100)], zoomedIn: false });
     expect(big.box).toMatchObject(MARK_SIZE.out);
   });
 
   test("a marker keeps off a name label: the nearest spot is taken by one, so it moves", () => {
     for (const zoomedIn of [true, false]) {
-      const [free] = placeMarks({ heads: [head(100, 100)], zoomedIn });
-      const [moved] = placeMarks({ heads: [head(100, 100)], labels: [{ ...free.box }], zoomedIn });
+      const [free] = placeMarks({ agents: [agent(100, 100)], zoomedIn });
+      const [moved] = placeMarks({ agents: [agent(100, 100)], labels: [{ ...free.box }], zoomedIn });
       expect(meets(free.box, moved.box, 1)).toBe(false);
     }
   });
 
   test("a marker keeps off other sprites and their bubbles, and off the markers already placed", () => {
-    const [free] = placeMarks({ heads: [head(100, 100)], zoomedIn: true });
+    const [free] = placeMarks({ agents: [agent(100, 100)], zoomedIn: true });
     const other = { sx: free.box.x - 4, sy: free.box.y - 6 };
-    const [moved] = placeMarks({ heads: [head(100, 100)], sprites: [other], zoomedIn: true });
+    const [moved] = placeMarks({ agents: [agent(100, 100)], sprites: [other], zoomedIn: true });
     expect(meets(figure(other.sx, other.sy), moved.box, 1)).toBe(false);
-    const two = placeMarks({ heads: [head(100, 100, "a"), head(100, 100, "b")], zoomedIn: true });
+    const two = placeMarks({ agents: [agent(100, 100, "a"), agent(100, 100, "b")], zoomedIn: true });
     expect(two).toHaveLength(2);
     expect(meets(two[0].box, two[1].box, 1)).toBe(false);
   });
@@ -209,7 +209,7 @@ describe("where frames and markers may go", () => {
     for (const zoomedIn of [true, false]) {
       for (let sx = 0; sx <= RW - 16; sx += 8) {
         for (let sy = 8; sy <= RH - 16; sy += 8) {
-          for (const m of placeMarks({ heads: [head(sx, sy)], zoomedIn })) {
+          for (const m of placeMarks({ agents: [agent(sx, sy)], zoomedIn })) {
             const b = m.box;
             expect(b.x >= 0 && b.y >= 0 && b.x + b.w <= RW && b.y + b.h <= RH).toBe(true);
             expect([...wall, figure(TERMINAL.sx, TERMINAL.sy)].filter((w) => meets(w, b, 1))).toEqual([]);
@@ -220,7 +220,7 @@ describe("where frames and markers may go", () => {
   });
 
   test("an agent with no clear spot gets no marker rather than one over something", () => {
-    const boxed = placeMarks({ heads: [head(100, 100)], labels: [{ x: 0, y: 0, w: RW, h: RH }], zoomedIn: true });
+    const boxed = placeMarks({ agents: [agent(100, 100)], labels: [{ x: 0, y: 0, w: RW, h: RH }], zoomedIn: true });
     expect(boxed).toEqual([]);
   });
 });

@@ -7,6 +7,10 @@ import { STATUS_TEXT } from "../core/status.js";
 import { dur, esc, setHTML } from "../core/format.js";
 import { linkify } from "../core/text.js";
 import { hasTree } from "../room/looks.js";
+import { issueLink, prLink } from "../core/floors.js";
+
+const words = (v) => String(v ?? "").split(/[ ,]+/).filter(Boolean);
+const linkTag = (href, text) => (href ? `<a class="tag" href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>` : `<span class="tag">${esc(text)}</span>`);
 
 export function renderCard() {
   const card = $("card");
@@ -18,10 +22,8 @@ export function renderCard() {
   const [label, color] = STATUS_TEXT[lane.status] || [lane.status, "#6a6a82"];
   const asks = S.open.filter((a) => a.lane === lane.name);
   const links = [
-    ...(lane.issue && CONFIG.linearWorkspace ? lane.issue.split(/[ ,]+/).filter(Boolean).map((i) => `<a class="tag" href="https://linear.app/${esc(CONFIG.linearWorkspace)}/issue/${esc(i)}" target="_blank" rel="noopener">${esc(i)}</a>`) : []),
-    ...(lane.pr && CONFIG.githubRepo ? String(lane.pr).split(/[ ,]+/).filter(Boolean).map((p) => `<a class="tag" href="https://github.com/${CONFIG.githubRepo}/pull/${esc(p.replace("#", ""))}" target="_blank" rel="noopener">#${esc(p.replace("#", ""))}</a>`) : []),
-    ...(lane.issue && !CONFIG.linearWorkspace ? lane.issue.split(/[ ,]+/).filter(Boolean).map((i) => `<span class="tag">${esc(i)}</span>`) : []),
-    ...(lane.pr && !CONFIG.githubRepo ? String(lane.pr).split(/[ ,]+/).filter(Boolean).map((p) => `<span class="tag">#${esc(p.replace("#", ""))}</span>`) : []),
+    ...words(lane.issue).map((i) => linkTag(issueLink(CONFIG, i).href, i)),
+    ...words(lane.pr).map((p) => { const l = prLink(CONFIG, p); return linkTag(l.href, `#${l.num}`); }),
     lane.machine ? `<span class="tag">${esc(lane.machine)} ${esc(lane.pane || "")}</span>` : "",
   ].join("");
   // Where it sits in the tree, once there is one: its level and the chain up to HQ (each step selects that lane).
