@@ -86,4 +86,17 @@ describe("floor and heads in /api/state", () => {
     const lanes = (await (await fetch(`${server.base}/api/state`)).json()).lanes as any[];
     expect(lanes.map((l) => l.name.trim())).not.toContain("..");
   });
+
+  // ask_comments and room_messages record the owner and HQ as "owner" and "hq": a lane with either name would be read as them.
+  test("a lane cannot be named owner or hq, in any case or with spaces; ordinary names still work", async () => {
+    for (const name of ["owner", "hq", "HQ", "Owner", " hq ", "OWNER "]) {
+      const res = await lane(name);
+      expect(res.status).not.toBe(200);
+      expect(((await res.json()) as any).error).toContain("a lane cannot be named");
+    }
+    expect((await lane("hq-ops")).status).toBe(200);
+    expect((await lane("owner-docs")).status).toBe(200);
+    const lanes = (await (await fetch(`${server.base}/api/state`)).json()).lanes as any[];
+    expect(lanes.map((l) => l.name.trim().toLowerCase()).filter((n) => ["owner", "hq"].includes(n))).toEqual([]);
+  });
 });

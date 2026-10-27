@@ -26,10 +26,14 @@ export function laneStatus(lane: Lane, openByLane: Map<string, number>, now: num
 
 const LANE_FIELDS = ["title", "machine", "pane", "issue", "pr", "phase", "note"] as const;
 
+const RESERVED_LANES = ["owner", "hq"];
+
 export function upsertLane(body: any) {
   if (!body.name) throw new Error("name is required");
   // A lane's name is also its floor's id in a URL (/floor/<id>/...), where "." and ".." would mean another path.
   if ([".", ".."].includes(String(body.name).trim())) throw new Error(`a lane cannot be named ${String(body.name).trim()}`);
+  // "owner" and "hq" mark the owner and HQ as authors in ask_comments and room_messages: a lane with either name would read as them.
+  if (RESERVED_LANES.includes(String(body.name).trim().toLowerCase())) throw new Error(`a lane cannot be named ${String(body.name).trim()}: "owner" and "hq" stand for the owner and HQ in questions and rooms, so pick another name`);
   const parent = body.parent === undefined ? undefined : underHq(body.parent) ? null : String(body.parent).trim();
   if (parent) checkParent(body.name, parent); // before any write: a refused parent changes nothing
   const now = Date.now();
