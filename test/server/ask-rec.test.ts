@@ -55,16 +55,38 @@ describe("a decision with options needs a recommendation", () => {
     const r = await hud("update", String(bare), "--opt", "Yes", "--opt", "No");
     expect(r.code).toBe(1);
     expect(r.err).toContain("This decision has options but no recommendation.");
-    expect(r.err).toContain('--opt "Yes" --opt "No" --rec "Yes"');
+    // The fix is an update of this question, and the why goes in a comment: a hud ask here would file it twice.
+    expect(r.err).toContain(`hud update ${bare} --opt "Yes" --opt "No" --rec "Yes" && hud comment ${bare} "I recommend Yes because ..."`);
+    expect(r.err).not.toContain("hud ask");
     expect((await ask_(bare)).options ?? []).toEqual([]);
     expect((await hud("update", String(bare), "--opt", "Yes", "--opt", "No", "--rec", "Yes")).code).toBe(0);
     expect((await ask_(bare)).recommended).toBe("Yes");
     // A blank --rec on a question with options takes its pick away: refused.
     expect((await hud("update", String(bare), "--rec", " ")).code).toBe(1);
+    // New options that leave the old pick out leave no pick either: refused, and the fix keeps the new options.
+    const gone = await hud("update", String(bare), "--opt", "Maybe", "--opt", "Later");
+    expect(gone.code).toBe(1);
+    expect(gone.err).toContain(`This decision's --rec "Yes" is not one of its options.`);
+    expect(gone.err).toContain(`hud update ${bare} --opt "Maybe" --opt "Later" --rec "Maybe"`);
+    expect((await ask_(bare)).options).toEqual(["Yes", "No"]);
     // An edit that leaves the options and the pick alone is not this rule's business.
     expect((await hud("update", String(bare), "--title", "Bare, renamed")).code).toBe(0);
     const info = await ask({ title: "FYI 2", kind: "info" });
     expect((await hud("update", String(info), "--opt", "Noted")).code).toBe(0);
+  });
+
+  test("a --rec that is not one of the options is refused, since the owner would see no pick", async () => {
+    const r = await hud("ask", "--title", "Left or right?", "--opt", "Left", "--opt", "Right", "--rec", "Up");
+    expect(r.code).toBe(1);
+    expect(r.err).toContain(`This decision's --rec "Up" is not one of its options.`);
+    expect((await o.state()).open.map((a: any) => a.title)).not.toContain("Left or right?");
+  });
+
+  test("the hud ask example keeps where the question goes and when it is due", async () => {
+    expect((await hud("lane", "app-lane")).code).toBe(0);
+    const r = await hud("ask", "--title", "Ship?", "--lane", "app-lane", "--kind", "decision", "--opt", "Now", "--opt", "Later", "--link", "https://example.com/pr/1", "--due", "17:30");
+    expect(r.code).toBe(1);
+    expect(r.err).toContain(`hud ask --title "Ship?" --lane "app-lane" --kind "decision" --opt "Now" --opt "Later" --rec "Now" --body "I recommend Now because ..." --link "https://example.com/pr/1" --due 17:30`);
   });
 
   test("the guide teaches the rule, with the same flag the refusal shows", () => {

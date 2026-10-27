@@ -8,28 +8,57 @@ import { bump, secrets } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
 
-// The owner's rule (#242): every ask carries the agent's pick and why. A decision with options and no --rec is refused,
-// with the line to send instead. The why has no field of its own: it goes in the body, and is not checked. The rule is
-// for what agents file, so the routes behind hud ask apply it; the server's own questions (claude-accounts.ts) have no
-// agent to pick.
-export function refuseMissingPick(body: any) {
-  const options: string[] = (body.options ?? []).map(String).filter(Boolean);
-  if ((body.kind ?? "decision") !== "decision" || !options.length || String(body.recommended ?? "").trim()) return;
-  const q = (v: string) => JSON.stringify(v);
+// The owner's rule (#242): every ask carries the agent's pick and why. A decision with options and no --rec, or a --rec
+// that is not one of its options, is refused (either way the owner would see no HQ PICK), with the command to send
+// instead. The why has no field of its own: it goes in the body, and is not checked. The rule is for what agents file,
+// so the routes behind hud ask and hud update apply it; the server's own questions (claude-accounts.ts) have no agent to
+// pick.
+const q = (v: string) => JSON.stringify(v);
+const listOf = (v: unknown) => (v == null ? [] : Array.isArray(v) ? v : [v]).map((o) => String(o).trim()).filter(Boolean);
+const hhmm = (at: number) => { const d = new Date(at); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+type Fix = { how: string; example: string };
+
+function refuse(kind: unknown, options: string[], recommended: unknown, fix: (pick: string) => Fix) {
+  if ((kind ?? "decision") !== "decision" || !options.length) return;
+  const rec = String(recommended ?? "").trim();
+  if (rec && options.includes(rec)) return;
+  const { how, example } = fix(options[0]);
   throw new Error(
-    `This decision has options but no recommendation. Every question to the owner carries your pick and why: add --rec with the option you recommend, and say why in --body. Example:\n` +
-      `  hud ask --title ${q(String(body.title))} ${options.map((o) => `--opt ${q(o)}`).join(" ")} --rec ${q(options[0])} --body ${q(`I recommend ${options[0]} because ...`)}\n` +
+    `${rec ? `This decision's --rec ${q(rec)} is not one of its options.` : "This decision has options but no recommendation."} Every question to the owner carries your pick and why: ${how}. Example:\n` +
+      `  ${example}\n` +
       `A question with no options (--kind action or info) needs no --rec.`,
   );
 }
 
-// hud update ID --opt / --rec: the same rule, on the question as the edit would leave it.
+// hud ask: the same command back, with --rec and a why in --body, keeping where it goes and when it is due.
+export function refuseMissingPick(body: any) {
+  const options = listOf(body.options);
+  refuse(body.kind, options, body.recommended, (pick) => ({
+    how: "add --rec with the option you recommend, and say why in --body",
+    example: [
+      `hud ask --title ${q(String(body.title ?? ""))}`,
+      body.lane ? `--lane ${q(String(body.lane))}` : "",
+      body.kind ? `--kind ${q(String(body.kind))}` : "",
+      ...options.map((o) => `--opt ${q(o)}`),
+      `--rec ${q(pick)}`,
+      `--body ${q(String(body.body ?? "").trim() || `I recommend ${pick} because ...`)}`,
+      body.link ? `--link ${q(String(body.link))}` : "",
+      Number(body.due) ? `--due ${hhmm(Number(body.due))}` : "",
+    ].filter(Boolean).join(" "),
+  }));
+}
+
+// hud update ID --opt / --rec: the same rule, on the question as the edit would leave it. The fix is an update of the
+// same question (a new hud ask would file it twice), and the why goes in a comment, which leaves its body alone.
 export function refuseMissingPickAfter(id: number, body: any) {
   if (body.options === undefined && body.recommended === undefined) return;
-  const ask = db.query("SELECT kind, title, options, recommended FROM asks WHERE id = ?").get(id) as { kind: string; title: string; options: string | null; recommended: string | null } | null;
+  const ask = db.query("SELECT kind, options, recommended FROM asks WHERE id = ?").get(id) as { kind: string; options: string | null; recommended: string | null } | null;
   if (!ask) return; // updateAsk says there is no such ask
-  const options = body.options !== undefined ? (Array.isArray(body.options) ? body.options : [body.options]) : JSON.parse(ask.options ?? "[]");
-  refuseMissingPick({ kind: ask.kind, title: body.title ?? ask.title, options, recommended: body.recommended !== undefined ? body.recommended : ask.recommended });
+  const options = listOf(body.options !== undefined ? body.options : JSON.parse(ask.options ?? "[]"));
+  refuse(ask.kind, options, body.recommended !== undefined ? body.recommended : ask.recommended, (pick) => ({
+    how: `set --rec on question ${id} to the option you recommend, and say why with hud comment`,
+    example: `hud update ${id} ${body.options !== undefined ? options.map((o) => `--opt ${q(o)} `).join("") : ""}--rec ${q(pick)} && hud comment ${id} ${q(`I recommend ${pick} because ...`)}`,
+  }));
 }
 
 export function createAsk(body: any) {

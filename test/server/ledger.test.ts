@@ -123,11 +123,12 @@ describe("server and hud CLI: the ask ledger", () => {
     const id = askId(await hud("ask", "--lane", "one", "--title", "Which way?", "--body", "Two roads.", "--opt", "Left", "--opt", "Middle", "--opt", "Right", "--rec", "Middle", "--link", "https://example.com/a"));
     const before = (await state()).open.find((a: any) => a.id === id);
     expect((await state()).ledger[id]).toBeUndefined();
-    await hud("update", String(id), "--title", "Which way now?", "--opt", "Left", "--opt", "Right");
+    // The new options keep the pick among them: options that drop it are refused (asks.ts, ask-rec.test.ts).
+    await hud("update", String(id), "--title", "Which way now?", "--opt", "Left", "--opt", "Middle");
     const s = await state();
     const after = s.open.find((a: any) => a.id === id);
     expect(after.title).toBe("Which way now?");
-    expect(after.options).toEqual(["Left", "Right"]);
+    expect(after.options).toEqual(["Left", "Middle"]);
     expect(after.body).toBe("Two roads.");
     expect(after.recommended).toBe("Middle");
     expect(after.link).toBe("https://example.com/a");
