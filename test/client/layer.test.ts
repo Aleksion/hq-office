@@ -157,10 +157,18 @@ for (const [width, height] of SIZES) {
     expect(await ev(`(() => { const p = document.getElementById("projectPanel").getBoundingClientRect(), r = document.querySelector(".room").getBoundingClientRect(), h = document.getElementById("hud").getBoundingClientRect(); const apart = r.left >= h.right - 1 || r.top >= h.bottom - 1; return p.left >= r.left - 1 && p.right <= r.right + 1 && apart; })()`)).toBe(true);
     expect(await ev(`document.querySelectorAll("#hud .ask").length`)).toBe(FACTS.waiting.hq);
     expect(await ev(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
-    // an open call chooses its agent and gets the panel out of the way of the question
-    await click(`#projectPanel .pgrp button.lrow`);
+    // an open call opens its question: with a lane it chooses the agent, and the panel gets out of the way
+    await click(`#projectPanel [data-open-ask]`);
     await until(`!document.querySelector("#projectPanel h2")`);
     expect(await scopeOf()).toMatchObject({ floor: "hq", agent: "hq-pm" });
+    expect(await ev(`document.querySelector("#hud .ask.flash h3")?.textContent`)).toBe(FACTS.asks.hq[1]);
+    // HQ's own call has no lane: its row opens that question too, on HQ's floor with no agent chosen
+    await click(`.layer[data-floor="hq"] .hit.frame[data-project="release"]`);
+    await until(`document.querySelectorAll("#projectPanel [data-open-ask]").length === ${FACTS.roomCalls.release}`);
+    await click(`#projectPanel [data-open-ask]:not(:has(.tag.lane))`);
+    await until(`!document.querySelector("#projectPanel h2")`);
+    expect(await scopeOf()).toMatchObject({ floor: "hq", agent: null });
+    await until(`[...document.querySelectorAll("#hud .ask.flash h3")].some((h) => h.textContent === ${JSON.stringify(FACTS.hqCall)})`);
     // the other floor's frames
     await click(".stagebar [data-building]");
     await click(`.tile[data-floor="sales"] .tlabel`);

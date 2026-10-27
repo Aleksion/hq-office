@@ -136,12 +136,12 @@ export function scheduleTick() {
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && S) tick(); scheduleTick(); });
 
-// A change of scope draws the list again; asked to jump, it shows the chosen lane's first open question, in the
-// QUESTIONS tab, however it was reached.
+// A change of scope draws the list again; asked to jump, it shows the question the jump names, or else the chosen
+// lane's first open one, in the QUESTIONS tab, however it was reached.
 $("hud").addEventListener("click", (e) => { if (e.target.closest("[data-showall]")) toggleAll(); });
 on("scope", ({ jump }) => {
   if (!S) return;
-  const ask = jump && jumpAsk(S, scope().agent);
+  const ask = jump && jumpAsk(S, scope().agent, jump);
   if (ask) setQTab("questions");
   renderHud();
   tick();

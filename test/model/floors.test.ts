@@ -2,7 +2,7 @@
 // counts and lines every panel shows, and a scope that still holds after the lanes change. No browser.
 import { describe, expect, test } from "bun:test";
 import {
-  canvasId, counts, escapeAction, floorFromPath, floorLanes, floorList, floorOfLane, floorTagShown, hasLane, helpStrip, inScope, jumpAsk, marksRead,
+  canvasId, counts, escapeAction, floorFromPath, floorLanes, floorList, floorOfLane, floorTagShown, askScope, hasLane, helpStrip, inScope, jumpAsk, marksRead,
   needHelp, normalizeScope, nothingLine, othersLine, readAllBody, tellRecipient, terminalName, viewOf, chipText,
 } from "../../src/client/core/floors.js";
 
@@ -154,6 +154,18 @@ describe("escape and the jump", () => {
     expect(jumpAsk(two, null)).toBeNull();
     expect(hasLane(two, "pm")).toBe(true);
     expect(hasLane(two, "nobody")).toBe(false);
+  });
+  test("a jump with a question's id goes to that question, not the lane's first; one that is gone goes nowhere", () => {
+    expect(jumpAsk(two, "g-eng", 3)?.id).toBe(3);
+    expect(jumpAsk(two, null, 4)?.id).toBe(4);
+    expect(jumpAsk(two, "g-eng", 99)).toBeNull();
+  });
+  test("a question opens in its lane's scope, or with no lane (or one that is gone) on HQ's floor; one floor has no floor to scope to", () => {
+    expect(askScope(two, two.open[2])).toEqual({ floor: "g", agent: "g-eng", all: false });
+    expect(askScope(two, two.open[3])).toEqual({ floor: "hq", agent: null, all: false });
+    expect(askScope(two, { id: 5, lane: "left" })).toEqual({ floor: "hq", agent: null, all: false });
+    expect(askScope(one, { id: 5, lane: "a" })).toEqual({ floor: null, agent: "a", all: false });
+    expect(askScope(one, { id: 6, lane: null })).toEqual({ floor: null, agent: null, all: false });
   });
   test("the chip reads the lane alone with one floor, and the floor and lane with two", () => {
     expect(chipText(one, { floor: null, agent: "a", all: false })).toBe("a ✕");

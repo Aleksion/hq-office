@@ -276,6 +276,9 @@ export function escapeAction(scope, busy) {
   if (busy.panel) return "panel";
   return scope.floor || scope.agent ? "out" : null;
 }
+// The scope that shows a question: its lane when the state has it, else its floor (a question with no lane is HQ's).
+// With one floor there is no floor to scope to.
+export const askScope = (S, ask) => ({ floor: floorList(S).length >= 2 ? floorOfLane(S, ask.lane) : null, agent: hasLane(S, ask.lane) ? ask.lane : null, all: false });
 // Where a `jump` takes the question panel: with an ask's id, that question; with true, the chosen lane's first open
 // question. Null when there is none.
 export const jumpAsk = (S, lane, jump = true) => (typeof jump === "number" ? S.open.find((a) => a.id === jump) ?? null : hasLane(S, lane) ? S.open.find((a) => a.lane === lane) ?? null : null);

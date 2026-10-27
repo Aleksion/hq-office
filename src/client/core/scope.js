@@ -4,7 +4,7 @@
 // Kept in sessionStorage so a reload or the page's autoreload keeps it, and a new tab starts unscoped.
 import { emit, on } from "./bus.js";
 import { S } from "./state.js";
-import { floorList, floorOfLane, hasLane, normalizeScope, viewOf } from "./floors.js";
+import { askScope, floorList, floorOfLane, hasLane, normalizeScope, viewOf } from "./floors.js";
 
 const KEY = "hq-scope";
 const none = () => ({ floor: null, agent: null, all: false });
@@ -37,6 +37,11 @@ export function chooseAgent(name, { jump = false } = {}) {
   if (S && !hasLane(S, name)) return;
   const floor = S && floorList(S).length >= 2 ? floorOfLane(S, name) : null;
   set({ floor, agent: name, all: false }, jump);
+}
+// Open one question: scope to its lane (or, with no lane, its floor) and show that question, flashed.
+export function openAsk(id) {
+  const ask = S?.open.find((a) => a.id === id);
+  if (ask) set(askScope(S, ask), id);
 }
 // Out one level: agent to its floor (with one floor, to nothing), floor to zoomed out.
 export function outOne() {
