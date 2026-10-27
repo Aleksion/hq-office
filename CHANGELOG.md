@@ -3,6 +3,15 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.11.1] - 2026-10-27
+
+### Fixed
+
+- **`hud room brief SLUG` no longer wipes the brief.** With no `--body` and nothing piped in, it read an empty brief
+  and saved it, clearing the room's brief. Now it prints the current brief and never writes. An empty `--body` is
+  refused, and clearing a brief takes `--clear`. The server refuses an empty brief from any client that does not ask
+  to clear it.
+
 ## [0.11.0] - 2026-10-27
 
 ### Added

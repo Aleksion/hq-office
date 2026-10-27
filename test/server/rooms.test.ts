@@ -90,6 +90,26 @@ describe("hud room", () => {
     expect(v.briefBy).toBe("pm");
   });
 
+  test("brief with nothing given prints it and never writes; an empty --body is refused; --clear clears", async () => {
+    const before = (await room("ope-12-auth")).brief;
+    const shown = await hud(["room", "brief", "ope-12-auth"]);
+    expect(shown.code).toBe(0);
+    expect(shown.out).toBe(before);
+    expect((await room("ope-12-auth")).brief).toBe(before);
+    const empty = await hud(["room", "brief", "ope-12-auth", "--body", ""]);
+    expect(empty.code).toBe(2);
+    expect(empty.err).toContain("hud room brief ope-12-auth --clear");
+    expect((await room("ope-12-auth")).brief).toBe(before);
+    // the server refuses an empty brief from any client that does not ask to clear
+    const res = await fetch(`${BASE}/api/rooms/ope-12-auth/brief`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify({ body: "" }) });
+    expect(res.status).toBe(400);
+    expect((await room("ope-12-auth")).brief).toBe(before);
+    expect((await hud(["room", "brief", "ope-12-auth", "--clear"])).out).toBe("brief of ope-12-auth cleared");
+    expect((await room("ope-12-auth")).brief).toBeNull();
+    expect((await hud(["room", "brief", "ope-12-auth"])).out).toContain("has no brief yet");
+    expect((await hud(["room", "brief", "ope-12-auth", "--body", before])).code).toBe(0);
+  });
+
   test("artifact: a Claude artifact link, a plain link and a file", async () => {
     expect((await hud(["room", "artifact", "ope-12-auth", "--title", "Design doc", "--url", "https://claude.ai/artifact/abc123"])).code).toBe(0);
     expect((await hud(["room", "artifact", "ope-12-auth", "--title", "Runbook", "--url", "https://example.com/runbook", "--as", "eng"])).code).toBe(0);

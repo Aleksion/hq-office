@@ -291,6 +291,7 @@ function roomUsage() {
   hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   (again: change or reopen it)
   hud room path SLUG                                 the room's folder: files/ is shared, and what is saved there shows on the shelf
   hud room brief SLUG --body B [--as LANE]           the pinned brief, replaced as a whole (or from stdin)
+  hud room brief SLUG                                 prints the brief (nothing given: never writes); --clear clears it
   hud room artifact SLUG --title T (--url U | --file PATH) [--kind claude-artifact|link|image|file] [--as LANE]
   hud room say SLUG TEXT [--as LANE] [--reply ID]    write in the thread (as the owning lane unless --as)
   hud room read SLUG [--since ID] [--wait] [--json]  the owner's messages; --wait blocks until a new one
@@ -310,7 +311,7 @@ function ago(t: number) {
 }
 
 async function roomCmd(args: string[]) {
-  const bools = new Set(args.filter((a) => ["--json", "--wait", "--all"].includes(a)));
+  const bools = new Set(args.filter((a) => ["--json", "--wait", "--all", "--clear"].includes(a)));
   const { flags: f, rest: r, one: o } = parse(args.filter((a) => !bools.has(a)));
   const [verb, slugRaw, ...words] = r;
   const slug = (slugRaw ?? "").toLowerCase();
@@ -331,9 +332,25 @@ async function roomCmd(args: string[]) {
       console.log((await call("GET", path)).folder);
       break;
     case "brief": {
+      // Writes only what it is given: --body, or text piped in. Nothing given (no --body, nothing on stdin) prints
+      // the brief; an empty brief is never a way to clear one by accident, only --clear clears it.
+      if (bools.has("--clear")) {
+        await call("POST", `${path}/brief`, { body: "", clear: true, as: o("as") });
+        console.log(`brief of ${slug} cleared`);
+        break;
+      }
       const body = await textArg(o("body"));
+      if (!body.trim()) {
+        if (o("body") !== undefined) {
+          console.error(`an empty --body would clear the brief of ${slug}; to clear it, use: hud room brief ${slug} --clear`);
+          process.exit(2);
+        }
+        const v = await call("GET", path);
+        console.log(v.brief ?? `(${slug} has no brief yet: hud room brief ${slug} --body B, or pipe it in)`);
+        break;
+      }
       await call("POST", `${path}/brief`, { body, as: o("as") });
-      console.log(body.trim() ? `brief of ${slug} set` : `brief of ${slug} cleared`);
+      console.log(`brief of ${slug} set`);
       break;
     }
     case "artifact": {

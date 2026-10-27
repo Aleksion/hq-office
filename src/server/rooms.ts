@@ -89,6 +89,8 @@ export function createRoom(body: any) {
 export function setBrief(slugRaw: unknown, body: any) {
   const r = mustRoom(slugRaw);
   const text = String(body.body ?? "").replace(/\s+$/, "");
+  // An empty brief clears the room's brief, so it has to be asked for: a client that sends nothing never wipes it.
+  if (!text.trim() && body.clear !== true) throw new Error("the brief is empty: send clear: true to clear it (hud room brief SLUG --clear)");
   if (text.length > 100_000) throw new Error("the brief is over 100,000 characters");
   const by = str(body.as) || r.owner;
   db.query("UPDATE rooms SET brief = ?, brief_at = ?, brief_by = ? WHERE slug = ?").run(text || null, Date.now(), by, r.slug);
