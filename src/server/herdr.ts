@@ -168,8 +168,10 @@ export function promptAgent(name: string, text: string, machine?: string | null,
   const timer = timeoutMs ? setTimeout(() => { timedOut = true; proc.kill(); }, timeoutMs) : null;
   return proc.exited.then(async (code) => {
     if (timer) clearTimeout(timer);
+    // Exit 0 first: a herdr that finished just as the timer fired did type, and a killed one never exits 0.
+    if (code === 0) return { ok: true as const };
     if (timedOut) return { ok: false as const, error: "herdr did not answer in time" };
-    return code === 0 ? { ok: true as const } : { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` };
+    return { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` };
   });
 }
 

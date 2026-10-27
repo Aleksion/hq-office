@@ -67,8 +67,10 @@ export function renderLog() {
 // Something HQ could not take yet (S.hq.held, see hq-link): said in red, not as "not picked up yet".
 const held = (ref) => (S.hq?.held ?? []).some((h) => h.ref === ref);
 const HELD = `<span style="color:var(--red)">· HELD: HQ isn't receiving</span>`;
+// A Tell that went to the queue is qN here; only an urgent one is held, in the outbox as ask:N.
+const noteRef = (n) => (String(n.id).startsWith("q") ? `ask:${String(n.id).slice(1)}` : `note:${n.id}`);
 function noteMark(n) {
-  if (!n.acked_at && held(`note:${n.id}`)) return HELD;
+  if (!n.acked_at && held(noteRef(n))) return HELD;
   return `<span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span>`;
 }
 function logRows() {

@@ -19,7 +19,8 @@ import type { Ask } from "./types.ts";
 export const KINDS = ["READY", "BLOCK", "QUESTION", "DONE", "NOTE"] as const;
 // A default is what a lane does when nobody answers; READY, DONE and NOTE ask for nothing to default.
 const DEFAULTABLE = ["BLOCK", "QUESTION"];
-const DELIVER_TIMEOUT_MS = 20_000;
+// HUD_DELIVER_TIMEOUT_MS shortens it for tests.
+const DELIVER_TIMEOUT_MS = Number(process.env.HUD_DELIVER_TIMEOUT_MS) || 20_000;
 
 // Whether the owner's Tell HQ goes to the queue (true) or is typed straight into HQ's pane (false). The URGENT toggle
 // on Tell HQ takes the other path. The owner decided on HUD #180: "Queue by default, URGENT sends straight to HQ".
