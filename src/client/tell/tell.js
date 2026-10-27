@@ -12,7 +12,8 @@ $("compose").addEventListener("submit", async (e) => {
   if (!typed && !hasImages("note")) return;
   const wait = notReady("note");
   if (wait) { toast(wait); return; }
-  try { await post("/api/notes", { text: withImages("note", typed), urgent: urgent.getAttribute("aria-pressed") === "true" }); urgent.setAttribute("aria-pressed", "false"); $("noteText").value = ""; $("noteText").style.height = ""; clearImages("note"); toast("SENT TO HQ."); } catch (err) { toast(err.message); }
+  const wasUrgent = urgent.getAttribute("aria-pressed") === "true";
+  try { await post("/api/notes", { text: withImages("note", typed), urgent: wasUrgent }); urgent.setAttribute("aria-pressed", "false"); $("noteText").value = ""; $("noteText").style.height = ""; clearImages("note"); toast(wasUrgent && S.hq?.ok === false ? "KEPT. HQ ISN'T RECEIVING; IT GOES WHEN HQ IS BACK." : "SENT TO HQ."); } catch (err) { toast(err.message); }
 });
 // URGENT: it goes to the top of HQ's queue and one line is typed into HQ's pane. Whether a plain note waits in the queue
 // is the server's TELL_GOES_TO_QUEUE; the title follows what /api/state says.

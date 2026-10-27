@@ -30,6 +30,13 @@
 .qwrap { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
 .qtabs { display: flex; align-items: center; gap: 6px; }
 .qtabs .tab { font-size: 9px; padding: 7px 10px; border-width: 3px; }
+/* Four tabs (ROOMS joined in 0.9): they tighten to fit a narrow column or a phone, and the row scrolls sideways
+   rather than ever widening the page. */
+.qtabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.qtabs::-webkit-scrollbar { display: none; }
+.qtabs .tab { flex: 0 0 auto; }
+@media (min-width: 1151px) and (max-width: 1300px) { .qtabs { gap: 4px; } .qtabs .tab { padding: 7px 6px; gap: 4px; } }
+@media (max-width: 520px) { .qtabs { gap: 4px; } .qtabs .tab { font-size: 7px; padding: 6px 5px; gap: 3px; border-width: 2px; } .qtabs .tab .tag { padding: 3px 3px; font-size: 6px; } }
 .qtabs .tag[hidden] { display: none; }
 .tag.count { background: var(--red); color: #fff; }
 .hud[hidden], .msgs[hidden] { display: none; }

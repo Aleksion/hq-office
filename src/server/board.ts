@@ -15,10 +15,12 @@ const DONE_SHOWN_MS = 24 * 3600_000;
 const GH_TIMEOUT_MS = 20_000;
 const GH_FIELDS = "state,isDraft,statusCheckRollup,mergedAt,closedAt,updatedAt";
 
-export type BoardState = "done" | "owner" | "ci" | "paused" | "moving" | "stalled";
+export type BoardState = "done" | "blocked" | "owner" | "ci" | "paused" | "moving" | "stalled";
 // Most urgent first: the order of the board, top to bottom.
-export const STATE_ORDER: BoardState[] = ["stalled", "owner", "ci", "moving", "paused", "done"];
+// BLOCKED ON A PROMPT tops it: the lane's agent waits at a prompt in its pane, and nothing moves until it is answered.
+export const STATE_ORDER: BoardState[] = ["blocked", "stalled", "owner", "ci", "moving", "paused", "done"];
 export const STATE_LABEL: Record<BoardState, string> = {
+  blocked: "BLOCKED ON A PROMPT",
   stalled: "STALLED",
   owner: "WAITING ON OWNER",
   ci: "WAITING ON CI",
@@ -375,6 +377,9 @@ export function createBoard(opts: {
       if (it.done_at || ended) {
         state = "done";
         why = it.done_at ? "closed by HQ" : "all PRs merged or closed";
+      } else if (lane?.prompt) {
+        state = "blocked";
+        why = lane.prompt.split("\n").join(" / ");
       } else if (openAsks.length) {
         state = "owner";
         const a = openAsks.find((x) => named.get(x.id)!.has(it.issue)) ?? openAsks[0];
@@ -402,6 +407,8 @@ export function createBoard(opts: {
         // The lane its lane reports to (null: HQ), so the board can group work under its managers.
         manager: lane?.parent && lanes.has(lane.parent) ? (lane.parent as string) : null,
         laneStatus: lane?.herdr ?? null,
+        // Where the prompt waits, so someone can go and answer it.
+        where: state === "blocked" ? { machine: lane?.machine ?? null, pane: lane?.pane ?? null } : null,
         prs,
         state,
         why,
@@ -417,7 +424,12 @@ export function createBoard(opts: {
     // Within a state, the oldest last change first.
     shown.sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || (a.last?.at ?? 0) - (b.last?.at ?? 0));
     const counts = Object.fromEntries(STATE_ORDER.map((s) => [s, shown.filter((i) => i.state === s).length])) as Record<BoardState, number>;
-    return { now: t, stallMs: STALL_MS, counts, items: shown };
+    // Lanes blocked on a prompt with no open tracked item: `hud board` lists them too, so no block goes unseen.
+    const covered = new Set(shown.filter((i) => i.state === "blocked").map((i) => i.lane));
+    const blockedLanes = [...lanes.values()]
+      .filter((l) => l.prompt && !covered.has(l.name))
+      .map((l) => ({ lane: l.name as string, machine: (l.machine ?? null) as string | null, pane: (l.pane ?? null) as string | null, prompt: l.prompt as string }));
+    return { now: t, stallMs: STALL_MS, counts, items: shown, blockedLanes };
   }
 
   return { track, done, pause, resume, linkLane, refresh, view, syncTimer, stop, follow, onFacts, fact };
@@ -436,13 +448,17 @@ function ago(ms: number) {
 // `owner` names the person who answers asks (HUD_OWNER), in place of OWNER.
 export function boardText(v: ReturnType<ReturnType<typeof createBoard>["view"]>, owner = "") {
   const label = (s: BoardState) => (s === "owner" && owner ? `WAITING ON ${owner.toUpperCase()}` : STATE_LABEL[s]);
-  if (!v.items.length) return "WORK BOARD: nothing tracked. Add work with: hud track ISSUE --lane L --pr N";
+  const where = (machine: string | null, pane: string | null) => (machine || pane ? ` (${[machine, pane].filter(Boolean).join(", ")})` : "");
+  // Lanes blocked on a prompt that no tracked item covers come first, before the board itself.
+  const loose = (v.blockedLanes ?? []).map((b) => `  lane ${b.lane}${where(b.machine, b.pane)}  ${b.prompt.split("\n").join(" / ")}`);
+  const looseHead = loose.length ? [`${STATE_LABEL.blocked} (answer in the pane)`, ...loose] : [];
+  if (!v.items.length) return [...looseHead, ...(loose.length ? [""] : []), "WORK BOARD: nothing tracked. Add work with: hud track ISSUE --lane L --pr N"].join("\n");
   const head = `WORK BOARD: ${STATE_ORDER.filter((s) => v.counts[s]).map((s) => `${v.counts[s]} ${label(s).toLowerCase()}`).join(", ")}`;
-  const out = [head];
+  const out = [...looseHead, ...(loose.length ? [""] : []), head];
   for (const s of STATE_ORDER) {
     const its = v.items.filter((i) => i.state === s);
     if (!its.length) continue;
-    out.push("", `${label(s)}${s === "stalled" ? " (push these)" : ""}`);
+    out.push("", `${label(s)}${s === "stalled" ? " (push these)" : s === "blocked" ? " (answer in the pane)" : ""}`);
     // With lanes in a tree, the work in each state is grouped under the lane its lane reports to (in the order
     // of its oldest item), so a manager sees its reports' work together.
     const grouped = v.items.some((i) => i.manager);
@@ -457,7 +473,8 @@ export function boardText(v: ReturnType<ReturnType<typeof createBoard>["view"]>,
       for (const i of list) {
         const prs = i.prs.map((p) => `#${p.number}${p.draft ? " draft" : ""}${p.state && p.state !== "OPEN" ? ` ${p.state.toLowerCase()}` : ""}${p.ci && p.ci !== "none" && p.state === "OPEN" ? ` ci ${p.ci}` : ""}${p.error ? ` (gh: ${p.error})` : ""}`).join(", ");
         const last = i.last ? `last: ${i.last.what} (${ago(i.last.age)})` : "last: nothing yet";
-        out.push(`${grouped ? "    " : "  "}${i.issue}  lane ${i.lane ?? "-"}${i.laneStatus ? ` (${i.laneStatus})` : ""}  PR ${prs || "-"}  ${s === "paused" || s === "owner" ? `${i.why}  ` : ""}${last}`);
+        const lane = s === "blocked" && i.where ? where(i.where.machine, i.where.pane) : i.laneStatus ? ` (${i.laneStatus})` : "";
+        out.push(`${grouped ? "    " : "  "}${i.issue}  lane ${i.lane ?? "-"}${lane}  PR ${prs || "-"}  ${s === "paused" || s === "owner" || s === "blocked" ? `${i.why}  ` : ""}${last}`);
       }
     }
   }

@@ -6,12 +6,12 @@
 //
 // The wire shape is the one lanes already use (/api/requests, hud request, hud req): toRequest maps an ask back to it.
 import { readFileSync } from "node:fs";
-import { HERDR, LOCAL, ORCHESTRATION, OWNER } from "./config.ts";
+import { ORCHESTRATION, OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import { createAsk } from "./asks.ts";
 import { event } from "./events.ts";
 import { postUpdate } from "./updates.ts";
-import { agentWhere, lastSync } from "./herdr.ts";
+import { agentWhere, lastSync, promptAgent } from "./herdr.ts";
 import { addStatePart } from "./state.ts";
 import { firstLine } from "./urgent.ts";
 import type { Ask } from "./types.ts";
@@ -150,16 +150,8 @@ export function nextRequest(lead?: string, now = Date.now()) {
 export const herdrDeliver: Deliver = async (lane, text) => {
   const a = agentWhere(lane);
   if (!a) return { ok: false, error: `no live herdr agent is named ${lane}` };
-  const args = a.machine === LOCAL ? [HERDR, "agent", "prompt", lane, text] : [HERDR, "--machine", a.machine, "agent", "prompt", lane, text];
-  try {
-    const proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
-    const timer = setTimeout(() => proc.kill(), DELIVER_TIMEOUT_MS);
-    const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
-    clearTimeout(timer);
-    return code === 0 ? { ok: true } : { ok: false, error: err.trim().split("\n")[0] || `herdr exit ${code}` };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
-  }
+  const timeout = new Promise<{ ok: false; error: string }>((done) => setTimeout(() => done({ ok: false, error: "herdr did not answer in time" }), DELIVER_TIMEOUT_MS).unref());
+  return Promise.race([promptAgent(lane, text, a.machine), timeout]);
 };
 
 // A queue item by its ask id, or else by the number it had as a request before the copy (lanes still hold those).

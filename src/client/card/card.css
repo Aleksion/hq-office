@@ -9,3 +9,7 @@
 .card .path { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; color: #3a3a52; overflow-wrap: anywhere; }
 .card .path .level { background: var(--ink); color: #fff; }
 .card .path .up { border: 0; background: none; padding: 0; font: inherit; color: var(--blue); cursor: pointer; text-decoration: underline; }
+/* blocked on a prompt: what it asks, and where to go to answer it */
+.card .prompt { display: grid; gap: 6px; margin-top: 8px; padding: 8px 10px; border: 2px solid var(--red); border-radius: 8px; background: #fff0f0; }
+.card .prompt .k { font: 8px/1.5 var(--pixel); color: var(--red); }
+.card .prompt pre { margin: 0; font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }

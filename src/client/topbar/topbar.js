@@ -35,6 +35,6 @@ export function renderStats() {
   const unread = S.updatesUnread ?? 0;
   setClass($("sFrom"), "box fromhq" + (unread ? " unread" : ""));
   setText($("sFrom").querySelector(".v"), `${unread} NEW`);
-  const title = n ? `(${n}) HQ Office` : "HQ Office";
+  const title = (S.hq?.ok === false ? "HQ ISN'T RECEIVING · " : "") + (n ? `(${n}) HQ Office` : "HQ Office");
   if (document.title !== title) document.title = title;
 }

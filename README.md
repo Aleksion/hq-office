@@ -150,10 +150,16 @@ hud secret get NAME | <command>          # the raw value, to a pipe only; refuse
 hud secret get NAME --once | <command>   # and delete it on read
 <command> | hud secret set NAME --minutes 30   # the value comes from stdin, never an argument
 hud secret rm NAME
-hud secret list                          # names, who set them, when they expire
+hud secret list                          # names, who set them, when they expire, and any LOST ones
 ```
 
-Values live in the server's memory only: never in the database, the log, `/api/state` or any listing, and a restart clears them all. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
+Every expiry is said both ways, in local time: `expires in 6d 23h (Mon 2 Nov, 13:45)`, or `expires in 23h (tomorrow 13:45)`.
+
+Values live in the server's memory only: never in the database, the log, `/api/state` or any listing. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
+
+**Restarts.** A planned restart (the plugin's reload or install service action, which a plugin update needs) hands the secrets over: the plugin takes them from the running server over loopback, holds them in its own memory while the new server starts, and gives them back with their original deadlines. Nothing is written to disk on the way. The handover routes also need a token that each server start writes to `secret-handover.token` in the data folder (readable by you only; it is not a secret value), and the new server takes a handover only while it holds no secrets, within 2 minutes of its start.
+
+A crash, a kill or a stop and start loses the values. The server keeps each secret's name, setter and deadline (never its value) in the database, so after such a restart it knows what it lost: the SECRETS tab lists those names as LOST in red, `hud secret list` marks them, `hud secret get NAME` fails with `NAME was lost when the server restarted at 13:45; ask the owner to set it again`, and HQ gets a one-line note. Setting the secret again clears it, and DISMISS (or `hud secret rm NAME`) removes the name.
 
 ## Lanes in levels
 
@@ -179,6 +185,25 @@ our own, not any show's.
 The WORK tab lists every piece of work in flight: an issue key, its pull requests and the lane that owns it. HQ adds one with `hud track ISSUE --lane L --pr N`, and `hud lane NAME --issue X --pr N` links a lane's work too. Each item's state is worked out from facts, in this order: done (all PRs merged or closed, or `hud done ISSUE`), waiting on you (an open question names its lane, issue or PR), waiting on CI (a check is running), paused (`hud pause ISSUE REASON`, undone with `hud resume ISSUE`), moving (the lane is working, or something changed in the last 45 minutes), and otherwise stalled. Stalled work shows red at the top of the question column and at the top of `hud board` (`--json` for JSON).
 
 PR facts come from the `gh` CLI. The server caches them and refreshes them every 10 minutes while anything is open, and when HQ runs `hud board` if the cache is over a minute old. Page loads never call GitHub.
+
+## Conference rooms
+
+A piece of work with an owner can get a conference room: one place where you talk straight to the lane that owns it (usually a manager or a lead) or to any lane in it, and where that lane keeps the concrete context of the problem. Think of it as the work's project folder. HQ opens one, and the owning lane keeps it current:
+
+```sh
+hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   # again: change or reopen it
+hud room brief SLUG --body B          # the pinned brief, in markdown, replaced as a whole (or piped on stdin)
+hud room artifact SLUG --title T --url U            # a Claude artifact link (recognised by its address) or any link
+hud room artifact SLUG --title T --file PATH        # an image or any file, uploaded (25 MB at most)
+hud room say SLUG TEXT [--as LANE] [--reply ID]     # write in the thread (as the owning lane unless --as)
+hud room read SLUG [--since ID] [--wait] [--json]   # your messages; --wait blocks until a new one, like hud wait
+hud room list [--all] [--json]
+hud room archive SLUG
+```
+
+The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. A room is a place you go to: open one and it takes the place of the office on the right, full height, at its own address (`#room/SLUG`), so a link, a reload and the browser's back button work. BACK TO OFFICE or Esc return to the office, and the strip at the top of a room moves straight to the other open rooms, marking those with new messages. The question column never moves. In the room, the thread fills the main column with the send box always at its foot: write there, with images as anywhere else, and messages keep their line breaks and render as markdown. TO picks the lane (the owner by default, or any lane in the room); REPLY on a lane's message answers it and addresses that lane. A rail beside the thread holds the room's lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief and the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files); fold it to give the thread the width. Above them a small pixel conference room seats the room's lanes at a table with you at its head. On a phone a room fills the screen with CHAT, BRIEF and SHELF tabs.
+
+What you write is typed into that lane's terminal through herdr, naming the room and telling it to answer with `hud room say` and to keep the brief and artifacts current. Each message shows DELIVERED, or AWAY · KEPT when the lane is not there: a kept message stays in the thread and is typed into the lane once, when herdr sees it again (RETRY appears if herdr refused one). Uploaded files are served sandboxed, so a file a lane uploads can show but never run a script.
 
 ## Changing a question in place
 
@@ -214,6 +239,7 @@ Set these in `config.env`. An empty value means the default.
 | --- | --- | --- |
 | `HUD_HQ_AGENT` | `hq` | herdr agent name of your HQ lane. Answers and notes are typed into it. |
 | `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
+| `HUD_HQ_BLOCKED` | on | `0` stops telling HQ when a lane's agent becomes blocked on a prompt in herdr (the page still shows it). |
 | `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |
 | `HUD_LEAD` | `HQ` | Whose queue the top bar and `bin/hq-queue-hook.ts` show. |
 | `HUD_ORCHESTRATION` | empty | A JSON registry of orchestrators and PMs; a request's recipient is read from it. Empty sends every request to HQ. |

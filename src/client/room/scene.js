@@ -153,10 +153,11 @@ export function drawRoom(now, still) {
   drawSeason(now);
 }
 
-export function drawBubble(x, y, glyph, color, bounce) {
+// fill: the bubble's inside (white; red for a lane blocked on a prompt).
+export function drawBubble(x, y, glyph, color, bounce, fill = "#ffffff") {
   const bx = x + 9, by = y - 9 - bounce;
   px(bx, by, 10, 9, "#22202a");
-  px(bx + 1, by + 1, 8, 7, "#ffffff");
+  px(bx + 1, by + 1, 8, 7, fill);
   px(bx + 2, by + 9, 2, 2, "#22202a");
   ctx.fillStyle = color;
   ctx.font = `bold ${7 * SC}px "Press Start 2P", monospace`;
@@ -187,4 +188,5 @@ export function drawLabel(text, cx, y, strong, mark = null) {
   for (let i = 0; i < mark.pips; i++) ctx.fillRect(x0 + i * (PIP + PIP_GAP), py, PIP, PIP);
 }
 
-export const GLYPH = { needs_you: ["!", "#d63c3c"], hq_turn: ["?", "#e0901e"], stale: ["?", "#c0501e"], waiting: ["…", "#3c6fd6"], parked: ["z", "#6a6a82"], done: ["✓", "#2f9e57"], gone: ["x", "#6a6a82"] };
+// [glyph, colour, inside]: blocked is a white "!" in a red bubble, at the lane's desk.
+export const GLYPH = { blocked: ["!", "#ffffff", "#d63c3c"], needs_you: ["!", "#d63c3c"], hq_turn: ["?", "#e0901e"], stale: ["?", "#c0501e"], waiting: ["…", "#3c6fd6"], parked: ["z", "#6a6a82"], done: ["✓", "#2f9e57"], gone: ["x", "#6a6a82"] };

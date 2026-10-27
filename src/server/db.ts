@@ -45,3 +45,5 @@ if (db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reque
     WHERE NOT EXISTS (SELECT 1 FROM asks a WHERE a.request_id = r.id)
     ORDER BY r.id`);
 }
+// blocked-prompts: the excerpt of the prompt a lane's agent waits on in herdr (null when none); see prompt.ts.
+if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "prompt")) db.exec("ALTER TABLE lanes ADD COLUMN prompt TEXT");

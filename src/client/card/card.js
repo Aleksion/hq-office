@@ -28,6 +28,7 @@ export function renderCard() {
   setHTML(card, `<h3>${esc(lane.name)}</h3>
     <div class="sub">${esc(lane.title || "")}</div>${tree}
     <div class="row"><span class="status" style="background:${color}">${esc(label.toUpperCase())}</span>${lane.herdr_since ? `<span class="tag">FOR <span data-since="${lane.herdr_since}">${dur(Date.now() - lane.herdr_since)}</span></span>` : ""}${links}</div>
+    ${lane.status === "blocked" ? `<div class="prompt"><span class="k">BLOCKED ON A PROMPT · ANSWER IT IN HERDR ON ${esc(String(lane.machine || "?").toUpperCase())}, PANE ${esc(lane.pane || "?")}</span><pre>${esc(lane.prompt || "")}</pre></div>` : ""}
     ${lane.note ? `<div class="note">${linkify(lane.note)}</div>` : ""}
     ${asks.length ? `<div class="row">${asks.map((a) => `<button class="tag lane" data-select="${esc(lane.name)}">ANSWER: ${esc(a.title.slice(0, 40))}${a.title.length > 40 ? "…" : ""}</button>`).join("")}</div>` : ""}`);
 }

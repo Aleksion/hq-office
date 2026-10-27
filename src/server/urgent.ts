@@ -3,7 +3,8 @@
 // a row in urgent_uses, which is what `hud urgent` reports.
 import { db } from "./db.ts";
 import { event } from "./events.ts";
-import { HQ_AGENT, promptAgent } from "./herdr.ts";
+import { agentWhere, promptAgent } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
 import type { Ask } from "./types.ts";
 
 // The first line of an ask's words: what the pane line and the lists show.
@@ -15,7 +16,12 @@ export function recordUrgent(ask: Ask, by: string, now = Date.now(), type = true
   db.query("INSERT INTO urgent_uses (ask_id, by, at) VALUES (?, ?, ?)").run(ask.id, by, now);
   event(by, `urgent #${ask.id} for ${ask.recipient}: ${ask.title.slice(0, 120)}`, ask.lane);
   if (!type || ask.recipient === "owner" || /\s/.test(ask.recipient)) return;
-  promptAgent(ask.recipient === "HQ" ? HQ_AGENT : ask.recipient, `URGENT from ${ask.lane ?? by}: ${firstLine(ask.title)}`);
+  const line = `URGENT from ${ask.lane ?? by}: ${firstLine(ask.title)}`;
+  // HQ's line goes through the outbox, which holds it while HQ is not receiving; another recipient is typed at once.
+  if (ask.recipient === "HQ") return notifyHq(line, `ask:${ask.id}`);
+  promptAgent(ask.recipient, line, agentWhere(ask.recipient)?.machine).then((r) => {
+    if (!r.ok) event("hud", `could not reach ${ask.recipient}: ${r.error}`);
+  });
 }
 
 // Pushes an open ask to the top of its list. Asking twice records the use twice but types the line once.

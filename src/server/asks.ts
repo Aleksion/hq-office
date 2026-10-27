@@ -1,11 +1,12 @@
 // Asks: HQ's questions, and answering them.
 import { checkMinutes, checkName, checkValue } from "./secrets.ts";
+import { expiresText } from "../client/secrets/expiry.js";
 import { OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import type { Ask } from "./types.ts";
 import { secrets } from "./push.ts";
 import { event } from "./events.ts";
-import { notifyHq } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
 import { recordUrgent } from "./urgent.ts";
 
 // An ask for the owner's desk, or (with body.recipient) a message in an orchestrator's queue; see queue.ts.
@@ -53,7 +54,7 @@ export function answerAsk(id: number, answer: string) {
   if (ask.recipient !== "owner") throw new Error(`ask ${id} is for ${ask.recipient}, not the owner: answer it with hud req answer ${id}`);
   db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ? WHERE id = ?").run(answer, Date.now(), id);
   event(OWNER, `answered "${ask.title}": ${answer}`, ask.lane);
-  notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`);
+  notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`, `ask:${id}`);
 }
 
 // An ask that requests secrets is answered with their values: each one goes to the secret store, and the
@@ -71,7 +72,7 @@ export function answerWithSecrets(id: number, body: any) {
       throw new Error(`${name}: ${(e as Error).message}`);
     }
   });
-  wanted.forEach((name, i) => secrets.set(name, values[i], minutes, "owner"));
+  const set = wanted.map((name, i) => secrets.set(name, values[i], minutes, "owner"));
   const note = String(body.note ?? "").trim();
-  answerAsk(id, `secrets set: ${wanted.join(", ")}, readable for ${minutes} min with: hud secret get NAME | <command>${note ? `. ${note}` : ""}`);
+  answerAsk(id, `secrets set: ${wanted.join(", ")}, ${expiresText(set[0].expiresAt)}; read with: hud secret get NAME | <command>${note ? `. ${note}` : ""}`);
 }
