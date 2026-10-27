@@ -1,9 +1,13 @@
 // Routes for the ask ledger: edit an open question, comment on it (and the owner talks it through), and its checklist. See src/server/ledger.ts.
 import { addItems, commentAsk, createAskWithItems, resendComment, talkAsk, tickItem, updateAsk } from "../ledger.ts";
+import { refuseMissingPick } from "../asks.ts";
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
-  { method: "POST", path: "/api/ledger/asks", handle: ({ body }) => ({ id: createAskWithItems(body) }) },
+  { method: "POST", path: "/api/ledger/asks", handle: ({ body }) => {
+    refuseMissingPick(body);
+    return { id: createAskWithItems(body) };
+  } },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/update$/, handle: ({ body, m }) => updateAsk(Number(m[1]), body) },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/comment$/, handle: ({ body, m }) => commentAsk(Number(m[1]), body.text, body.as) },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/talk$/, handle: ({ body, m }) => talkAsk(Number(m[1]), body) },

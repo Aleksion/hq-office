@@ -1,11 +1,14 @@
 // Routes for asks. The router loads every file in this folder; see src/server/router.ts.
 import { db } from "../db.ts";
 import { event } from "../events.ts";
-import { answerAsk, createAsk, deferAsk } from "../asks.ts";
+import { answerAsk, createAsk, deferAsk, refuseMissingPick } from "../asks.ts";
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
-  { method: "POST", path: "/api/asks", handle: ({ body }) => ({ id: createAsk(body) }) },
+  { method: "POST", path: "/api/asks", handle: ({ body }) => {
+    refuseMissingPick(body);
+    return { id: createAsk(body) };
+  } },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/answer$/, handle: ({ body, m }) => {
     answerAsk(Number(m[1]), String(body.answer ?? "").trim() || "done");
   } },

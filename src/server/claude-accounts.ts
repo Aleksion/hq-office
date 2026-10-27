@@ -34,7 +34,7 @@ export const laneAccount = (lane: string) => (db.query("SELECT account FROM lane
 
 function fileQuestion(lane: string, title: string, body: string, options: string[]) {
   const open = db.query("SELECT 1 FROM asks WHERE lane = ? AND title = ? AND status = 'open'").get(lane, title);
-  if (!open) createAsk({ lane, title, body, options, recommended: options[0] });
+  if (!open) createAsk({ lane, title, body, options });
 }
 
 function fileDialogQuestion(lane: string, account: string, kind: "limit" | "prompt") {

@@ -9,8 +9,10 @@ import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
 
 // The owner's rule (#242): every ask carries the agent's pick and why. A decision with options and no --rec is refused,
-// with the line to send instead. The why has no field of its own: it goes in the body, and is not checked.
-function refuseMissingPick(body: any) {
+// with the line to send instead. The why has no field of its own: it goes in the body, and is not checked. The rule is
+// for what agents file, so the routes behind hud ask apply it; the server's own questions (claude-accounts.ts) have no
+// agent to pick.
+export function refuseMissingPick(body: any) {
   const options: string[] = (body.options ?? []).map(String).filter(Boolean);
   if ((body.kind ?? "decision") !== "decision" || !options.length || String(body.recommended ?? "").trim()) return;
   const q = (v: string) => JSON.stringify(v);
@@ -23,7 +25,6 @@ function refuseMissingPick(body: any) {
 
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
-  refuseMissingPick(body);
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const res = db
     .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
