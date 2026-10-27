@@ -26,7 +26,7 @@ document.querySelector(".stageslot")?.append(button);
 
 let open = false;
 const briefs = {}; // slug -> the brief's text, as last fetched
-const fetched = {}; // slug -> the room's rev it was fetched at
+const fetched = {}; // slug -> the room's rev last asked for; a failure waits for a new rev or the panel opening again
 
 async function fetchBrief(slug, rev) {
   if (fetched[slug] === rev) return;
@@ -36,9 +36,7 @@ async function fetchBrief(slug, rev) {
     if (!res.ok) throw new Error(String(res.status));
     briefs[slug] = (await res.json()).brief ?? "";
     render();
-  } catch {
-    delete fetched[slug]; // the next state tries again
-  }
+  } catch {} // kept as asked: not asked again in a loop while the server is down
 }
 
 const dots = (help) => help.map((h) => `<i class="dot" style="background:${HELP_COLORS[h.state]}" title="${esc(h.lane)}"></i>`).join("");
@@ -58,7 +56,11 @@ function render() {
   setHTML(panel, `<div class="rdhdr"><h2>RUNDOWN</h2><button class="btn" type="button" data-rundown-close>BACK TO THE ROOM</button></div>${floors.map((f) => `<div class="box rdfloor"><h3>${tagged ? `<span class="tag floortag" style="background:${f.color}">${esc(f.label)}</span>` : ""}${dots(f.help)}</h3>${f.projects.length ? f.projects.map(project).join("") : `<p class="rnone">NO PROJECTS</p>`}</div>`).join("")}`);
 }
 
-on("panel", (id) => { open = id === "rundown"; render(); });
+on("panel", (id) => {
+  if (id === "rundown" && !open) for (const k of Object.keys(fetched)) delete fetched[k]; // opening asks again
+  open = id === "rundown";
+  render();
+});
 on("state", render);
 on("scope", render);
 // A conference room opening covers the floor, and the panel with it.
