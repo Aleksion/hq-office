@@ -1,0 +1,6 @@
+/* The scope's chip, border and ring. Nothing here applies until the scope is set (scope/index.js makes the elements). */
+.scopechip { margin-left: auto; align-self: center; padding: 2px 8px; border: 2px solid currentColor; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.scopeborder, .scopering { position: fixed; pointer-events: none; z-index: 50; box-sizing: border-box; }
+.scopeborder { inset: 0; border: 5px solid; }
+.scopering { inset: 5px; border: 2px solid; opacity: 0.6; }
+.scopechip[hidden], .scopeborder[hidden], .scopering[hidden] { display: none; }
