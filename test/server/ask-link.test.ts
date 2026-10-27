@@ -13,7 +13,7 @@ describe("a question's link", () => {
   test("an ask keeps an http(s) link and refuses any other, saving nothing", async () => {
     const ok = (await (await o.send("/api/asks", { title: "Read this", link: "https://example.com/pr/1" })).json()) as any;
     expect(await linkOf(ok.id)).toBe("https://example.com/pr/1");
-    for (const link of ["ftp://example.com/x", "file:///tmp/x", "example.com/x"]) {
+    for (const link of ["javascript:void(0)", "JavaScript:void(0)", "data:text/html,x", "ftp://example.com/x", "file:///tmp/x", "example.com/x"]) {
       const res = await o.send("/api/asks", { title: `Bad ${link}`, link });
       expect(res.ok).toBe(false);
       expect(await res.text()).toContain("http:// or https://");

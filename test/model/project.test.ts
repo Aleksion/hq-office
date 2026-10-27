@@ -129,6 +129,15 @@ describe("the project panel's shelf", () => {
   });
 });
 
+describe("a question's OPEN LINK", () => {
+  const { openLinkHTML } = require("../../src/client/questions/links.js");
+  test("only for a web address; nothing for any other link a question stored before the server refused them", () => {
+    expect(openLinkHTML({ link: "https://example.com/a?b=1&c" })).toContain('href="https://example.com/a?b=1&amp;c"');
+    expect(openLinkHTML({ link: "HTTP://example.com" })).toContain("OPEN LINK");
+    for (const link of ["javascript:void(0)", " javascript:void(0)", "data:text/html,x", "ftp://example.com", "example.com", "", null]) expect(openLinkHTML({ link })).toBe("");
+  });
+});
+
 describe("the project panel's shelf, shown again", () => {
   const { shelfLoader } = require("../../src/client/project/shelf.js");
   const settle = () => new Promise((r) => setTimeout(r, 5));

@@ -6,6 +6,10 @@ import { CONFIG } from "../core/state.js";
 
 const tag = (cls, href, text) => (href ? `<a class="tag ${cls}" href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>` : `<span class="tag ${cls}">${esc(text)}</span>`);
 
+// A question's own link, as OPEN LINK, only when it is a web address. The server refuses any other, but a question stored
+// before it did may still hold one.
+export const openLinkHTML = (ask) => (/^https?:\/\//i.test(String(ask?.link ?? "")) ? `<a class="tag" href="${esc(ask.link)}" target="_blank" rel="noopener">OPEN LINK</a>` : "");
+
 export function linksHTML(S, ask) {
   const { projects, issues, prs } = askLinks(S, CONFIG, ask);
   return projects.map((p) => `<button class="tag project" type="button" data-project="${esc(p.slug)}" title="${esc(p.title)}">PROJECT · ${esc(p.title)}</button><a class="tag room" href="#room/${esc(p.slug)}">ROOM</a>`).join("")
