@@ -68,8 +68,7 @@ lives in a `.scene` with the layer beside it, with one floor too: that is the on
 ## Projects, links and the way into rooms
 
 A frame on the wall, a question's PROJECT tag or `showPanel("project", { slug })` opens the project panel (`project/`,
-`projectView`) over the room, in the accounts panel's pattern: its state, OPEN CALLS (a click chooses the agent and
-closes the panel), ROOM, PULL REQUESTS with their board state, ARTIFACTS (fetched from `GET /api/rooms/<slug>`) and
+`projectView`) over the room, in the accounts panel's pattern: its state, ROOM, PULL REQUESTS with their board state, ARTIFACTS (fetched from `GET /api/rooms/<slug>`) and
 WHO IS ON IT. Panels over the room take turns through `core/panel.js` and the `"panel"` bus event: opening one closes
 the other, and Escape closes the open panel before it steps the scope out (`escapeAction`).
 

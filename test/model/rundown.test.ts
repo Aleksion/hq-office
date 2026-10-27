@@ -32,13 +32,14 @@ describe("RUNDOWN's entries", () => {
     expect(r.map((f: any) => f.projects.map((p: any) => p.slug))).toEqual([["release", "web-fix"], ["recon"], ["pipeline", "outbound"]]);
   });
 
-  test("a project carries its state, owner, open calls and brief; one with no brief has none", () => {
+  test("a project carries its state, owner and brief, and no count of questions; one with no brief has none", () => {
     const r = rundown(S, ALL, BRIEFS);
     const by = Object.fromEntries(r.flatMap((f: any) => f.projects).map((p: any) => [p.slug, p]));
-    expect(by.release).toMatchObject({ title: "RELEASE", owner: "pm", state: "moving", name: "MOVING", calls: 0, brief: "Cut the branch. Tag it." });
+    expect(by.release).toMatchObject({ title: "RELEASE", owner: "pm", state: "moving", name: "MOVING", brief: "Cut the branch. Tag it." });
     expect(by["web-fix"]).toMatchObject({ state: "blocked", brief: null });
     expect(by.recon).toMatchObject({ state: "stalled", brief: "Close March." });
-    expect(by.outbound).toMatchObject({ state: "waiting", calls: 1, brief: null });
+    expect(by.outbound).toMatchObject({ state: "waiting", brief: null });
+    expect(Object.values(by).some((p: any) => "calls" in p)).toBe(false);
     expect(by.pipeline.brief).toBeNull(); // not fetched yet: nothing stands in for it
     expect(by.release).toMatchObject({ last: { who: "pm", to: null, text: "Branch cut." }, at: 8 });
     expect(by["web-fix"]).toMatchObject({ last: null, at: 2 }); // no thread yet: it moved when it was made

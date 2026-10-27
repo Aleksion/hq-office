@@ -148,7 +148,8 @@ for (const [width, height] of SIZES) {
     expect(await ev(`document.querySelector("#projectPanel h2").textContent`)).toBe(FACTS.release.title);
     expect(await ev(`document.querySelector("#projectPanel .tag.st").textContent`)).toBe("WAITING ON YOU");
     await until(`document.querySelectorAll("#projectPanel .shelfc").length === 1`);
-    expect(await panelHeads()).toEqual(["OPEN CALLS · 1", "ROOM", "PULL REQUESTS · 1", "ARTIFACTS · 1", "WHO IS ON IT"]);
+    expect(await panelHeads()).toEqual(["ROOM", "PULL REQUESTS · 1", "ARTIFACTS · 1", "WHO IS ON IT"]);
+    expect(await ev(`document.querySelectorAll("#projectPanel button.lrow, #projectPanel .count").length`)).toBe(0);
     expect(await ev(`[...document.querySelectorAll("#projectPanel .pgrp:last-child .lrow b")].map((b) => b.textContent)`)).toEqual([FACTS.release.owner, ...FACTS.release.members]);
     expect(await ev(`document.querySelector("#projectPanel a.btn").getAttribute("href")`)).toBe("#room/release");
     expect(await ev(`document.querySelector("#projectPanel .shelfc").textContent`)).toContain(FACTS.release.shelf);
@@ -156,10 +157,8 @@ for (const [width, height] of SIZES) {
     expect(await ev(`(() => { const p = document.getElementById("projectPanel").getBoundingClientRect(), r = document.querySelector(".room").getBoundingClientRect(), h = document.getElementById("hud").getBoundingClientRect(); const apart = r.left >= h.right - 1 || r.top >= h.bottom - 1; return p.left >= r.left - 1 && p.right <= r.right + 1 && apart; })()`)).toBe(true);
     expect(await ev(`document.querySelectorAll("#hud .ask").length`)).toBe(FACTS.waiting.hq);
     expect(await ev(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
-    // an open call chooses its agent and gets the panel out of the way of the question
-    await click(`#projectPanel .pgrp button.lrow`);
+    await click(`#projectPanel [data-project-close]`);
     await until(`!document.querySelector("#projectPanel h2")`);
-    expect(await scopeOf()).toMatchObject({ floor: "hq", agent: "hq-pm" });
     // the other floor's frames
     await click(".stagebar [data-building]");
     await click(`.tile[data-floor="sales"] .tlabel`);

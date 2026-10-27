@@ -7,7 +7,7 @@ import { CONFIG, S } from "../core/state.js";
 import { closePanel, showPanel } from "../core/panel.js";
 import { floorTag, projectView } from "../core/floors.js";
 import { STATUS_TEXT } from "../core/status.js";
-import { dur, esc, setClass, setHTML } from "../core/format.js";
+import { esc, setClass, setHTML } from "../core/format.js";
 import { shelfLoader } from "./shelf.js";
 
 const room = document.querySelector(".room");
@@ -42,7 +42,6 @@ function render() {
   const sh = shelf.of(r), art = sh?.list ?? null;
   setClass(panel, "projectp");
   setHTML(panel, `<div class="phdr"><div class="ptitle"><h2>${esc(r.title)}</h2><span class="tag st" style="background:${v.color}">${esc(v.name)}</span>${fl ? `<span class="tag floortag" style="background:${fl.color}">${esc(fl.label)}</span>` : ""}${v.issues.map((i) => tagOf("key", i.href, i.key)).join("")}</div><button class="btn" type="button" data-project-close>BACK TO THE ROOM</button></div>
-    <div class="box pgrp"><h3>OPEN CALLS · ${v.calls.length}</h3>${v.calls.map((a) => `<button class="lrow" type="button" data-select="${esc(a.lane)}"><span class="timer" data-since="${a.created_at}">${dur(Date.now() - a.created_at)}</span><b>${esc(a.title)}</b><span class="d">${a.recommended ? `▶ ${esc(a.recommended)}` : ""}</span><span class="tag lane">${esc(a.lane)}</span></button>`).join("")}</div>
     <div class="box pgrp"><h3>ROOM</h3><a class="btn go" href="#room/${esc(r.slug)}">OPEN THE ROOM</a>${r.unread ? `<span class="tag new">${r.unread} NEW</span>` : ""}</div>
     <div class="box pgrp"><h3>PULL REQUESTS · ${v.prs.length}</h3><div class="pwork">${v.prs.map((p) => `<span class="rwork">${tagOf("pr", p.href, `#${p.num}${prMark(p.pr)}`)}${p.board ? `<span class="tag ws ${esc(p.board.state)}" title="${esc(p.board.why)}">${BOARD[p.board.state] ?? ""}</span>` : ""}</span>`).join("")}</div></div>
     <div class="box pgrp"><h3>ARTIFACTS${art ? ` · ${art.length}` : sh?.failed ? " · COULDN'T LOAD" : ""}</h3><div class="shelf">${(art ?? []).map((a) => `<a class="shelfc" href="${esc(a.url)}" target="_blank" rel="noopener"><span class="tag">${esc(KIND[a.kind] ?? "LINK")}</span>${esc(a.title)}</a>`).join("")}</div></div>
@@ -62,8 +61,7 @@ on("state", render);
 on("stage", (shown) => { if (shown !== "office") closePanel("project"); });
 
 panel.addEventListener("click", (e) => {
-  // An open call chooses its agent (clicks.js does that); the panel gets out of the way of the question.
-  if (e.target.closest("[data-project-close], [data-select]")) closePanel("project");
+  if (e.target.closest("[data-project-close]")) closePanel("project");
 });
 document.addEventListener("click", (e) => {
   const p = e.target.closest("[data-project]");

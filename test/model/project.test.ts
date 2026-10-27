@@ -37,10 +37,10 @@ describe("links on a question", () => {
 });
 
 describe("the project panel's data", () => {
-  test("state, open calls, who is on it and the linked work with its board state", () => {
+  test("state, who is on it and the linked work with its board state; no questions, since a question has no room yet", () => {
     const v = projectView(S, CONFIG, "release")!;
     expect(v.state).toBe("waiting");
-    expect(v.calls.map((a: any) => a.id)).toEqual([1]);
+    expect(v).not.toHaveProperty("calls");
     expect(v.lanes.map((l: any) => [l.name, l.owner, l.help])).toEqual([["pm", true, null], ["api", false, null], ["web", false, "blocked"]]);
     expect(v.issues[0]).toMatchObject({ key: "REL-1", board: { state: "ci" } });
     expect(v.prs[0]).toMatchObject({ key: "acme-example/app#7", num: "7", pr: { state: "OPEN" }, board: { issue: "REL-1" } });

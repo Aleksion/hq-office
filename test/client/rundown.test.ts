@@ -71,7 +71,7 @@ for (const [width, height] of SIZES) {
     // a project with no brief shows none: no placeholder line
     await until(`document.querySelectorAll("#rundownPanel .rbrief").length === 3`);
     expect((await projects()).map((p) => p.brief)).toEqual([FACTS.briefs.release, null, FACTS.briefs.recon, FACTS.briefs.pipeline, null]);
-    expect(list[4].calls).toBe("1 OPEN CALL");
+    expect(list.map((p) => p.calls)).toEqual([null, null, null, null, null]);
     expect(list.map((p) => p.room)).toEqual(["#room/release", "#room/web-fix", "#room/recon", "#room/pipeline", "#room/outbound"]);
     expect(await ev(`document.querySelector("#rundownBtn").getAttribute("aria-pressed")`)).toBe("true");
     // the explanatory words stay out of it

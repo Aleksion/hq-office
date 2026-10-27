@@ -169,7 +169,7 @@ export function helpMarks(S, floor, zoomedIn) {
 // itself, is HQ's floor. Archived rooms are not on the wall.
 export const roomLanes = (room) => [room.owner, ...(room.members ?? [])];
 const boardItems = (S, room) => (S.board?.items ?? []).filter((i) => room.issues?.includes(i.issue) || i.prs?.some((p) => room.prs?.includes(p.key)));
-// The open asks of the room's lanes.
+// The open asks of the room's lanes. Only a project's colour reads them: no view counts them as the project's (see frames).
 export const roomCalls = (S, room) => S.open.filter((a) => a.lane && roomLanes(room).includes(a.lane));
 const BOARD_STATE = { owner: "waiting", blocked: "blocked", stalled: "stalled", ci: "ci" };
 const PROJECT_ORDER = ["waiting", "blocked", "stalled", "ci"];
@@ -221,8 +221,8 @@ export function briefExcerpt(text) {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
   return !t ? null : t.length > BRIEF_MAX ? t.slice(0, BRIEF_MAX - 1).trimEnd() + "…" : t;
 }
-// RUNDOWN: for each floor in scope, who needs help there and each open project with its state, its owner, how many
-// questions of its lanes wait on you, the thread's last line, when it last moved and its brief. `briefs` maps a slug to the brief's text, once the page has fetched it
+// RUNDOWN: for each floor in scope, who needs help there and each open project with its state, its owner, the thread's
+// last line, when it last moved and its brief. Like a frame, it counts no questions (see frames). `briefs` maps a slug to the brief's text, once the page has fetched it
 // (S.rooms carries only when it was set). A project with no brief has none: nothing stands in for it.
 export function rundown(S, view, briefs = {}) {
   return viewFloors(S, view).map((f) => ({
@@ -230,7 +230,7 @@ export function rundown(S, view, briefs = {}) {
     help: needHelp(S, { floor: f.id, agent: null }),
     projects: openRooms(S, f.id).map((r) => {
       const state = projectState(S, r);
-      return { slug: r.slug, title: r.title, owner: r.owner, state, color: PROJECT_COLORS[state], name: PROJECT_NAMES[state], calls: roomCalls(S, r).length, last: r.last ? { who: r.last.who, to: r.last.to, text: r.last.text } : null, at: r.lastAt ?? r.createdAt, brief: briefExcerpt(briefs[r.slug]) };
+      return { slug: r.slug, title: r.title, owner: r.owner, state, color: PROJECT_COLORS[state], name: PROJECT_NAMES[state], last: r.last ? { who: r.last.who, to: r.last.to, text: r.last.text } : null, at: r.lastAt ?? r.createdAt, brief: briefExcerpt(briefs[r.slug]) };
     }),
   }));
 }
@@ -306,7 +306,6 @@ export function projectView(S, config, slug) {
   return {
     room, state, color: PROJECT_COLORS[state], name: PROJECT_NAMES[state],
     floor: floorOfLane(S, room.owner),
-    calls: roomCalls(S, room),
     lanes: roomLanes(room).map((name, i) => {
       const l = lanesOf(S).find((x) => x.name === name);
       return { name, owner: i === 0, title: l?.title ?? "", status: l?.status ?? null, help: l ? helpState(l) : null };
