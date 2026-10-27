@@ -11,7 +11,7 @@ import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { board } from "./work-board.ts";
 import { parsePr } from "./board.ts";
-import { createAsk } from "./asks.ts";
+import { checkLink, createAsk } from "./asks.ts";
 import { bump } from "./push.ts";
 import { notifyHq } from "./hq-link.ts";
 import { promptAgent } from "./herdr.ts";
@@ -50,7 +50,8 @@ export function updateAsk(id: number, body: any) {
     if (f === "options") {
       const opts = (Array.isArray(body.options) ? body.options : [body.options]).map((o: unknown) => String(o).trim()).filter(Boolean);
       v = opts.length ? JSON.stringify(opts) : null;
-    } else v = String(body[f]).trim() || null;
+    } else if (f === "link") v = checkLink(body.link);
+    else v = String(body[f]).trim() || null;
     if (f === "title" && !v) throw new Error("title cannot be empty");
     set.push(`${f} = ?`);
     values.push(v);

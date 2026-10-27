@@ -83,8 +83,16 @@ function handedBy(from: unknown) {
   return lane;
 }
 
+// A question's link opens from the page, so it must be a web address. Empty means none.
+export function checkLink(v: unknown) {
+  const s = String(v ?? "").trim();
+  if (s && !/^https?:\/\/\S+$/i.test(s)) throw new Error("the link must start with http:// or https://");
+  return s || null;
+}
+
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
+  const link = checkLink(body.link);
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const from = handedBy(body.from);
   const res = db
@@ -96,7 +104,7 @@ export function createAsk(body: any) {
       body.body ?? null,
       listOf(body.options).length ? JSON.stringify(listOf(body.options)) : null, // stored as compared: trimmed
       String(body.recommended ?? "").trim() || null,
-      body.link ?? null,
+      link,
       body.due ?? null,
       body.created_at ?? Date.now(),
       wanted.length ? JSON.stringify(wanted) : null,
