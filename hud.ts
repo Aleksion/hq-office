@@ -7,7 +7,8 @@
 // ask ledger: change an open question instead of withdrawing and reposting it
 //   hud update ID [--title T] [--body B] [--opt A --opt B] [--rec A] [--link URL] [--lane L]   only the fields given;
 //                                --lane L moves it to lane L, --lane hq (or "") takes it off every lane
-//   hud comment ID TEXT          a timestamped line under the question; information, not in the inbox
+//   hud comment ID TEXT [--as LANE]   a timestamped line under the question; information, not in the inbox. A lane
+//                                answering the owner's comment writes it with --as LANE
 //   hud item ID N done|undo      tick or untick item N (from 1) by hand
 //   hud item ID add TEXT         add an item to an open question
 //   hud lane NAME [--title T] [--machine M] [--pane P] [--issue OPE-1] [--pr 123] [--phase running|waiting|parked|done] [--note N]
@@ -152,7 +153,7 @@ switch (cmd) {
     console.log(`ask #${rest[0]} updated`);
     break;
   case "comment":
-    await call("POST", `/api/asks/${rest[0]}/comment`, { text: rest.slice(1).join(" ") });
+    await call("POST", `/api/asks/${rest[0]}/comment`, { text: rest.slice(1).join(" "), as: one("as") });
     break;
   case "item": {
     const [id, what, ...words] = rest;
