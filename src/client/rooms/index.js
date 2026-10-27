@@ -7,6 +7,10 @@
 // (write to the owning lane or any lane in the room; the server types it into that lane). The lanes, linked work,
 // the brief and the shelf sit in a rail beside it, folded or open as this browser last left it. Each pane scrolls
 // on its own. On a phone (or any screen under 1151px) a room is a full-screen view with CHAT, BRIEF and SHELF tabs.
+//
+// Each room is a folder on the HUD's disk (rooms/SLUG/, see src/server/room-folder.ts). The shelf's ADD puts files
+// (picked, dropped anywhere on the room, or pasted) into its files/ and links on the shelf; images attached to a
+// message go into files/ too, so they are on the shelf as well.
 import { $, keepScroll, showEdges, toast } from "../core/dom.js";
 import { CONFIG, S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
@@ -15,7 +19,7 @@ import { post } from "../core/net.js";
 import { emit, on } from "../core/bus.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { qTab } from "../messages/messages.js";
-import { clearImages, composer, hasImages, notReady, openPreview, withImages } from "../images/images.js";
+import { clearImages, composer, hasImages, notReady, openPreview, uploadTarget, withImages } from "../images/images.js";
 import { markdown } from "./markdown.js";
 import { ART_H, drawStrip, laneAt, stripKey } from "./pix.js";
 
@@ -221,8 +225,9 @@ const ICON = {
 };
 const LABEL = { "claude-artifact": "CLAUDE ARTIFACT", link: "LINK", file: "FILE", image: "IMAGE" };
 function host(u) { try { return new URL(u, location.href).host.replace(/^www\./, ""); } catch { return ""; } }
+const byName = (by) => (by === "owner" ? "you" : by || "");
 function cardHtml(a) {
-  const meta = `<span class="am">${esc(a.by || "")} · ${ago(a.at)}</span>`;
+  const meta = `<span class="am">${esc(byName(a.by))} · ${ago(a.at)}</span>`;
   if (a.kind === "image") {
     return `<div class="art image"><button type="button" class="aimg" data-art-preview="${a.id}" aria-label="See ${esc(a.title)} full screen"><img src="${esc(a.url)}" alt="" loading="lazy"></button><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}</div></div>`;
   }
@@ -230,14 +235,78 @@ function cardHtml(a) {
   const label = a.kind === "file" ? `${ext || "FILE"} FILE` : a.kind === "link" ? host(a.url) || "LINK" : LABEL[a.kind];
   return `<div class="art ${esc(a.kind)}"><div class="ak">${ICON[a.kind] ?? ICON.link}<span>${esc(label)}</span></div><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}<a class="btn-s open" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN</a></div></div>`;
 }
-function renderShelf(d) {
+// The shelf: its head (with ADD), the ADD form, the cards and where the folder is. The form is built once per room
+// and never redrawn, so what you type in it survives every update.
+let addOpen = false, adding = 0, shelfFor = null;
+function renderShelf(d, r) {
   const items = d?.artifactList ?? [];
   const tab = view.querySelector('[data-ptab="shelf"]'), label = items.length ? `SHELF (${items.length})` : "SHELF";
   if (tab.textContent !== label) tab.textContent = label;
-  setHTML(part("rshelf"), `<div class="k"><span>SHELF${items.length ? ` (${items.length})` : ""}</span></div>${items.length
+  const el = part("rshelf");
+  if (shelfFor !== r.slug) {
+    shelfFor = r.slug;
+    el.innerHTML = `<div class="k rshk"></div>
+      <form class="radd" hidden autocomplete="off">
+        <label class="btn-s rpick">ADD FILES<input type="file" multiple data-shelf-file aria-label="Add files to the shelf"></label>
+        <span class="or">OR A LINK</span>
+        <input type="url" name="url" inputmode="url" placeholder="https://…" aria-label="Link">
+        <input type="text" name="title" placeholder="Title (optional)" aria-label="Title">
+        <button class="btn-s go" type="submit">ADD LINK</button>
+      </form>
+      <div class="rshitems"></div>`;
+  }
+  const live = !r.archivedAt;
+  const form = el.querySelector(".radd");
+  form.hidden = !(addOpen && live);
+  setHTML(el.querySelector(".rshk"), `<span>SHELF${items.length ? ` (${items.length})` : ""}</span>${adding ? `<span class="by">adding ${adding}…</span>` : ""}${live ? `<button class="btn-s addbtn" type="button" data-shelf-add aria-expanded="${addOpen}">${addOpen ? "CLOSE" : "+ ADD"}</button>` : ""}`);
+  const folder = d?.folder ? `<div class="rfolder" title="The room's folder on the HUD's disk. A file saved in its files/ shows here.">FOLDER <code>${esc(d.folder)}/files/</code></div>` : "";
+  setHTML(el.querySelector(".rshitems"), (items.length
     ? `<div class="cards">${[...items].reverse().map(cardHtml).join("")}</div>`
-    : `<div class="none">Nothing on the shelf yet. Lanes add Claude artifacts, links, images and files with hud room artifact.</div>`}`);
+    : `<div class="none">Nothing on the shelf yet. Add a file or a link here, drop files on the room, or a lane adds them with hud room artifact.</div>`) + folder);
 }
+
+// ---- adding to the shelf, as the owner: files (picked, dropped or pasted) and links ----
+
+const MAX_FILE = 25 * 1024 * 1024;
+export async function addToShelf(files) {
+  const slug = openSlug, r = roomOf(slug);
+  if (!r || r.archivedAt) { toast("THIS ROOM IS ARCHIVED."); return; }
+  const list = [...files].filter((f) => f.size > 0 || f.name);
+  if (!list.length) return;
+  adding += list.length;
+  renderShelf(detail?.slug === slug ? detail : null, r);
+  const added = [];
+  await Promise.all(list.map(async (f) => {
+    const name = f.name || "file";
+    try {
+      if (f.size > MAX_FILE) throw new Error(`${name} is over 25 MB`);
+      const res = await fetch(`/api/rooms/${encodeURIComponent(slug)}/files?name=${encodeURIComponent(name)}&as=owner`, { method: "POST", headers: { "content-type": f.type || "application/octet-stream", "x-hud": "1" }, body: f });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      added.push(data.name);
+    } catch (err) { toast(`NOT ADDED: ${err.message}`); }
+  }));
+  adding -= list.length;
+  if (added.length) toast(added.length === 1 ? `ON THE SHELF: ${added[0]}` : `${added.length} FILES ON THE SHELF.`);
+  if (openSlug === slug) renderShelf(detail?.slug === slug ? detail : null, roomOf(slug));
+}
+async function addLinkFrom(form) {
+  const url = form.url.value.trim();
+  if (!/^https?:\/\/\S+$/i.test(url)) { toast("A LINK STARTS WITH HTTP:// OR HTTPS://"); form.url.focus(); return; }
+  const title = form.title.value.trim() || (() => { try { const u = new URL(url); return (u.host + u.pathname).replace(/\/$/, ""); } catch { return url; } })();
+  try {
+    await post(`/api/rooms/${encodeURIComponent(openSlug)}/artifacts`, { url, title, as: "owner" });
+    form.reset();
+    toast(`ON THE SHELF: ${title}`);
+  } catch (err) { toast(err.message); }
+}
+
+// A room's send box puts its images in the room's folder, so they land on the shelf too, by you. One removed from
+// the box before sending comes off the shelf again.
+uploadTarget("room:", {
+  url: (k, name) => `/api/rooms/${encodeURIComponent(k.slice(5))}/files?name=${encodeURIComponent(name)}&as=owner`,
+  remove: (k, a) => post(`/api/rooms/${encodeURIComponent(k.slice(5))}/artifacts/${a.ref}/remove`, {}).catch(() => {}),
+});
 
 // ---- the thread ----
 
@@ -328,7 +397,7 @@ function renderRoom() {
   renderHead(r, d);
   renderTop(r);
   renderBrief(d);
-  renderShelf(d);
+  renderShelf(d, r);
   renderThread(d, r);
   renderSend(r);
   renderStrip(r);
@@ -369,7 +438,7 @@ function setPtab(t) {
   for (const b of view.querySelectorAll("[data-ptab]")) { b.classList.toggle("on", b.dataset.ptab === t); b.setAttribute("aria-selected", String(b.dataset.ptab === t)); }
 }
 function show(slug) {
-  if (openSlug !== slug) { detail = null; fresh.clear(); stick = true; atEnd = true; sendFor = null; pixKey = ""; setPtab("chat"); }
+  if (openSlug !== slug) { detail = null; fresh.clear(); stick = true; atEnd = true; sendFor = null; shelfFor = null; pixKey = ""; setPtab("chat"); }
   openSlug = slug;
   view.hidden = !slug;
   stage.classList.toggle("inroom", !!slug);
@@ -476,6 +545,13 @@ view.addEventListener("click", (e) => {
     renderHead(roomOf(openSlug), detail);
     return;
   }
+  if (t.closest("[data-shelf-add]")) {
+    addOpen = !addOpen;
+    renderShelf(detail, roomOf(openSlug));
+    // On a desktop the link field is ready to type in; on a phone a keyboard would cover the picker.
+    if (addOpen && !fullScreen.matches) part("rshelf").querySelector(".radd input[type=url]")?.focus({ preventScroll: true });
+    return;
+  }
   const art = t.closest("[data-art-preview]");
   if (art) { const a = detail?.artifactList.find((x) => String(x.id) === art.dataset.artPreview); if (a) openPreview(a.url, a.title); return; }
   const reply = t.closest("[data-room-reply]");
@@ -513,7 +589,18 @@ view.addEventListener("input", (e) => {
   draft(openSlug).text = e.target.value;
   sendState();
 });
+view.addEventListener("submit", (e) => {
+  if (!e.target.matches(".radd")) return;
+  e.preventDefault();
+  addLinkFrom(e.target);
+});
 view.addEventListener("change", (e) => {
+  if (e.target.matches("[data-shelf-file]")) {
+    const files = [...(e.target.files ?? [])];
+    e.target.value = "";
+    addToShelf(files);
+    return;
+  }
   if (!e.target.matches("[data-room-to]") || !openSlug) return;
   draft(openSlug).to = e.target.value;
   renderSend(roomOf(openSlug));
@@ -529,6 +616,43 @@ new ResizeObserver(toEnd).observe(thread);
 // The strip follows its own width (the rail folding, the window) and redraws only when that changes what it shows.
 new ResizeObserver(() => { if (openSlug) renderStrip(roomOf(openSlug)); }).observe(pix);
 document.fonts?.addEventListener?.("loadingdone", () => { if (openSlug) renderStrip(roomOf(openSlug)); });
+// Files dropped anywhere on the room go on the shelf. Images dropped on the send box are attached to the message
+// instead (images.js; they reach the shelf that way too). Listening first (capture) keeps a drop on the room from
+// joining Tell HQ's tray, and a file that is not an image from opening in place of the page.
+const fileItems = (dt) => [...(dt?.items ?? [])].filter((i) => i.kind === "file");
+const forMessage = (e, list) => !!e.target.closest?.(".rsend [data-composer]") && list.length > 0 && list.every((f) => (f.type || "").startsWith("image/"));
+const clearDrop = () => view.classList.remove("dropping");
+document.addEventListener("dragover", (e) => {
+  if (!openSlug || !view.contains(e.target) || !fileItems(e.dataTransfer).length) return;
+  e.preventDefault();
+  if (forMessage(e, fileItems(e.dataTransfer))) { clearDrop(); return; }
+  e.stopPropagation();
+  if (!roomOf(openSlug)?.archivedAt) view.classList.add("dropping");
+}, true);
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget || !view.contains(e.relatedTarget)) clearDrop(); }, true);
+document.addEventListener("drop", (e) => {
+  clearDrop();
+  if (!openSlug || !view.contains(e.target)) return;
+  const files = [...(e.dataTransfer?.files ?? [])];
+  if (!files.length) return;
+  e.preventDefault();
+  if (forMessage(e, files)) return;
+  e.stopPropagation();
+  addToShelf(files);
+}, true);
+// Pasting a file or an image while a room is open, and not into a text box elsewhere on the page or into the room's
+// send box (which attaches it to the message), puts it on the shelf.
+document.addEventListener("paste", (e) => {
+  if (!openSlug || view.hidden) return;
+  const files = [...(e.clipboardData?.files ?? [])];
+  if (!files.length) return;
+  const f = document.activeElement;
+  if (f?.closest?.(".rsend [data-composer]")) return;
+  if (f && !view.contains(f) && f.matches("input, textarea, [contenteditable]")) return;
+  e.preventDefault();
+  e.stopPropagation();
+  addToShelf(files);
+}, true);
 on("attach", (k) => { if (openSlug && k === key(openSlug)) sendState(); });
 on("state", render);
 on("settings", () => { if (openSlug) renderStrip(roomOf(openSlug)); });

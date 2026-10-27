@@ -118,6 +118,21 @@
 .art.image .at { -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block; }
 .aimg { display: block; width: 100%; height: 64px; padding: 0; border: 0; border-radius: 6px; overflow: hidden; background: #e8e8f4; cursor: zoom-in; }
 .aimg img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* ADD: files (a picker; a drop or a paste anywhere on the room does the same) and a link with a title */
+.rshelf .addbtn { margin-left: auto; padding: 4px 7px; font-size: 7px; }
+.radd { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 8px; border: 2px dashed var(--edge-2); border-radius: 8px; background: var(--box); }
+.radd[hidden] { display: none; }
+.radd .rpick { position: relative; grid-column: 1 / -1; justify-self: start; overflow: hidden; cursor: pointer; }
+.radd .rpick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
+.radd .rpick:focus-within { outline: 2px solid var(--blue); outline-offset: 1px; }
+.radd .or { grid-column: 1 / -1; font: 7px/1 var(--pixel); color: var(--muted); }
+.radd input[type=url], .radd input[type=text] { grid-column: 1 / -1; min-width: 0; padding: 5px 7px; border: 2px solid var(--edge); border-radius: 6px; background: #fff; color: var(--ink); font: 400 14px/1.3 var(--text); }
+.radd button[type=submit] { grid-column: 2; padding: 5px 8px; font-size: 7px; }
+.rfolder { margin-top: 2px; font: 6px/1.6 var(--pixel); color: var(--muted); overflow-wrap: anywhere; }
+.rfolder code { font: 11px/1.4 var(--mono); color: #3a3a52; user-select: all; }
+/* a file being dragged over the room: it goes on the shelf */
+.roomview.dropping { outline: 3px dashed var(--blue); outline-offset: -3px; }
+.roomview.dropping .rshelf { border-color: var(--blue); background: #eef4ff; }
 
 /* the thread: the same messages as MESSAGES; a lane's on white, yours tinted */
 .rthread { display: grid; gap: 8px; align-content: start; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; outline: none; }
@@ -160,7 +175,8 @@
   .rthread, .rvrail { -webkit-overflow-scrolling: touch; }
 }
 @media (max-width: 1150px) and (pointer: coarse) {
-  html .rto select { font-size: 16px; }
+  html .rto select, html .radd input[type=url], html .radd input[type=text] { font-size: 16px; }
+  .radd .rpick, .radd button[type=submit] { min-height: 34px; display: inline-flex; align-items: center; }
   .rlane { padding-block: 5px; }
   .rvtab, .rvptabs .tab { min-height: 34px; }
 }

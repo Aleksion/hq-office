@@ -1,4 +1,4 @@
-// Which look each figure wears: a worker by its lane's depth in the tree, the hero and HQ by their place above the
+// Which look each figure wears: a worker by its lane's rank (its level: set by hand, else its depth in the tree), the hero and HQ by their place above the
 // lanes, all in the theme chosen in SETTINGS (room/themes.js). A dressed palette is made once per figure, look and
 // number and kept, so the sprite cache paints each costume once.
 import { hash } from "../core/format.js";
@@ -10,17 +10,20 @@ export const themeOf = (id) => THEMES[id] ?? THEMES.office;
 
 // A room has a tree once any lane reports to another lane; until then every lane is "flat" under HQ.
 export const hasTree = (lanes) => lanes.some((l) => l.parent);
+// Whether the room shows ranks: once there is a tree or a level set by hand, and always in a theme with no flat look
+// (Arena: a lane straight under HQ is a PM and wears the top mask from the start).
+export const ranked = (lanes, theme) => !("flat" in theme) || hasTree(lanes) || lanes.some((l) => l.levelSet);
 
-// The label mark for a depth: none in a room with no tree.
-export function markFor(theme, depth, flat) {
+// The label mark for a rank (1 = the top level): none in a room that shows no ranks.
+export function markFor(theme, rank, flat) {
   if (flat) return null;
-  return theme.marks[Math.min(Math.max(1, depth || 1), theme.marks.length) - 1];
+  return theme.marks[Math.min(Math.max(1, rank || 1), theme.marks.length) - 1];
 }
 
-export function lookFor(theme, depth, flat) {
+export function lookFor(theme, rank, flat) {
   if (flat) return theme.flat;
-  const d = Math.max(1, depth || 1);
-  return theme.depths[Math.min(d, theme.depths.length) - 1];
+  const r = Math.max(1, rank || 1);
+  return theme.depths[Math.min(r, theme.depths.length) - 1];
 }
 
 const dressedCache = new Map();
@@ -49,14 +52,15 @@ function dressedFigure(key, base, look) {
 export const heroPal = (themeId = settings.theme) => dressedFigure(`hero:${hero().name}`, hero().pal, themeOf(themeId).hero);
 export const hqPal = (themeId = settings.theme) => dressedFigure("hq", HQBOT, themeOf(themeId).hq);
 
-// Dresses every worker for its lane's place in the tree and the theme. Run on every state and settings change: a
+// Dresses every worker for its lane's rank and the theme. Run on every state and settings change: a
 // lookup per worker, and a worker keeps its palette object while its look stays the same.
 export function dressWorkers(workers, lanes, themeId, seatIndex) {
-  const theme = themeOf(themeId), flat = !hasTree(lanes);
+  const theme = themeOf(themeId), flat = !ranked(lanes, theme);
   for (const lane of lanes) {
     const w = workers.get(lane.name);
     if (!w) continue;
-    w.pal = dressed(lane.name, lookFor(theme, lane.depth, flat), (seatIndex.get(lane.name) ?? 0) + 1);
-    w.mark = markFor(theme, lane.depth, flat);
+    const rank = lane.rank ?? lane.depth;
+    w.pal = dressed(lane.name, lookFor(theme, rank, flat), (seatIndex.get(lane.name) ?? 0) + 1);
+    w.mark = markFor(theme, rank, flat);
   }
 }

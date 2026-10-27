@@ -19,7 +19,7 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const setPort = (port: number) => writeFileSync(join(config, "config.env"), `HUD_PORT=${port}\nHUD_HQ_AGENT=hq\n`);
 function plugin(args: string[], path = process.env.PATH ?? "/usr/bin:/bin") {
   const env = { PATH: path, HOME: home, TMPDIR: tmpdir(), HERDR_PLUGIN_STATE_DIR: state, HERDR_PLUGIN_CONFIG_DIR: config, HQ_OFFICE_PLATFORM: "none", HQ_OFFICE_LAUNCHCTL: "/nonexistent/launchctl", HQ_OFFICE_SYSTEMCTL: "/nonexistent/systemctl", HQ_OFFICE_OPENER: "true" };
-  const p = Bun.spawnSync([process.execPath, "bin/hud-plugin.ts", ...args], { cwd: ROOT, env, stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawnSync([process.execPath, "bin/hud-plugin.ts", ...args], { cwd: ROOT, env, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
   return { code: p.exitCode, out: p.stdout.toString() + p.stderr.toString() };
 }
 
@@ -41,7 +41,7 @@ test("installs an executable hud for this plugin's hud.ts and port, creating the
     let out = "";
     for (let i = 0; i < 100 && !out.includes("the stand-in"); i++) {
       const env: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: home };
-      out = Bun.spawnSync([hud, "state"], { env, stdout: "pipe", stderr: "pipe" }).stdout.toString();
+      out = Bun.spawnSync([hud, "state"], { env, stdout: "pipe", stderr: "pipe", timeout: 10_000 }).stdout.toString();
       if (!out.includes("the stand-in")) await Bun.sleep(50);
     }
     expect(out).toContain("the stand-in");

@@ -65,10 +65,12 @@ const room = (slug: string) => get(`/api/rooms/${slug}`);
 describe("hud room", () => {
   test("create: a room with an owner, members and linked work; again changes it", async () => {
     const r = await hud(["room", "create", "OPE-12-auth", "--title", "Auth rewrite", "--owner", "pm", "--member", "eng", "--member", "far", "--issue", "ope-12", "--pr", "#41"]);
-    expect(r).toMatchObject({ code: 0, out: "room ope-12-auth created" });
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n")[0]).toBe("room ope-12-auth created");
+    expect(r.out.split("\n")[1]).toBe(`folder ${join(DATA, "rooms", "ope-12-auth")} (files/ is shared; anything saved there shows on the shelf)`);
     const v = await room("ope-12-auth");
     expect(v).toMatchObject({ slug: "ope-12-auth", title: "Auth rewrite", owner: "pm", members: ["eng", "far"], issues: ["OPE-12"], prs: ["41"], archivedAt: null });
-    expect((await hud(["room", "create", "ope-12-auth", "--issue", "OPE-13"])).out).toBe("room ope-12-auth updated");
+    expect((await hud(["room", "create", "ope-12-auth", "--issue", "OPE-13"])).out).toStartWith("room ope-12-auth updated\n");
     expect((await room("ope-12-auth")).issues).toEqual(["OPE-12", "OPE-13"]);
   });
 
@@ -125,6 +127,7 @@ describe("hud room", () => {
     expect(text).toContain(`hud room say ope-12-auth "<your reply>" [--reply ${id}]`);
     expect(text).toContain("hud room brief ope-12-auth");
     expect(text).toContain("hud room artifact ope-12-auth");
+    expect(text).toContain(`\nRoom folder: ${join(DATA, "rooms", "ope-12-auth")} (files/ is shared; anything you save there shows on the shelf)\n`);
     expect((await room("ope-12-auth")).messages.at(-1)).toMatchObject({ id, who: "owner", to: "pm", delivery: "sent" });
   });
 
@@ -216,5 +219,6 @@ describe("hud room", () => {
     const line = GUIDE.split("\n").find((l) => l.includes("conference room"))!;
     expect(line).toContain("hud room create SLUG --title T --owner LANE");
     expect(line).toContain("the owning lane keeps its brief and artifacts current");
+    expect(line).toContain("hud room path SLUG");
   });
 });

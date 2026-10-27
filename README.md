@@ -145,9 +145,10 @@ A piece of work with an owner can get a conference room: one place where you tal
 
 ```sh
 hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   # again: change or reopen it
+hud room path SLUG                    # the room's folder (see below)
 hud room brief SLUG --body B          # the pinned brief, in markdown, replaced as a whole (or piped on stdin)
 hud room artifact SLUG --title T --url U            # a Claude artifact link (recognised by its address) or any link
-hud room artifact SLUG --title T --file PATH        # an image or any file, uploaded (25 MB at most)
+hud room artifact SLUG --title T --file PATH        # an image or any file, copied into the room's files/ (25 MB at most)
 hud room say SLUG TEXT [--as LANE] [--reply ID]     # write in the thread (as the owning lane unless --as)
 hud room read SLUG [--since ID] [--wait] [--json]   # your messages; --wait blocks until a new one, like hud wait
 hud room list [--all] [--json]
@@ -155,6 +156,8 @@ hud room archive SLUG
 ```
 
 The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. A room is a place you go to: open one and it takes the place of the office on the right, full height, at its own address (`#room/SLUG`), so a link, a reload and the browser's back button work. BACK TO OFFICE or Esc return to the office, and the strip at the top of a room moves straight to the other open rooms, marking those with new messages. The question column never moves. In the room, the thread fills the main column with the send box always at its foot: write there, with images as anywhere else, and messages keep their line breaks and render as markdown. TO picks the lane (the owner by default, or any lane in the room); REPLY on a lane's message answers it and addresses that lane. A rail beside the thread holds the room's lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief and the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files); fold it to give the thread the width. Above them a small pixel conference room seats the room's lanes at a table with you at its head. On a phone a room fills the screen with CHAT, BRIEF and SHELF tabs.
+
+Each room is a folder on the HUD's machine, `rooms/SLUG/` in its data folder (`hud room path SLUG` prints it, and so does `hud room create`). Its `files/` holds everything shared in the room: files added with `hud room artifact --file`, files you add on the page, and images attached to the room's messages, each under its own name (`name-2.ext` when the name is taken). A lane can also save straight into `files/`: the file joins the shelf (by "folder") once it is written, and a file deleted from `files/` drops off the shelf. Beside it, `shelf.json` and `brief.md` mirror the shelf and the brief, so a lane can read the whole room from disk; the database stays the source of truth and the mirrors are rewritten whenever the shelf or the brief changes. An open room's `files/` is watched (no polling); an archived room keeps its folder. On the page, the shelf's **+ ADD** takes files from a picker and a link with a title, and dropping files anywhere on the room or pasting an image into it does the same. Files are served from `/rooms/SLUG/files/NAME` sandboxed: images show inline, text as plain text, and HTML, SVG and anything else download instead of opening on the HUD's address.
 
 What you write is typed into that lane's terminal through herdr, naming the room and telling it to answer with `hud room say` and to keep the brief and artifacts current. Each message shows DELIVERED, or AWAY · KEPT when the lane is not there: a kept message stays in the thread and is typed into the lane once, when herdr sees it again (RETRY appears if herdr refused one). Uploaded files are served sandboxed, so a file a lane uploads can show but never run a script.
 
