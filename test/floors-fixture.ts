@@ -18,7 +18,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnServer } from "../scripts/room-hash.ts";
-import { frameBlocked, frameLanes, seedFrame } from "./floors-frame.ts";
+import { frameBlocked, frameLanes, frameStubs, seedFrame } from "./floors-frame.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -75,13 +75,18 @@ export async function startFloors(opts: { general?: boolean; frame?: boolean } =
   writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[${agents}]}}' ;;\n  *"pane read w1:p${blocked}"*) cat "${data}/pane.txt" ;;\nesac\nexit 0\n`);
   chmodSync(herdr, 0o755);
   const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_GH_BIN: gh, HUD_OWNER: "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq" };
+  // The frame's office is on two machines, with stand-ins for what the server reads there.
+  if (opts.frame) {
+    const stubs = frameStubs(data, join(data, "pane.txt"));
+    Object.assign(env, stubs.env, { HERDR_BIN: stubs.herdr });
+  }
   const server = await spawnServer({ cwd: ROOT, env });
   const { base } = server;
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
   const stop = async () => { await server.stop(); rmSync(data, { recursive: true, force: true }); };
   if (opts.frame) {
-    for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });
-    await seedFrame(post, data);
+    for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: l.machine, title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });
+    await seedFrame(post, data, base);
     return { base, post, facts: FACTS, stop };
   }
 

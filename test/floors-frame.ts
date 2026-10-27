@@ -13,9 +13,14 @@
 //   gen and idle = idle (waiting on HQ).
 // - Times. The prototype's clock is 17:40; here ages and times are counted back from now, and a due time is the next one.
 // - Kinds. APPROVAL is a decision here; SECRET is an action that asks for one secret by name.
-// - Question numbers, the colours and order of the floors, RUNDOWN's words, accounts, machines and the messages you sent
-//   are the app's own, not seeded.
+// - Machines and accounts. The server reads them from herdr and two scripts on each machine; frameStubs puts stand-ins for
+//   herdr, python3, sh and ssh first on the server's PATH, which answer with the prototype's two machines (laptop and hub),
+//   each lane on its machine and account, and the numbers its ACCOUNTS and MACHINES panels draw.
+// - The messages you sent. A note in the app goes to HQ, so only the one the prototype sent to HQ is seeded; its notes to
+//   SALES and PEOPLE have no place here.
+// - Question numbers, the colours and order of the floors and RUNDOWN's words are the app's own, not seeded.
 import { Database } from "bun:sqlite";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 type Post = (path: string, body: object) => Promise<any>;
@@ -36,13 +41,15 @@ const isLane = (name: string) => name !== "HQ" && DATA.LANES.some((l) => l[0] ==
 // The lanes in registration order (parents first), with what the stub herdr says of each.
 export function frameLanes() {
   const asking = new Set(QUESTIONS().map((q) => q.pm));
-  const lanes = DATA.LANES.filter(([name]) => name !== "HQ").map(([name, , base, doing]) => ({
+  const lanes = DATA.LANES.filter(([name]) => name !== "HQ").map(([name, , base, doing, account, machine]) => ({
     name,
     parent: PARENTS[name],
     title: doing,
     herdr: (base === "blocked" ? "blocked" : asking.has(name) || ["stalled", "gen", "idle"].includes(base) ? "idle" : "working") as "working" | "idle" | "blocked",
     phase: base === "ci" ? "waiting" : undefined,
     stalled: base === "stalled",
+    machine: machine as string,
+    account: account as string,
     issue: [...new Set(QUESTIONS().filter((q) => q.pm === name && q.work).map((q) => q.work))].join(" ") || undefined,
   }));
   const depth = (n: string): number => (PARENTS[n] ? 1 + depth(PARENTS[n]) : 1);
@@ -50,6 +57,62 @@ export function frameLanes() {
 }
 // The lane at a prompt in herdr.
 export const frameBlocked = (): string => DATA.LANES.find((l: string[]) => l[2] === "blocked")[0];
+
+// The prototype's machines and accounts, as its MACHINES and ACCOUNTS panels draw them (machinesP and accountsP): how busy
+// each machine is, and what each account has left. Its panels draw one number per account; both windows get it here.
+const MACHINE_STATS: Record<string, string> = { laptop: "cores=10 load1=4.1 cpu_busy=41 mem_used=52", hub: "cores=16 load1=9.3 cpu_busy=58 mem_used=61" };
+const LEFT: Record<string, number> = { work: 62, "work-2": 23, codex: 80 };
+function accountsOn(machine: string) {
+  const used = [...new Set(frameLanes().filter((l) => l.machine === machine).map((l) => l.account))].sort();
+  const both = (left: number) => ({ session: { left, resets_at: null }, weekly: { left, resets_at: null } });
+  return {
+    claude: { homes: used.filter((a) => a !== "codex").map((name) => ({ name, logged_in: true, windows: both(LEFT[name]) })) },
+    codex: used.filter((a) => a === "codex").map((name) => ({
+      name, logged_in: true, shares_sessions_with: [],
+      reading: { at: new Date().toISOString(), windows: [300, 10080].map((minutes) => ({ minutes, used: 100 - LEFT[name], resets_at: null })) },
+    })),
+  };
+}
+
+// Stand-ins the frame's server finds first on its PATH, in `data`/bin, and the environment that makes it see two machines.
+// herdr lists each machine's lanes and names the hub; python3 and sh answer the account and machine scripts here, ssh
+// answers them on the hub; anything else goes to the real python3 and sh.
+export function frameStubs(data: string, paneFile: string) {
+  const bin = join(data, "bin");
+  mkdirSync(bin);
+  const lanes = frameLanes(), blocked = lanes.findIndex((l) => l.name === frameBlocked());
+  const agents = (machine: string) => JSON.stringify({ result: { agents: lanes.flatMap((l, i) => (l.machine === machine ? [{ name: l.name, agent_status: l.herdr, pane_id: `w1:p${i}`, agent: l.account === "codex" ? "codex" : "claude" }] : [])) } });
+  const script = (name: string, body: string) => {
+    writeFileSync(join(bin, name), `#!/bin/sh
+${body}`);
+    chmodSync(join(bin, name), 0o755);
+  };
+  script("herdr", `case "$*" in
+  *"machine list"*) echo '[{"label":"hub","target":"hub.example"}]' ;;
+  *"--machine hub agent list"*) echo '${agents("hub")}' ;;
+  *"agent list"*) echo '${agents("laptop")}' ;;
+  *"pane read w1:p${blocked} "*) cat "${paneFile}" ;;
+esac
+exit 0
+`);
+  script("python3", `case "$*" in
+  *account-stats.py*) echo '${JSON.stringify(accountsOn("laptop"))}' ;;
+  *) exec ${Bun.which("python3") ?? "false"} "$@" ;;
+esac
+`);
+  script("sh", `case "$1" in
+  *machine-stats.sh) echo '${MACHINE_STATS.laptop}' ;;
+  *) exec /bin/sh "$@" ;;
+esac
+`);
+  script("ssh", `case "$*" in
+  *"python3 -I -") echo '${JSON.stringify(accountsOn("hub"))}' ;;
+  *" sh -s") echo '${MACHINE_STATS.hub}' ;;
+  *) exit 255 ;;
+esac
+`);
+  return { herdr: join(bin, "herdr"), env: { PATH: `${bin}:${process.env.PATH}`, HUD_MACHINES: "laptop,hub", HUD_LOCAL_MACHINE: "laptop" } };
+}
 
 // The next time of day `hhmm` (today if still to come), or on weekday `day` (SUN to SAT).
 function next(now: number, hhmm = "23:59", day?: string) {
@@ -68,7 +131,7 @@ function dueOf(now: number, due: string) {
   return /^\d/.test(a) ? next(now, a) : next(now, b, a);
 }
 
-export async function seedFrame(post: Post, data: string) {
+export async function seedFrame(post: Post, data: string, base: string) {
   const now = Date.now();
   const must = async (path: string, body: object) => {
     const r = await post(path, body);
@@ -130,17 +193,27 @@ export async function seedFrame(post: Post, data: string) {
     const { id } = await must("/api/updates", { lane, title, body: text });
     if (!unread) await must(`/api/updates/${id}/read`, {});
   }
+  // The note the prototype sent to HQ, read.
+  for (const [, to, text] of [...SENT].reverse().filter(([, to]) => to === "HQ")) {
+    await must("/api/notes", { text });
+    const { notes } = await (await fetch(`${base}/api/state`)).json();
+    await must(`/api/notes/${notes[0].id}/ack`, {});
+  }
   await must("/api/sync", {});
   // Only this fixture's own throwaway database: the rooms were opened a minute apart in wall order (created together, they
-  // would hang by name), the stalled lanes have been idle 40 minutes, and the question that came back from a deferral came
+  // would hang by name), each Claude lane is on its account, the stalled lanes have been idle 40 minutes, and the question that came back from a deferral came
   // back a minute ago.
   const db = new Database(join(data, "hud.db"));
   DATA.PROJECTS.forEach((p: any, i: number) => db.query("UPDATE rooms SET created_at = ? WHERE slug = ?").run(now - (DATA.PROJECTS.length - i) * MIN, p.id));
   for (const l of frameLanes().filter((l) => l.stalled)) db.query("UPDATE lanes SET herdr_since = ? WHERE name = ?").run(now - 40 * MIN, l.name);
+  for (const l of frameLanes().filter((l) => l.account !== "codex")) db.query("INSERT INTO lane_accounts (lane, account, moved_at) VALUES (?, ?, ?)").run(l.name, l.account, now);
   for (const id of back) db.query("UPDATE asks SET defer_until = ? WHERE id = ?").run(now - MIN, id);
   db.close();
   await must("/api/lanes", { name: frameLanes().find((l) => l.stalled)!.name }); // a write, so the page's next state carries them
 }
+
+// What the prototype's owner sent, newest first (its SENT, beside the data block): time, to whom, the text.
+const SENT = [["17:31", "HQ", "Where are we with the meetings?"], ["16:40", "SALES", "Fund A first. Anything that blocks their paid decision goes to HQ today."], ["14:02", "PEOPLE", "Hold the founding engineer role open until I’ve seen the three."]];
 
 // The prototype's data block, as its page evaluates it (generated from snap-f8b/floors.html; do not edit by hand).
 const DATA: any = {
