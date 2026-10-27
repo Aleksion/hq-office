@@ -54,6 +54,8 @@ export const FACTS = {
   // (an issue and a pull request, both on its owner's lane too), a brief and one thing on its shelf.
   rooms: { hq: ["release", "web-fix"], fin: ["recon"], sales: ["pipeline", "outbound"] },
   roomStates: { release: "waiting", "web-fix": "blocked", recon: "stalled", pipeline: "moving", outbound: "waiting" } as Record<string, string>,
+  // The briefs the fixture pins, by project. The others have none, and RUNDOWN shows them without one.
+  briefs: { release: "Cut the branch, tag it, and tell the owner when the checks are green.", recon: "Close March: match every invoice to a payment, then list what is left.", pipeline: "Review the open deals and name the three that need the owner." } as Record<string, string>,
   release: { title: "Ship the release", owner: "hq-pm", members: ["hq-api", "hq-web"], issue: "REL-1", pr: "acme-example/app#12", shelf: "Release checklist" },
 };
 
@@ -86,12 +88,14 @@ export async function startFloors(opts: { general?: boolean } = {}) {
   await post("/api/notes", { text: "Keep going." });
   const R = FACTS.release;
   await post("/api/rooms", { slug: "release", title: R.title, owner: R.owner, members: R.members, issues: [R.issue], prs: [R.pr] });
-  await post("/api/rooms/release/brief", { body: "Cut the branch, tag it, and tell the owner when the checks are green." });
+  await post("/api/rooms/release/brief", { body: FACTS.briefs.release });
   await post("/api/rooms/release/artifacts", { title: R.shelf, url: "https://example.com/release-checklist" });
   await post("/api/rooms", { slug: "web-fix", title: "Fix the web build", owner: "hq-web" });
   if (general) {
     await post("/api/rooms", { slug: "recon", title: "Reconcile March", owner: "fin-recon" });
+    await post("/api/rooms/recon/brief", { body: FACTS.briefs.recon });
     await post("/api/rooms", { slug: "pipeline", title: "Pipeline review", owner: "sales-lead" });
+    await post("/api/rooms/pipeline/brief", { body: FACTS.briefs.pipeline });
     await post("/api/rooms", { slug: "outbound", title: "Outbound calls", owner: "sales-outb", members: ["sales-pm"] });
     await ask("fin-audit", "decision", FACTS.asks.fin[1], { options: ["Yes", "No"], recommended: "Yes" });
     await ask("sales-outb", "decision", FACTS.asks.sales[1], { options: ["I take it", "Hand it over"], recommended: "Hand it over" });

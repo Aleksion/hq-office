@@ -187,13 +187,13 @@ export function projectState(S, room) {
   return PROJECT_ORDER.find((s) => found.has(s)) ?? "moving";
 }
 export const FRAMES_MAX = 7;
-// The open rooms that hang on a floor: oldest first, at most seven (the wall has seven places).
-export function floorRooms(S, floor) {
-  return (S.rooms ?? [])
+// The open rooms that hang on a floor, oldest first.
+export const openRooms = (S, floor) =>
+  (S.rooms ?? [])
     .filter((r) => !r.archivedAt && floorOfLane(S, r.owner) === floor)
-    .sort((a, b) => a.createdAt - b.createdAt || a.slug.localeCompare(b.slug))
-    .slice(0, FRAMES_MAX);
-}
+    .sort((a, b) => a.createdAt - b.createdAt || a.slug.localeCompare(b.slug));
+// The ones the wall hangs: at most seven (the wall has seven places).
+export const floorRooms = (S, floor) => openRooms(S, floor).slice(0, FRAMES_MAX);
 // A floor's frames, in wall order: the room, its state and colour, and how many questions of its lanes wait on you.
 export function frames(S, floor) {
   return floorRooms(S, floor).map((r) => {
@@ -202,6 +202,33 @@ export function frames(S, floor) {
   });
 }
 
+// ---- RUNDOWN: the panel over the room ----
+
+// The floors a scope shows: the floor zoomed into, the chosen agent's floor, or all of them, HQ's first.
+function viewFloors(S, view) {
+  const all = floorList(S);
+  const at = view?.agent ? floorOfLane(S, view.agent) : view?.floor;
+  return at ? all.filter((f) => f.id === at) : all;
+}
+export const BRIEF_MAX = 280;
+// A brief as one short run of words: the whitespace folded, cut at BRIEF_MAX. Null when it says nothing.
+export function briefExcerpt(text) {
+  const t = String(text ?? "").replace(/\s+/g, " ").trim();
+  return !t ? null : t.length > BRIEF_MAX ? t.slice(0, BRIEF_MAX - 1).trimEnd() + "…" : t;
+}
+// RUNDOWN: for each floor in scope, who needs help there and each open project with its state, its owner, how many
+// questions of its lanes wait on you and its brief. `briefs` maps a slug to the brief's text, once the page has fetched it
+// (S.rooms carries only when it was set). A project with no brief has none: nothing stands in for it.
+export function rundown(S, view, briefs = {}) {
+  return viewFloors(S, view).map((f) => ({
+    ...f,
+    help: needHelp(S, { floor: f.id, agent: null }),
+    projects: openRooms(S, f.id).map((r) => {
+      const state = projectState(S, r);
+      return { slug: r.slug, title: r.title, owner: r.owner, state, color: PROJECT_COLORS[state], name: PROJECT_NAMES[state], calls: roomCalls(S, r).length, brief: briefExcerpt(briefs[r.slug]) };
+    }),
+  }));
+}
 // A scope that still holds: a lane that is gone drops the agent, a floor that is gone zooms out, an agent's floor is
 // where the agent is, and one floor has no floor scope. SHOW ALL means nothing with nothing scoped.
 export function normalizeScope(S, scope) {
