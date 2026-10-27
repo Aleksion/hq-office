@@ -10,15 +10,20 @@ import { pageStamp } from "./page.ts";
 import { machineHealth } from "./machines.ts";
 import { board } from "./work-board.ts";
 
+const DEFER_UNTIL = "(SELECT MAX(to_at) FROM ask_defers WHERE ask_id = asks.id) AS defer_until";
+
 export function state() {
   const now = Date.now();
   const lanes = db.query("SELECT * FROM lanes ORDER BY name").all() as Lane[];
   // A question the owner deferred is out of `open` until its time (it is in `deferred`); once back it sorts first, soonest back first.
-  const everyOpen = db.query("SELECT * FROM asks WHERE status = 'open' ORDER BY (defer_until IS NULL), defer_until, COALESCE(due, 9e15), created_at").all() as Ask[];
+  // defer_until is derived from ask_defers, the one record of deferrals; it comes last, so it wins over a column of that name in a database the earlier build made.
+  const everyOpen = db
+    .query(`SELECT asks.*, ${DEFER_UNTIL} FROM asks WHERE status = 'open' ORDER BY (defer_until IS NULL), defer_until, COALESCE(due, 9e15), created_at`)
+    .all() as Ask[];
   const open = everyOpen.filter((a) => !(a.defer_until > now));
   const deferred = everyOpen.filter((a) => a.defer_until > now);
   const answered = db
-    .query("SELECT * FROM asks WHERE status != 'open' AND COALESCE(answered_at, created_at) >= ? ORDER BY answered_at DESC LIMIT 40")
+    .query(`SELECT asks.*, ${DEFER_UNTIL} FROM asks WHERE status != 'open' AND COALESCE(answered_at, created_at) >= ? ORDER BY answered_at DESC LIMIT 40`)
     .all(now - 24 * 3600_000) as Ask[];
   const openByLane = new Map<string, number>();
   for (const a of open) if (a.lane) openByLane.set(a.lane, (openByLane.get(a.lane) ?? 0) + 1);

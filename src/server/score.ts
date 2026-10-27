@@ -14,9 +14,10 @@ function startOfDay(now: number) {
 // A deferred ask does not wait: the owner chose when it comes back.
 export function score(now: number) {
   const asks = db
-    .query("SELECT id, created_at, answered_at, status, defer_until FROM asks WHERE status != 'withdrawn' AND (created_at >= ? OR status = 'open' OR answered_at >= ?)")
+    .query("SELECT id, created_at, answered_at, status FROM asks WHERE status != 'withdrawn' AND (created_at >= ? OR status = 'open' OR answered_at >= ?)")
     .all(startOfDay(now), startOfDay(now)) as Ask[];
   const defers = db.query("SELECT from_at, to_at FROM ask_defers WHERE ask_id = ?");
+  const deferredNow = db.query("SELECT 1 FROM ask_defers WHERE ask_id = ? AND to_at > ?");
   let lost = 0;
   let bonus = 0;
   let fast = 0;
@@ -29,6 +30,6 @@ export function score(now: number) {
       fast++;
     }
   }
-  const open = asks.filter((a) => a.status === "open" && !((a.defer_until ?? 0) > now)).length;
+  const open = asks.filter((a) => a.status === "open" && !deferredNow.get(a.id, now)).length;
   return { bank: 1000 - lost + bonus, lost, bonus, fast, burnPerMin: open };
 }

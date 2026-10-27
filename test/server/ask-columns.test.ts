@@ -1,4 +1,4 @@
-// Floors v4 adds columns to asks and ask_comments (defer_until, handed_by, author, to_lane, delivery, error). A database made before them keeps
+// Floors v4 adds columns to asks and ask_comments (handed_by, author, to_lane, delivery, error). A database made before them keeps
 // every row, and the old rows read as they did: never deferred, handed in by nobody, written by HQ.
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";

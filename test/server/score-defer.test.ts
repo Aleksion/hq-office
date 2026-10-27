@@ -22,7 +22,7 @@ describe("waitedMinutes", () => {
 
 // score(now) at a fixed noon, in a child process whose HUD_DATA_DIR is a throwaway dir: `rows` are asks (times in minutes
 // before noon) and their deferrals.
-async function scoreAtNoon(rows: { ask: [number, string]; defers?: [number, number][]; until?: number }[]) {
+async function scoreAtNoon(rows: { ask: [number, string]; defers?: [number, number][] }[]) {
   const dir = mkdtempSync(join(tmpdir(), "hud-score-"));
   const script = `
     const { db } = await import(${JSON.stringify(join(ROOT, "src/server/db.ts"))});
@@ -30,7 +30,7 @@ async function scoreAtNoon(rows: { ask: [number, string]; defers?: [number, numb
     const noon = new Date(); noon.setHours(12, 0, 0, 0);
     const at = (min) => noon.getTime() - min * 60000;
     for (const r of ${JSON.stringify(rows)}) {
-      const id = Number(db.query("INSERT INTO asks (kind, title, created_at, status, defer_until) VALUES ('decision', 'q', ?, ?, ?)").run(at(r.ask[0]), r.ask[1], r.until == null ? null : at(r.until)).lastInsertRowid);
+      const id = Number(db.query("INSERT INTO asks (kind, title, created_at, status) VALUES ('decision', 'q', ?, ?)").run(at(r.ask[0]), r.ask[1]).lastInsertRowid);
       for (const [f, t] of r.defers ?? []) db.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (?, ?, ?)").run(id, at(f), at(t));
     }
     console.log(JSON.stringify(score(noon.getTime())));`;
@@ -51,7 +51,7 @@ describe("score(now)", () => {
   test("two deferrals one after the other both come off; a deferral still running stops the burn", async () => {
     const s = await scoreAtNoon([
       { ask: [90, "open"], defers: [[80, 60], [60, 30]] }, // 90 open, 50 deferred: 40 waited
-      { ask: [20, "open"], defers: [[10, -60]], until: -60 }, // deferred until an hour from now
+      { ask: [20, "open"], defers: [[10, -60]] }, // deferred until an hour from now
     ]);
     expect(s.lost).toBe(35 + 5); // 40 - 5, and 10 - 5
     expect(s.burnPerMin).toBe(1);
