@@ -88,15 +88,20 @@ test.skipIf(!chromeFound)("each theme paints a distinct look for each depth, fro
 
 test.skipIf(!chromeFound)("with a tree, workers dress by depth and theme, and the card shows the level and the path", async () => {
   for (const [name, parent] of TREE) if (parent) await server.post("/api/lanes", { name, parent });
-  const looksNow = `import("/src/client/room/workers.js").then(({ workers }) => JSON.stringify(Object.fromEntries([...workers].map(([n, w]) => [n, w.pal.look?.id ?? null]))))`;
-  await until(`${looksNow}.then((s) => JSON.parse(s)["api-auth"] === null && JSON.parse(s)["web-pm"] === "blazer")`);
-  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": null, "api-lead": "cardigan", "data-pm": "blazer", "web-pm": "blazer" });
+  // web-pm runs a lead with a report, so it heads a floor of its own: its lanes are workers on that floor's copy of the
+  // room (loaded from /floor/web-pm/...), and web-pm stands at that floor's terminal, not at a desk. Every floor's
+  // workers together are the office's.
+  await until(`!!document.getElementById("room-web-pm")`);
+  const everyFloor = (pick: string) => `Promise.all(["/src/client/room/workers.js", "/floor/web-pm/src/client/room/workers.js"].map((u) => import(u))).then((ms) => JSON.stringify(Object.fromEntries(ms.flatMap(({ workers }) => [...workers].map(([n, w]) => [n, ${pick}])))))`;
+  const looksNow = everyFloor("w.pal.look?.id ?? null");
+  await until(`${looksNow}.then((s) => JSON.parse(s)["api-auth"] === null && JSON.parse(s)["data-pm"] === "blazer")`);
+  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": null, "api-lead": "cardigan", "data-pm": "blazer" });
   // the label marks: three pips at the top level, then two, then one, so the level reads from behind too
-  const marks = `import("/src/client/room/workers.js").then(({ workers }) => JSON.stringify(Object.fromEntries([...workers].map(([n, w]) => [n, w.mark?.pips ?? null]))))`;
-  expect(JSON.parse(await page.evaluate(marks))).toEqual({ "api-auth": 1, "api-lead": 2, "data-pm": 3, "web-pm": 3 });
+  const marks = everyFloor("w.mark?.pips ?? null");
+  expect(JSON.parse(await page.evaluate(marks))).toEqual({ "api-auth": 1, "api-lead": 2, "data-pm": 3 });
   await server.post("/api/settings", { settings: { theme: "arena" } });
-  await until(`${looksNow}.then((s) => JSON.parse(s)["web-pm"] === "guard-square")`);
-  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": "player", "api-lead": "guard-triangle", "data-pm": "guard-square", "web-pm": "guard-square" });
+  await until(`${looksNow}.then((s) => JSON.parse(s)["data-pm"] === "guard-square")`);
+  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": "player", "api-lead": "guard-triangle", "data-pm": "guard-square" });
 
   await page.evaluate(`(() => { const b = document.createElement("button"); b.dataset.select = "api-auth"; document.body.append(b); b.click(); b.remove(); })()`);
   await until(`document.querySelector("#card h3")?.textContent === "api-auth" && !!document.querySelector("#card .path")`);
