@@ -50,7 +50,8 @@ lives in a `.scene` with the layer beside it, with one floor too: that is the on
 
 - **Markers** (`helpMarks`): zoomed out, one beside every agent that needs help (the names are too small to read);
   zoomed in, only workers blocked at a prompt or stalled, because the room already shows a "!" over a worker waiting on
-  you and a "?" over one waiting on HQ. The head at the terminal is marked in any help state. A marker takes the nearest
+  you and a "?" over one waiting on HQ. The general at the terminal is marked only when blocked or waiting on you: idle is its normal state, whether the server
+  calls it waiting on HQ or, after 15 idle minutes, stalled. A marker takes the nearest
   spot clear of every name label, sprite, bubble, wall piece and other marker (`layer/place.js`; the label boxes come from
   `room/scene.js` `labelBox`, which measures them the way `drawLabel` draws them). With no clear spot there is no marker.
 - **Frames** (`floorRooms`, `projectState`): each open project (a conference room) hangs on the wall of its owner's
@@ -61,7 +62,8 @@ lives in a `.scene` with the layer beside it, with one floor too: that is the on
 - **NEED HELP** (`help/`, `helpStrip`) is a strip between the floor and the worker card: the agents in scope that need
   help, worst first, each row choosing its agent like a worker's click. Nobody needing help reads "0 NEED HELP" and is
   disabled. The strip follows the scope and never changes it: every row's lane is on the scoped floor.
-- The legend gains BLOCKED and STALLED rows. Heads are marked at their terminal but not listed in NEED HELP.
+- The legend gains BLOCKED and STALLED rows. A general that needs help (blocked or waiting on you) gets a NEED HELP row
+  and a dot on its floor's tile as well as its marker.
 
 ## Projects, links and the way into rooms
 

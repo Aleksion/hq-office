@@ -132,10 +132,10 @@ const HELP = { blocked: "blocked", needs_you: "waiting", stale: "stalled", hq_tu
 export const helpState = (lane) => HELP[lane.status] ?? null;
 const HELP_ORDER = ["blocked", "waiting", "stalled", "hq"];
 // The lanes in scope that need help, worst first, then by name.
-// A floor's general waits on HQ whenever it is idle, which is its normal state: it needs help only when it is blocked,
-// waiting on the owner or stalled. Then it counts as any agent does: a NEED HELP row, a dot on its floor's tile, and a
-// marker at its terminal.
-const generalNeedsHelp = (l) => ["blocked", "waiting", "stalled"].includes(helpState(l));
+// A floor's general is idle while its PMs work, which is its normal state: waiting on HQ, and after 15 idle minutes the
+// server calls that stalled too. So it needs help only when it is blocked or waiting on the owner. Then it counts as any
+// agent does: a NEED HELP row, a dot on its floor's tile, and a marker at its terminal.
+const generalNeedsHelp = (l) => ["blocked", "waiting"].includes(helpState(l));
 const needsHelp = (l) => (l.heads ? generalNeedsHelp(l) : !!helpState(l));
 export function needHelp(S, view) {
   return lanesOf(S)

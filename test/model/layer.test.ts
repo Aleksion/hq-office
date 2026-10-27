@@ -38,13 +38,18 @@ describe("who gets a marker", () => {
     expect(who("g", true)).toEqual(["g-eng:blocked", "g-books:stalled"]);
   });
 
-  // A general idle at its terminal waits on HQ: that is its normal state, not a call for help.
-  test("the general at the terminal is marked when blocked, waiting on you or stalled, never for waiting on HQ", () => {
+  // A general idle at its terminal waits on HQ, and after 15 idle minutes the server calls it stale: both are its normal
+  // state, not a call for help.
+  test("the general at the terminal is marked when blocked or waiting on you, never when idle (waiting on HQ, or stale)", () => {
+    const as = (status: string) => ({ ...S, lanes: S.lanes.map((l: any) => (l.name === "g" ? { ...l, status } : l)) });
     for (const zoomedIn of [true, false]) {
-      expect(who("g", zoomedIn).some((m) => m.startsWith("g:"))).toBe(false);
-      for (const [status, state] of [["blocked", "blocked"], ["needs_you", "waiting"], ["stale", "stalled"]]) {
-        const s = { ...S, lanes: S.lanes.map((l: any) => (l.name === "g" ? { ...l, status } : l)) };
-        expect(helpMarks(s, "g", zoomedIn).find((m: any) => m.lane === "g")).toMatchObject({ state, head: true });
+      for (const status of ["hq_turn", "stale"]) {
+        expect(helpMarks(as(status), "g", zoomedIn).some((m: any) => m.lane === "g")).toBe(false);
+        expect(needHelp(as(status), { floor: "g", agent: null }).map((r: any) => r.lane)).not.toContain("g");
+        expect(floorLabel(as(status), "g").help.map((r: any) => r.lane)).not.toContain("g");
+      }
+      for (const [status, state] of [["blocked", "blocked"], ["needs_you", "waiting"]]) {
+        expect(helpMarks(as(status), "g", zoomedIn).find((m: any) => m.lane === "g")).toMatchObject({ state, head: true });
       }
     }
   });
