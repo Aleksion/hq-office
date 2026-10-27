@@ -3,7 +3,7 @@ import { STALE_MS } from "./config.ts";
 import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { event } from "./events.ts";
-import { laneTree, levelName, levelNames, underHq } from "../lane-tree.ts";
+import { floorsOf, laneTree, levelName, levelNames, underHq } from "../lane-tree.ts";
 
 // An agent at work: herdr says working, or an idle agent still has shells, a monitor or subagents running (bg).
 export const laneWorking = (lane: Lane | null | undefined) => !!lane && (lane.herdr === "working" || !!lane.bg);
@@ -70,13 +70,15 @@ export function removeLane(name: string) {
   })();
 }
 
-// Each lane with its place in the tree: depth (HQ is 0), path (its ancestors from the top) and level name.
+// Each lane with its place in the tree: depth (HQ is 0), path (its ancestors from the top) and level name, and the
+// floor it is on (see floorsOf) with whether it heads that floor.
 export function withTree<T extends Lane>(lanes: T[]) {
   const row = db.query("SELECT value FROM settings WHERE key = 'levels'").get() as { value: string } | null;
   const names = levelNames(row ? JSON.parse(row.value) : null);
   const tree = laneTree(lanes);
+  const floors = floorsOf(lanes);
   return lanes.map((l) => {
     const t = tree.get(l.name)!;
-    return { ...l, parent: t.path.at(-1) ?? null, depth: t.depth, path: t.path, level: levelName(t.depth, names) };
+    return { ...l, parent: t.path.at(-1) ?? null, depth: t.depth, path: t.path, level: levelName(t.depth, names), ...floors.get(l.name)! };
   });
 }
