@@ -61,10 +61,30 @@ export const FACTS = {
   release: { title: "Ship the release", owner: "hq-pm", members: ["hq-api", "hq-web"], issue: "REL-1", pr: "acme-example/app#12", shelf: "Release checklist" },
 };
 
+type Server = Awaited<ReturnType<typeof spawnServer>>;
+
+// The data dir is made first and everything after it is undone together: a spawn that never comes up, a seed that throws or a
+// Ctrl-C at any point after the dir exists leaves no server listening and no dir behind. (A Ctrl-C in the instant the server is
+// being spawned, before it is handed back, cannot stop it: that window is the spawn's own.)
 export async function startFloors(opts: { general?: boolean; frame?: boolean } = {}) {
+  const data = mkdtempSync(join(tmpdir(), "hq-floors-fixture-"));
+  let server: Server | undefined;
+  const stop = async () => { await server?.stop(); rmSync(data, { recursive: true, force: true }); };
+  const interrupted = () => stop().finally(() => process.exit(130));
+  process.once("SIGINT", interrupted);
+  try {
+    return { ...(await openOffice(opts, data, (s) => (server = s))), stop };
+  } catch (e) {
+    await stop();
+    throw e;
+  } finally {
+    process.off("SIGINT", interrupted);
+  }
+}
+
+async function openOffice(opts: { general?: boolean; frame?: boolean }, data: string, started: (server: Server) => void) {
   const general = opts.general ?? true;
   const lanes: Lane[] = opts.frame ? frameLanes() : general ? [...HQ_LANES, ...GENERAL_LANES] : HQ_LANES;
-  const data = mkdtempSync(join(tmpdir(), "hq-floors-fixture-"));
   const herdr = join(data, "herdr");
   const agents = lanes.map((l, i) => `{"name":"${l.name}","agent_status":"${l.herdr}","pane_id":"w1:p${i}","agent":"claude"}`).join(",");
   const blocked = lanes.findIndex((l) => l.name === (opts.frame ? frameBlocked() : FACTS.blocked));
@@ -82,19 +102,14 @@ export async function startFloors(opts: { general?: boolean; frame?: boolean } =
     Object.assign(env, stubs.env, { HERDR_BIN: stubs.herdr });
   }
   const server = await spawnServer({ cwd: ROOT, env });
+  started(server);
   const { base } = server;
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
-  const stop = async () => { await server.stop(); rmSync(data, { recursive: true, force: true }); };
   // FACTS describe the default office, not the frame's: frame mode returns none.
   if (opts.frame) {
-    try {
-      for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: l.machine, title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });
-      await seedFrame(post, data, base);
-    } catch (e) {
-      await stop(); // no server left listening and no data dir left behind
-      throw e;
-    }
-    return { base, post, stop };
+    for (const l of lanes as ReturnType<typeof frameLanes>) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: l.machine, title: l.title, ...(l.phase ? { phase: l.phase } : {}), ...(l.issue ? { issue: l.issue } : {}) });
+    await seedFrame(post, data, base);
+    return { base, post };
   }
 
   for (const l of lanes) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.name, ...(l.issue ? { issue: l.issue, pr: l.pr } : {}) });
@@ -132,7 +147,7 @@ export async function startFloors(opts: { general?: boolean; frame?: boolean } =
     db.close();
     await post("/api/lanes", { name: FACTS.stalled, note: "waiting for a reply" }); // a write, so the page's next state carries it
   }
-  return { base, post, facts: FACTS, stop };
+  return { base, post, facts: FACTS };
 }
 
 if (import.meta.main) {
