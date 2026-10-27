@@ -15,6 +15,7 @@ async function hud(...args: string[]) {
 }
 
 test("--from is recorded on the question and reaches the page; without it nobody handed it in", async () => {
+  expect((await hud("lane", "billing-lead")).code).toBe(0);
   const a = await hud("ask", "--title", "Handed in", "--from", "billing-lead");
   expect(a.code).toBe(0);
   expect((await hud("ask", "--title", "Plain")).code).toBe(0);
@@ -22,4 +23,11 @@ test("--from is recorded on the question and reaches the page; without it nobody
   expect((await hud("ask", "--title", "With items", "--from", "billing-lead", "--item", "one")).code).toBe(0);
   const s = await o.state();
   expect(s.open.map((q: any) => [q.title, q.handed_by])).toEqual([["Handed in", "billing-lead"], ["Plain", null], ["With items", "billing-lead"]]);
+});
+
+test("--from must name a lane HQ knows: a typo is refused, not shown as handed in by nobody real", async () => {
+  const r = await hud("ask", "--title", "From a typo", "--from", "biling-lead");
+  expect(r.code).toBe(1);
+  expect(r.err).toContain("no lane named biling-lead");
+  expect((await o.state()).open.map((q: any) => q.title)).not.toContain("From a typo");
 });

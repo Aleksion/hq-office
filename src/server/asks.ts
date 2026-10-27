@@ -61,9 +61,17 @@ export function refuseMissingPickAfter(id: number, body: any) {
   }));
 }
 
+// hud ask --from LANE: the lane that handed the question in must be one HQ knows, as --as is for a comment.
+function handedBy(from: unknown) {
+  const lane = String(from ?? "").trim();
+  if (lane && !db.query("SELECT 1 FROM lanes WHERE name = ?").get(lane)) throw new Error(`no lane named ${lane}: --from names the lane that handed the question in`);
+  return lane || null;
+}
+
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
+  const from = handedBy(body.from);
   const res = db
     .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .run(
@@ -77,7 +85,7 @@ export function createAsk(body: any) {
       body.due ?? null,
       body.created_at ?? Date.now(),
       wanted.length ? JSON.stringify(wanted) : null,
-      String(body.from ?? "").trim() || null,
+      from,
     );
   event("hq", `asked: ${body.title}`, body.lane);
   return Number(res.lastInsertRowid);
