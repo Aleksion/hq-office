@@ -2,7 +2,7 @@
 // counts and lines every panel shows, and a scope that still holds after the lanes change. No browser.
 import { describe, expect, test } from "bun:test";
 import {
-  canvasId, counts, floorFromPath, floorLanes, floorList, floorOfLane, floorTagShown, helpStrip, inScope, marksRead,
+  canvasId, counts, escapeAction, floorFromPath, floorLanes, floorList, floorOfLane, floorTagShown, hasLane, helpStrip, inScope, jumpAsk, marksRead,
   needHelp, normalizeScope, nothingLine, othersLine, readAllBody, tellRecipient, terminalName, viewOf, chipText,
 } from "../../src/client/core/floors.js";
 
@@ -132,5 +132,31 @@ describe("reading updates in a scope", () => {
     expect(readAllBody({ floor: null, agent: null })).toEqual({});
     expect(readAllBody(g)).toEqual({ floor: "g" });
     expect(readAllBody({ floor: "g", agent: "g-pm" })).toEqual({ floor: "g", lane: "g-pm" });
+  });
+});
+
+describe("escape and the jump", () => {
+  const idle = { stage: false, settings: false, dialog: false, typing: false };
+  test("Escape steps out of any scope, and leaves the key alone when nothing is scoped", () => {
+    expect(escapeAction({ floor: null, agent: "a", all: false }, idle)).toBe("out");
+    expect(escapeAction({ floor: "g", agent: null, all: false }, idle)).toBe("out");
+    expect(escapeAction({ floor: null, agent: "a", all: true }, idle)).toBe("out");
+    expect(escapeAction({ floor: null, agent: null, all: false }, idle)).toBeNull();
+  });
+  test("a room, SETTINGS, a dialog or a text field keeps the key", () => {
+    const scoped = { floor: null, agent: "a", all: false };
+    for (const busy of ["stage", "settings", "dialog", "typing"]) expect(escapeAction(scoped, { ...idle, [busy]: true })).toBeNull();
+  });
+  test("a jump goes to the lane's first open question, and nowhere for a lane that is gone", () => {
+    expect(jumpAsk(two, "g-eng")?.id).toBe(2);
+    expect(jumpAsk(two, "solo")).toBeNull();
+    expect(jumpAsk({ ...two, lanes: [] }, "g-eng")).toBeNull();
+    expect(jumpAsk(two, null)).toBeNull();
+    expect(hasLane(two, "pm")).toBe(true);
+    expect(hasLane(two, "nobody")).toBe(false);
+  });
+  test("the chip reads the lane alone with one floor, and the floor and lane with two", () => {
+    expect(chipText(one, { floor: null, agent: "a", all: false })).toBe("a ✕");
+    expect(chipText(two, { floor: "g", agent: "g-eng", all: false })).toBe("G FLOOR › g-eng ✕");
   });
 });

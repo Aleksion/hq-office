@@ -29,6 +29,14 @@ test("choosing an agent scopes to the agent's floor; with one floor, to the agen
   expect(scope()).toEqual({ floor: null, agent: "pm", all: false });
 });
 
+test("a lane the state does not have is not chosen", () => {
+  chooseAgent("g-pm");
+  events.length = 0;
+  chooseAgent("nobody", { jump: true });
+  expect(scope()).toEqual({ floor: "g", agent: "g-pm", all: false });
+  expect(events).toEqual([]);
+});
+
 test("out one goes agent, floor, none; with one floor, agent, none", () => {
   chooseAgent("g-pm");
   outOne();

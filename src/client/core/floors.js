@@ -25,6 +25,7 @@ export function floorList(S) {
   const heads = lanesOf(S).filter((l) => l.heads).map((l) => l.name).sort((a, b) => a.localeCompare(b));
   return [HQ, ...heads].map((id, i) => ({ id, label: id === HQ ? "HQ" : id.toUpperCase(), color: FLOOR_COLORS[i % FLOOR_COLORS.length] }));
 }
+export const hasLane = (S, name) => !!name && lanesOf(S).some((l) => l.name === name);
 // A lane that is gone, or none, is on HQ's floor.
 export function floorOfLane(S, name) {
   const l = name ? lanesOf(S).find((x) => x.name === name) : null;
@@ -113,7 +114,7 @@ export function helpStrip(S, view) {
 export function normalizeScope(S, scope) {
   const floors = floorList(S).map((f) => f.id);
   let { floor, agent, all } = scope;
-  if (agent && !lanesOf(S).some((l) => l.name === agent)) agent = null;
+  if (agent && !hasLane(S, agent)) agent = null;
   if (agent) floor = floors.length >= 2 ? floorOfLane(S, agent) : null;
   else if (!floors.includes(floor) || floors.length < 2) floor = null;
   return { floor, agent, all: !!all && !!(floor || agent) };
@@ -128,3 +129,12 @@ export function readAllBody(view) {
   if (view?.agent) body.lane = view.agent;
   return body;
 }
+
+// What Escape does: step the scope out one level ("out"), or leave the key alone (null) when nothing is scoped or
+// something else owns it: a conference room on the stage, SETTINGS or a dialog, a text field.
+export function escapeAction(scope, busy) {
+  if (busy.stage || busy.settings || busy.dialog || busy.typing) return null;
+  return scope.floor || scope.agent ? "out" : null;
+}
+// Where choosing a lane with `jump` takes the question panel: the lane's first open question, or null.
+export const jumpAsk = (S, lane) => (hasLane(S, lane) ? S.open.find((a) => a.lane === lane) ?? null : null);

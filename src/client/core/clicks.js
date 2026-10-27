@@ -1,13 +1,13 @@
-// Clicks delegated from the whole document: select a worker, switch the feed tab, MORE/LESS.
+// Clicks delegated from the whole document: choose an agent (core/scope.js), switch the feed tab, MORE/LESS.
 import { renderFeed, renderLog, setFeedTab } from "../feed/feed.js";
-import { select } from "../room/input.js";
+import { chooseAgent } from "./scope.js";
 import { expanded } from "./text.js";
 import { renderHud } from "../questions/questions.js";
 import { renderMsgs } from "../messages/messages.js";
 
 document.addEventListener("click", (e) => {
   const sel = e.target.closest("[data-select]");
-  if (sel) { select(sel.dataset.select, true); return; }
+  if (sel) { chooseAgent(sel.dataset.select, { jump: true }); return; }
   const tabBtn = e.target.closest("[data-tab]");
   if (tabBtn) {
     setFeedTab(tabBtn.dataset.tab);
