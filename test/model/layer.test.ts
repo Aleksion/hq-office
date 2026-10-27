@@ -5,7 +5,7 @@ import { setS } from "../../src/client/core/state.js";
 import { allFloors, chooseAgent, scope, setFloor } from "../../src/client/core/scope.js";
 import { KEEP_CLEAR, MARK_SIZE, RH, RW, TERMINAL, WALL, figure, frameBox, frameSlots, meets, placeMarks } from "../../src/client/layer/place.js";
 import {
-  FRAMES_MAX, HELP_COLORS, PROJECT_COLORS, floorLabel, floorRooms, frames, helpMarks, helpStrip, needHelp, projectState, roomCalls,
+  FRAMES_MAX, HELP_COLORS, PROJECT_COLORS, floorLabel, floorRooms, frameName, frames, helpMarks, helpStrip, needHelp, projectState, roomCalls,
 } from "../../src/client/core/floors.js";
 
 const store = new Map<string, string>();
@@ -125,10 +125,14 @@ describe("a frame's colour is its project's state", () => {
     expect(projectState({ ...S, open: [] }, room("h", "idle", { members: ["ghost"] }))).toBe("moving");
   });
 
-  test("frames carry the colour of their state and the questions waiting inside", () => {
+  test("frames carry the colour of their state and draw no count: a question belongs to a lane, not to a room", () => {
     const r = room("a", "pm", { members: ["ops"] });
     const f = frames({ ...S, rooms: [r, room("b", "web")] }, "hq");
-    expect(f.map((x: any) => [x.slug, x.state, x.color, x.calls])).toEqual([["a", "waiting", PROJECT_COLORS.waiting, 1], ["b", "blocked", PROJECT_COLORS.blocked, 0]]);
+    expect(f).toEqual([
+      { slug: "a", title: "A", state: "waiting", color: PROJECT_COLORS.waiting },
+      { slug: "b", title: "B", state: "blocked", color: PROJECT_COLORS.blocked },
+    ]);
+    expect(f.map(frameName)).toEqual(["A: WAITING ON YOU", "B: BLOCKED AT A PROMPT"]);
     expect(roomCalls(S, r).map((a: any) => a.id)).toEqual([1]);
     expect(new Set(Object.values(PROJECT_COLORS)).size).toBe(Object.keys(PROJECT_COLORS).length);
     expect(PROJECT_COLORS.blocked).toBe(HELP_COLORS.blocked);

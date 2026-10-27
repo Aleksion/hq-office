@@ -5,7 +5,7 @@
 import { on } from "../core/bus.js";
 import { S } from "../core/state.js";
 import { scope } from "../core/scope.js";
-import { FRAMES_MAX, HELP_COLORS, HELP_NAMES, PROJECT_NAMES, frames, helpMarks, stageMode } from "../core/floors.js";
+import { FRAMES_MAX, HELP_COLORS, HELP_NAMES, frameName, frames, helpMarks, stageMode } from "../core/floors.js";
 import { esc } from "../core/format.js";
 import { onFloor } from "../floors/registry.js";
 import { wrap } from "../floors/building.js";
@@ -73,7 +73,7 @@ function draw(L) {
   const sprites = floor.positions(), at = new Map(sprites.map((p) => [p.name, p]));
   const agents = marked.map((m) => ({ ...m, ...(m.head ? TERMINAL : at.get(m.lane)) })).filter((m) => m.sx !== undefined);
   const marks = placeMarks({ agents, sprites, labels: floor.labels(), zoomedIn });
-  const key = JSON.stringify([live, wall.map((f) => [f.slug, f.title, f.state, f.calls]), marks.map((m) => [m.lane, m.state, m.box.x, m.box.y])]);
+  const key = JSON.stringify([live, wall.map((f) => [f.slug, f.title, f.state]), marks.map((m) => [m.lane, m.state, m.box.x, m.box.y])]);
   if (key === L.key) return;
   L.key = key;
   const g = L.ovl.getContext("2d"), k = L.ovl.width / RW;
@@ -86,8 +86,8 @@ function draw(L) {
   // there are or what they say changes; a marked agent walking only moves its button, so a click, hover or focus survives it.
   const buttons = !live ? [] : [
     ...wall.map((f) => {
-      const name = `${f.title}: ${PROJECT_NAMES[f.state]}${f.calls ? `, ${f.calls} for you` : ""}`;
-      return { box: frameBox(f), html: `<button class="hit frame" type="button" data-project="${esc(f.slug)}" aria-label="${esc(name)}" title="${esc(name)}">${f.calls ? `<span class="tag count">${f.calls}</span>` : ""}</button>` };
+      const name = frameName(f);
+      return { box: frameBox(f), html: `<button class="hit frame" type="button" data-project="${esc(f.slug)}" aria-label="${esc(name)}" title="${esc(name)}"></button>` };
     }),
     ...marks.map((m) => {
       const name = `${m.lane}: ${HELP_NAMES[m.state]}`;

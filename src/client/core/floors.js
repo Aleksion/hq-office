@@ -196,13 +196,16 @@ export const openRooms = (S, floor) =>
     .sort((a, b) => a.createdAt - b.createdAt || a.slug.localeCompare(b.slug));
 // The ones the wall hangs: at most seven (the wall has seven places).
 export const floorRooms = (S, floor) => openRooms(S, floor).slice(0, FRAMES_MAX);
-// A floor's frames, in wall order: the room, its state and colour, and how many questions of its lanes wait on you.
+// A floor's frames, in wall order: the room, its state and colour. A frame carries no count of questions: a question
+// belongs to a lane, not to a room, so the questions of a room's lanes are not the project's.
 export function frames(S, floor) {
   return floorRooms(S, floor).map((r) => {
     const state = projectState(S, r);
-    return { slug: r.slug, title: r.title, state, color: PROJECT_COLORS[state], calls: roomCalls(S, r).length };
+    return { slug: r.slug, title: r.title, state, color: PROJECT_COLORS[state] };
   });
 }
+// What a frame's button says: the project and its state.
+export const frameName = (f) => `${f.title}: ${PROJECT_NAMES[f.state]}`;
 
 // ---- RUNDOWN and PARTY: the panels over the room ----
 

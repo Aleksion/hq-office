@@ -141,7 +141,8 @@ for (const [width, height] of SIZES) {
     await until(`document.querySelectorAll(".building .tile").length === 3`);
     await click(`.tile[data-floor="hq"] .tlabel`);
     await until(`document.querySelectorAll('.layer[data-floor="hq"] .hit.frame').length === 2`);
-    expect(await frameLabels("hq")).toEqual(["Ship the release: WAITING ON YOU, 1 for you", "Fix the web build: BLOCKED AT A PROMPT"]);
+    expect(await frameLabels("hq")).toEqual(["Ship the release: WAITING ON YOU", "Fix the web build: BLOCKED AT A PROMPT"]);
+    expect(await ev(`document.querySelectorAll(".layer .hit.frame .count").length`)).toBe(0);
     await click(`.layer[data-floor="hq"] .hit.frame[data-project="release"]`);
     await until(`!!document.querySelector("#projectPanel h2")`);
     expect(await ev(`document.querySelector("#projectPanel h2").textContent`)).toBe(FACTS.release.title);
@@ -163,7 +164,7 @@ for (const [width, height] of SIZES) {
     await click(".stagebar [data-building]");
     await click(`.tile[data-floor="sales"] .tlabel`);
     await until(`document.querySelectorAll('.layer[data-floor="sales"] .hit.frame').length === 2`);
-    expect(await frameLabels("sales")).toEqual(["Pipeline review: MOVING", "Outbound calls: WAITING ON YOU, 1 for you"]);
+    expect(await frameLabels("sales")).toEqual(["Pipeline review: MOVING", "Outbound calls: WAITING ON YOU"]);
   }, 60_000);
 
   test.skipIf(!chromeFound)(`${at}: panels over the room take turns, and Escape closes the panel before the scope`, async () => {
