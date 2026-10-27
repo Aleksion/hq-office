@@ -8,8 +8,22 @@ import { bump, secrets } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
 
+// The owner's rule (#242): every ask carries the agent's pick and why. A decision with options and no --rec is refused,
+// with the line to send instead. The why has no field of its own: it goes in the body, and is not checked.
+function refuseMissingPick(body: any) {
+  const options: string[] = (body.options ?? []).map(String).filter(Boolean);
+  if ((body.kind ?? "decision") !== "decision" || !options.length || String(body.recommended ?? "").trim()) return;
+  const q = (v: string) => JSON.stringify(v);
+  throw new Error(
+    `This decision has options but no recommendation. Every question to the owner carries your pick and why: add --rec with the option you recommend, and say why in --body. Example:\n` +
+      `  hud ask --title ${q(String(body.title))} ${options.map((o) => `--opt ${q(o)}`).join(" ")} --rec ${q(options[0])} --body ${q(`I recommend ${options[0]} because ...`)}\n` +
+      `A question with no options (--kind action or info) needs no --rec.`,
+  );
+}
+
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
+  refuseMissingPick(body);
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const res = db
     .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")

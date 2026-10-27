@@ -53,7 +53,7 @@ describe("HUD_OWNER set", async () => {
   });
 
   test("an answer is logged under the owner's name", async () => {
-    const { id } = await (await o.post("/api/asks", { title: "Left or right?", options: ["Left", "Right"] })).json();
+    const { id } = await (await o.post("/api/asks", { title: "Left or right?", options: ["Left", "Right"], recommended: "Left" })).json();
     expect((await o.post(`/api/asks/${id}/answer`, { answer: "Left" })).status).toBe(200);
     expect(await o.events()).toContain('Aleks answered "Left or right?": Left');
   });

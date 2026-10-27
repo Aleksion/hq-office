@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // HQ's side of the command centre.
-//   hud ask --lane L --title T [--body B] [--opt A --opt B] [--rec A] [--kind decision|action|info] [--link URL] [--due HH:MM]
+//   hud ask --lane L --title T [--body B] [--opt A --opt B --rec A] [--kind decision|action|info] [--link URL] [--due HH:MM]
+//           a decision with --opt needs --rec (your pick; the why goes in --body); no options (--kind action|info) needs none
 //           [--from LANE]         the lane that handed this question in (shown on the card as handed in by it)
 //           [--secret NAME ...]   ask the owner for named secrets, filled in on the question card
 //           [--item TEXT ...]     a checklist; an item naming a PR (#123) ticks itself when it merges, and the
