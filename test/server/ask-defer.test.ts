@@ -98,7 +98,7 @@ describe("defer", () => {
     const s = await second.state();
     expect(ids(s.open)).toEqual([]);
     expect(ids(s.deferred)).toEqual(["Survives"]);
-    // The restarted server arms its own timer from the column: an open page is pushed the question's return.
+    // The restarted server arms its own timer from ask_defers: an open page is pushed the question's return.
     await Bun.sleep(2500);
     const page = await pageOpen(second.base);
     await page.until((m) => m.deferred?.length === 0 && m.open?.length === 1);
@@ -131,30 +131,32 @@ describe("defer", () => {
     const o = await start();
     const a = (await o.post("/api/asks", { title: "Never deferred" })).id;
     const res = await o.send(`/api/asks/${a}/defer`, { until: null });
-    expect(res.status).not.toBe(200);
+    expect(res.status).toBe(400);
     expect(await res.text()).toContain(`ask ${a} is not deferred`);
     expect((await o.state()).open[0].defer_until).toBeNull(); // the refusal did not float it to the top as "back"
     await o.post(`/api/asks/${a}/defer`, { until: Date.now() + 3_600_000 });
     await o.post(`/api/asks/${a}/defer`, { until: null });
-    expect((await o.send(`/api/asks/${a}/defer`, { until: null })).status).not.toBe(200); // already brought back
+    expect((await o.send(`/api/asks/${a}/defer`, { until: null })).status).toBe(400); // already brought back
   });
 
-  test("a database the earlier build made, with an asks.defer_until column, still reports defer_until from ask_defers", async () => {
+  test("a database the earlier build made, with an asks.defer_until column, reports and sorts by defer_until from ask_defers", async () => {
     const data = mkdtempSync(join(tmpdir(), "hq-oldcol-test-"));
     const old = new Database(join(data, "hud.db"), { create: true });
     old.exec(readFileSync(join(ROOT, "src/server/schema/asks.sql"), "utf8"));
     old.exec("ALTER TABLE asks ADD COLUMN defer_until INTEGER");
     old.exec(readFileSync(join(ROOT, "src/server/schema/ask_defers.sql"), "utf8"));
-    const t = Date.now() + 3_600_000;
-    // The stale column says one thing for each question; the rows say another.
-    old.query("INSERT INTO asks (title, created_at, defer_until) VALUES ('Deferred', 1000, 5), ('Plain', 1000, ?)").run(t);
-    old.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (1, 1000, ?)").run(t);
+    const t = Date.now() + 3_600_000, back = Date.now() - 60_000;
+    // The stale column says one thing for each question; the rows say another. Back came back from a deferral under this
+    // build (its column is empty), Stale has only an old column value, and both were asked after Plain.
+    old.query("INSERT INTO asks (title, created_at, defer_until) VALUES ('Deferred', 1000, 5), ('Plain', 1000, NULL), ('Stale', 2000, 5), ('Back', 3000, NULL)").run();
+    old.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (1, 1000, ?), (4, 500, ?)").run(t, back);
     old.close();
     try {
       const o = await start({ data });
       const s = await o.state();
       expect(s.deferred.map((x: any) => [x.title, x.defer_until])).toEqual([["Deferred", t]]);
-      expect(s.open.map((x: any) => [x.title, x.defer_until])).toEqual([["Plain", null]]);
+      // the question that is back sorts first; the stale column floats nothing
+      expect(s.open.map((x: any) => [x.title, x.defer_until])).toEqual([["Back", back], ["Plain", null], ["Stale", null]]);
     } finally {
       rmSync(data, { recursive: true, force: true });
     }

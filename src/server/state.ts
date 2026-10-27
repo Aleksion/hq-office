@@ -10,15 +10,18 @@ import { pageStamp } from "./page.ts";
 import { machineHealth } from "./machines.ts";
 import { board } from "./work-board.ts";
 
-const DEFER_UNTIL = "(SELECT MAX(to_at) FROM ask_defers WHERE ask_id = asks.id) AS defer_until";
+// When a question is deferred to (or was, once back): ask_defers is the one record of deferrals.
+const DEFERRED_TO = "(SELECT MAX(to_at) FROM ask_defers WHERE ask_id = asks.id)";
+const DEFER_UNTIL = `${DEFERRED_TO} AS defer_until`;
 
 export function state() {
   const now = Date.now();
   const lanes = db.query("SELECT * FROM lanes ORDER BY name").all() as Lane[];
   // A question the owner deferred is out of `open` until its time (it is in `deferred`); once back it sorts first, soonest back first.
-  // defer_until is derived from ask_defers, the one record of deferrals; it comes last, so it wins over a column of that name in a database the earlier build made.
+  // A database the earlier build made also has an asks.defer_until column. The derived value comes last in the row, so the
+  // JSON carries it; ORDER BY names the expression itself, since there a bare defer_until would mean the table's column.
   const everyOpen = db
-    .query(`SELECT asks.*, ${DEFER_UNTIL} FROM asks WHERE status = 'open' ORDER BY (defer_until IS NULL), defer_until, COALESCE(due, 9e15), created_at`)
+    .query(`SELECT asks.*, ${DEFER_UNTIL} FROM asks WHERE status = 'open' ORDER BY (${DEFERRED_TO} IS NULL), ${DEFERRED_TO}, COALESCE(due, 9e15), created_at`)
     .all() as Ask[];
   const open = everyOpen.filter((a) => !(a.defer_until > now));
   const deferred = everyOpen.filter((a) => a.defer_until > now);
