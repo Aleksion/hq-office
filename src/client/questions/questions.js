@@ -7,6 +7,8 @@ import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
 import { renderSecretTimes } from "../secrets/secrets.js";
 import { clearImages, composer, hasImages, imageKeys } from "../images/images.js";
+import { counts, inScope, nothingLine, othersLine } from "../core/floors.js";
+import { scope, toggleAll, view } from "../core/scope.js";
 
 // A question below the fold gets a red pill at the bottom of the list. Click it to go to the next one.
 export function renderBelow() {
@@ -38,9 +40,13 @@ export function renderHud() {
   const caret = document.activeElement?.selectionStart;
   const focusedSecret = document.activeElement?.dataset?.secret;
   const focusedMin = document.activeElement?.dataset?.secretMin !== undefined;
-  // The count lives in the top bar now; the list only needs words when it is empty.
-  const head = S.open.length ? "" : `<div class="box"><h2>NOTHING WAITS ON YOU</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Questions land here.</div></div>`;
-  const html = head + S.open.map((a) => {
+  // The count lives in the top bar now; the list only needs words when it is empty. Scoped (core/scope.js), the list
+  // holds the asks in scope, and its first line says how many are left out.
+  const open = S.open.filter((a) => inScope(S, a, view()));
+  const line = othersLine(S, scope(), S.open.length - open.length);
+  const head = (line ? `<button class="scopeline" type="button" data-showall>${esc(line)}</button>` : "") +
+    (open.length ? "" : `<div class="box"><h2>${esc(nothingLine(S, scope()) || "NOTHING WAITS ON YOU")}</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Questions land here.</div></div>`);
+  const html = head + open.map((a) => {
     const d = drafts.get(a.id) || {};
     const kind = a.kind;
     const want = a.secrets ?? [];
@@ -95,7 +101,7 @@ export function tick() {
   }
   for (const el of document.querySelectorAll("[data-since]")) setText(el, dur(now - Number(el.dataset.since)));
   if (S) {
-    const oldest = S.open.length ? Math.min(...S.open.map((a) => a.created_at)) : null;
+    const oldest = counts(S, view()).oldest;
     const age = oldest ? now - oldest : 0;
     setClass($("sOld"), "old" + (age > 30 * 60000 ? " hot" : age > 5 * 60000 ? " warm" : ""));
     setText($("sOld").querySelector(".v"), oldest ? dur(age) : "-");
@@ -126,3 +132,14 @@ export function scheduleTick() {
   if (wait < Infinity) clockTimer = setTimeout(() => { tick(); scheduleTick(); }, wait + 5);
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && S) tick(); scheduleTick(); });
+
+// A change of scope draws the list again; asked to jump, it shows the chosen lane's first open question.
+$("hud").addEventListener("click", (e) => { if (e.target.closest("[data-showall]")) toggleAll(); });
+on("scope", ({ jump }) => {
+  if (!S) return;
+  renderHud();
+  tick();
+  const lane = scope().agent;
+  const card = jump && lane && document.querySelector(`.ask[data-lane="${CSS.escape(lane)}"]`);
+  if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash"); }
+});

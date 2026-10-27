@@ -4,6 +4,9 @@ import { post } from "../core/net.js";
 import { attachButton, chipsHTML, clearImages, hasImages, notReady, withImages } from "../images/images.js";
 import { setHTML } from "../core/format.js";
 import { S } from "../core/state.js";
+import { on } from "../core/bus.js";
+import { tellRecipient } from "../core/floors.js";
+import { view } from "../core/scope.js";
 
 $("compose").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -17,3 +20,8 @@ $("noteText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.m
 // The photo button, the same on every send box, and the images kept from before a reload.
 document.querySelector("#compose .acts").insertAdjacentHTML("afterbegin", attachButton("note"));
 setHTML(document.querySelector('[data-chips="note"]'), chipsHTML("note"));
+// The heading names who the note goes to: HQ in every scope.
+const heading = $("below").closest(".head").querySelector("h2");
+const renderTo = () => { const text = `TELL ${tellRecipient(S, view())}`; if (heading.textContent !== text) heading.textContent = text; };
+on("state", renderTo);
+on("scope", () => S && renderTo());

@@ -59,6 +59,12 @@ describe("what a scope lets through", () => {
     expect(counts(two, viewOf({ floor: "g", agent: null, all: true }))).toMatchObject({ waiting: 4, oldest: 100, unread: 5, otherWaiting: 0 });
   });
 
+  test("with no scope the counts are what the top bar showed before floors", () => {
+    const none = { floor: null, agent: null };
+    expect(counts(two, none)).toMatchObject({ waiting: two.open.length, oldest: 100, working: 2, live: 5, onHq: 1, unread: two.updatesUnread, otherWaiting: 0, otherUnread: 0 });
+    expect(counts(one, none)).toMatchObject({ waiting: 0, oldest: null, working: 2, live: 2, onHq: 0, unread: 0 });
+  });
+
   test("SHOW ALL turns the view off", () => {
     expect(viewOf({ floor: "g", agent: "g-pm", all: true })).toEqual({ floor: null, agent: null });
     expect(viewOf({ floor: "g", agent: "g-pm", all: false })).toEqual({ floor: "g", agent: "g-pm" });
