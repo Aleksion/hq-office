@@ -23,6 +23,15 @@ export function refuseMissingPick(body: any) {
   );
 }
 
+// hud update ID --opt / --rec: the same rule, on the question as the edit would leave it.
+export function refuseMissingPickAfter(id: number, body: any) {
+  if (body.options === undefined && body.recommended === undefined) return;
+  const ask = db.query("SELECT kind, title, options, recommended FROM asks WHERE id = ?").get(id) as { kind: string; title: string; options: string | null; recommended: string | null } | null;
+  if (!ask) return; // updateAsk says there is no such ask
+  const options = body.options !== undefined ? (Array.isArray(body.options) ? body.options : [body.options]) : JSON.parse(ask.options ?? "[]");
+  refuseMissingPick({ kind: ask.kind, title: body.title ?? ask.title, options, recommended: body.recommended !== undefined ? body.recommended : ask.recommended });
+}
+
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];

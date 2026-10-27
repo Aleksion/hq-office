@@ -48,8 +48,27 @@ describe("a decision with options needs a recommendation", () => {
     expect(await titles()).toEqual(["Picked", "Open question", "Do the thing", "FYI"]);
   });
 
+  test("hud update refuses an edit that would leave options with no pick, and allows the rest", async () => {
+    const ask = async (body: object) => ((await (await o.send("/api/asks", body)).json()) as any).id as number;
+    const ask_ = async (id: number) => (await o.state()).open.find((a: any) => a.id === id);
+    const bare = await ask({ title: "Bare" });
+    const r = await hud("update", String(bare), "--opt", "Yes", "--opt", "No");
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("This decision has options but no recommendation.");
+    expect(r.err).toContain('--opt "Yes" --opt "No" --rec "Yes"');
+    expect((await ask_(bare)).options ?? []).toEqual([]);
+    expect((await hud("update", String(bare), "--opt", "Yes", "--opt", "No", "--rec", "Yes")).code).toBe(0);
+    expect((await ask_(bare)).recommended).toBe("Yes");
+    // A blank --rec on a question with options takes its pick away: refused.
+    expect((await hud("update", String(bare), "--rec", " ")).code).toBe(1);
+    // An edit that leaves the options and the pick alone is not this rule's business.
+    expect((await hud("update", String(bare), "--title", "Bare, renamed")).code).toBe(0);
+    const info = await ask({ title: "FYI 2", kind: "info" });
+    expect((await hud("update", String(info), "--opt", "Noted")).code).toBe(0);
+  });
+
   test("the guide teaches the rule, with the same flag the refusal shows", () => {
-    const line = GUIDE.split("\n").find((l) => l.includes("refuses options without"))!;
+    const line = GUIDE.split("\n").find((l) => l.includes("refuse options without"))!;
     expect(line).toContain("--rec A");
     expect(line).toContain("--opt A --opt B");
   });
