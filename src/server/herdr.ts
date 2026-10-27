@@ -155,7 +155,8 @@ function tellBlocked(lane: Lane) {
 // Types text into an agent's session through herdr (on another machine with `machine`). The one way the server
 // prompts an agent: HQ (notifyHq) and a lane in a conference room (rooms.ts). It never throws: what it says is saved
 // first, and a herdr that cannot even start must not turn that into an error for the page. Resolves once herdr is done.
-export function promptAgent(name: string, text: string, machine?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+// With timeoutMs, a herdr still running then is killed, so a late prompt never lands after the caller recorded a failure.
+export function promptAgent(name: string, text: string, machine?: string | null, timeoutMs?: number): Promise<{ ok: true } | { ok: false; error: string }> {
   const on = machine && machine !== LOCAL ? ["--machine", machine] : [];
   let proc: ReturnType<typeof Bun.spawn>;
   try {
@@ -163,7 +164,13 @@ export function promptAgent(name: string, text: string, machine?: string | null)
   } catch (e) {
     return Promise.resolve({ ok: false, error: (e as Error).message });
   }
-  return proc.exited.then(async (code) => (code === 0 ? { ok: true as const } : { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` }));
+  let timedOut = false;
+  const timer = timeoutMs ? setTimeout(() => { timedOut = true; proc.kill(); }, timeoutMs) : null;
+  return proc.exited.then(async (code) => {
+    if (timer) clearTimeout(timer);
+    if (timedOut) return { ok: false as const, error: "herdr did not answer in time" };
+    return code === 0 ? { ok: true as const } : { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` };
+  });
 }
 
 // The agent the owner's answers and notes are typed into, with a one-line reminder to reply through the HUD (the
