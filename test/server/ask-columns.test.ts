@@ -1,5 +1,5 @@
-// Floors v4 adds columns to asks and ask_comments (defer_until, handed_by, author, to_lane, delivery, error). A database made before them keeps
-// every row, and the old rows read as they did: never deferred, handed in by nobody, written by HQ.
+// Floors v4 adds columns to asks and ask_comments (defer_until, handed_by, room, author, to_lane, delivery, error). A database made before them keeps
+// every row, and the old rows read as they did: never deferred, handed in by nobody, naming no room, written by HQ.
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -22,7 +22,7 @@ test("the migration keeps an old database's rows and adds the columns", async ()
     // The second round is a restart on the migrated file: the migration is idempotent.
     const o = await office({ data });
     const s = await o.state();
-    expect(s.open.map((a: any) => [a.title, a.defer_until, a.handed_by])).toEqual([["Old question", null, null]]);
+    expect(s.open.map((a: any) => [a.title, a.defer_until, a.handed_by, a.room])).toEqual([["Old question", null, null, null]]);
     await o.stop();
     const db = new Database(join(data, "hud.db"), { readonly: true });
     expect(db.query("SELECT text, author, to_lane, delivery, error FROM ask_comments").all()).toEqual([{ text: "old comment", author: null, to_lane: null, delivery: null, error: null }]);

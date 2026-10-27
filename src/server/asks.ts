@@ -41,6 +41,7 @@ export function refuseMissingPick(body: any) {
     example: [
       `hud ask --title ${q(String(body.title ?? ""))}`,
       body.lane ? `--lane ${q(String(body.lane))}` : "",
+      body.room ? `--room ${q(String(body.room))}` : "",
       body.kind ? `--kind ${q(String(body.kind))}` : "",
       ...options.map((o) => `--opt ${q(o)}`),
       `--rec ${q(pick)}`,
@@ -69,6 +70,7 @@ export function refuseMissingPickAfter(id: number, body: any) {
       `--rec ${q(pick)}`,
       body.link !== undefined ? `--link ${q(String(body.link))}` : "",
       body.lane !== undefined ? `--lane ${q(String(body.lane))}` : "",
+      body.room !== undefined ? `--room ${q(String(body.room))}` : "",
       `&& hud comment ${id} ${q(`I recommend ${pick} because ...`)}`,
     ].filter(Boolean).join(" "),
   }));
@@ -83,6 +85,17 @@ function handedBy(from: unknown) {
   return lane;
 }
 
+// hud ask --room SLUG: the room (project) the question is about. It must exist and be open; empty means none. A room is
+// never guessed from the lane: a wrong guess would put a count on the wrong project, and a missing count misleads no one.
+export function roomOf(v: unknown) {
+  const slug = String(v ?? "").trim().toLowerCase();
+  if (!slug) return null;
+  const room = db.query("SELECT archived_at FROM rooms WHERE slug = ?").get(slug) as { archived_at: number | null } | null;
+  if (!room) throw new Error(`no room ${slug}: --room names a room that exists (hud room create ${slug} --title T --owner LANE), or leave --room out`);
+  if (room.archived_at) throw new Error(`room ${slug} is archived: reopen it with hud room create ${slug} --title T --owner LANE, or leave --room out`);
+  return slug;
+}
+
 // A question's link opens from the page, so it must be a web address. Empty means none.
 export function checkLink(v: unknown) {
   const s = String(v ?? "").trim();
@@ -95,8 +108,9 @@ export function createAsk(body: any) {
   const link = checkLink(body.link);
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const from = handedBy(body.from);
+  const room = roomOf(body.room);
   const res = db
-    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by, room) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .run(
       body.lane ?? null,
       body.kind ?? "decision",
@@ -109,6 +123,7 @@ export function createAsk(body: any) {
       body.created_at ?? Date.now(),
       wanted.length ? JSON.stringify(wanted) : null,
       from,
+      room,
     );
   event("hq", `asked: ${body.title}`, body.lane);
   return Number(res.lastInsertRowid);

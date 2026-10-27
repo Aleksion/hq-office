@@ -2,13 +2,15 @@
 // HQ's side of the command centre.
 //   hud ask --lane L --title T [--body B] [--opt A --opt B --rec A] [--kind decision|action|info] [--link URL] [--due HH:MM]
 //           a decision with --opt needs --rec (your pick; the why goes in --body); no options (--kind action|info) needs none
+//           [--room SLUG]         the room (project) this question is about; the project counts it. Never guessed from the lane
 //           [--from LANE]         the lane that handed this question in (shown on the card as handed in by it)
 //           [--secret NAME ...]   ask the owner for named secrets, filled in on the question card
 //           [--item TEXT ...]     a checklist; an item naming a PR (#123) ticks itself when it merges, and the
 //                                 question closes itself ("all done") when every item is done
 // ask ledger: change an open question instead of withdrawing and reposting it
-//   hud update ID [--title T] [--body B] [--opt A --opt B] [--rec A] [--link URL] [--lane L]   only the fields given;
-//                                --lane L moves it to lane L, --lane hq (or "") takes it off every lane
+//   hud update ID [--title T] [--body B] [--opt A --opt B] [--rec A] [--link URL] [--lane L] [--room SLUG]   only the fields given;
+//                                --lane L moves it to lane L, --lane hq (or "") takes it off every lane;
+//                                --room SLUG names its room, --room "" clears it
 //   hud comment ID TEXT [--as LANE]   a timestamped line under the question; information, not in the inbox. A lane
 //                                answering the owner's comment writes it with --as LANE
 //   hud item ID N done|undo      tick or untick item N (from 1) by hand
@@ -143,6 +145,7 @@ switch (cmd) {
       options: flags.opt ?? [],
       recommended: one("rec"),
       from: one("from"),
+      room: one("room"),
       link: one("link"),
       due: dueAt(one("due")),
       secrets: flags.secret ?? [],
@@ -152,7 +155,7 @@ switch (cmd) {
     break;
   }
   case "update":
-    await call("POST", `/api/asks/${rest[0]}/update`, { title: one("title"), body: one("body"), options: flags.opt, recommended: one("rec"), link: one("link"), lane: one("lane") });
+    await call("POST", `/api/asks/${rest[0]}/update`, { title: one("title"), body: one("body"), options: flags.opt, recommended: one("rec"), link: one("link"), lane: one("lane"), room: one("room") });
     console.log(`ask #${rest[0]} updated`);
     break;
   case "comment":

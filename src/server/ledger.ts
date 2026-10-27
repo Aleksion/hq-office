@@ -11,7 +11,7 @@ import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { board } from "./work-board.ts";
 import { parsePr } from "./board.ts";
-import { checkLink, createAsk } from "./asks.ts";
+import { checkLink, createAsk, roomOf } from "./asks.ts";
 import { bump } from "./push.ts";
 import { notifyHq } from "./hq-link.ts";
 import { promptAgent } from "./herdr.ts";
@@ -61,6 +61,11 @@ export function updateAsk(id: number, body: any) {
     set.push("options = ?");
     values.push(JSON.stringify((JSON.parse(ask.options) as string[]).map((o) => o.trim()).filter(Boolean)));
   }
+  // --room SLUG names the room the question is about; --room "" clears it. Moving the question to another lane leaves it.
+  if (body.room !== undefined) {
+    set.push("room = ?");
+    values.push(roomOf(body.room));
+  }
   // --lane L moves the question to lane L; --lane hq (or "") takes it off every lane.
   let moved: string | null | undefined;
   if (body.lane !== undefined) {
@@ -69,7 +74,7 @@ export function updateAsk(id: number, body: any) {
     set.push("lane = ?");
     values.push(moved);
   }
-  if (!set.length) throw new Error("nothing to change: give --title, --body, --opt, --rec, --link or --lane");
+  if (!set.length) throw new Error("nothing to change: give --title, --body, --opt, --rec, --link, --lane or --room");
   db.query(`UPDATE asks SET ${set.join(", ")} WHERE id = ?`).run(...values, id);
   db.query("INSERT INTO ask_edits (ask_id, edited_at) VALUES (?, ?) ON CONFLICT (ask_id) DO UPDATE SET edited_at = excluded.edited_at").run(id, Date.now());
   event("hq", `edited ask #${id} (${set.map((s) => s.split(" ")[0]).join(", ")}): ${body.title ?? ask.title}`, ask.lane);
