@@ -1,6 +1,7 @@
 // The owner's rule: every ask carries the agent's pick. `hud ask` and the route behind it refuse a decision filed with options and no
 // --rec, say what is missing and show the line to send; a question with no options is not refused. The guide teaches the rule.
 import { afterAll, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { GUIDE } from "../../src/hq-guide.ts";
@@ -92,9 +93,12 @@ describe("a decision with options needs a recommendation", () => {
 
   // An agent copies the example into its shell. Every value must arrive as it was, and nothing in it may run: a body is
   // markdown with newlines, $ and backticks. A stub hud prints the arguments the shell hands it.
-  const SHELLS = ["bash", "zsh"].filter((sh) => Bun.which(sh));
+  // Each shell without its startup files, so this machine's profile cannot change what it does with the line.
+  const SHELL_ARGS: Record<string, string[]> = { bash: ["bash", "--noprofile", "--norc", "-c"], zsh: ["zsh", "-f", "-c"] };
+  const SHELLS = Object.keys(SHELL_ARGS).filter((sh) => Bun.which(sh));
+  for (const sh of Object.keys(SHELL_ARGS)) if (!SHELLS.includes(sh)) console.warn(`ask-rec: ${sh} is not installed here, so the example is not run in it`);
   const ranInShell = async (sh: string, line: string) => {
-    const proc = Bun.spawn([sh, "-c", `hud() { for a in "$@"; do printf '%s\\0' "$a"; done; printf '\\036'; }\n${line}`], { stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn([...SHELL_ARGS[sh], `hud() { for a in "$@"; do printf '%s\\0' "$a"; done; printf '\\036'; }\n${line}`], { stdout: "pipe", stderr: "pipe" });
     const out = await new Response(proc.stdout).text();
     await proc.exited;
     return out.split("\x1e").filter(Boolean).map((cmd) => cmd.split("\0").filter((a, i, all) => i < all.length - 1));
@@ -117,6 +121,7 @@ describe("a decision with options needs a recommendation", () => {
   });
 
   test("the hud update example carries the whole refused edit, and runs in a real shell exactly as filed", async () => {
+    expect(SHELLS.length).toBeGreaterThan(0);
     const { id } = (await (await o.send("/api/asks", { title: "Edit me" })).json()) as any;
     const r = await hud("update", String(id), "--title", "New $HOME title", "--body", tricky, "--link", "https://example.com/x", "--opt", "A", "--opt", "B");
     expect(r.code).toBe(1);
@@ -142,6 +147,17 @@ describe("a decision with options needs a recommendation", () => {
     expect(a.recommended).toBe("Left");
     expect((await hud("update", String(a.id), "--opt", " Left", "--opt", "Up ")).code).toBe(0);
     expect((await o.state()).open.find((x: any) => x.id === a.id).options).toEqual(["Left", "Up"]);
+  });
+
+  test("a new pick on a row stored before trimming keeps matching its option", async () => {
+    const { id } = (await (await o.send("/api/asks", { title: "Old row", options: ["Left", "Right"], recommended: "Left" })).json()) as any;
+    const old = new Database(join(o.data, "hud.db"));
+    old.query("UPDATE asks SET options = ?, recommended = ? WHERE id = ?").run(JSON.stringify(["Left ", "Right "]), "Left ", id);
+    old.close();
+    expect((await hud("update", String(id), "--rec", "Right ")).code).toBe(0);
+    const a = (await o.state()).open.find((x: any) => x.id === id);
+    expect(a.recommended).toBe("Right");
+    expect(a.options).toContain(a.recommended);
   });
 
   test("the guide teaches the rule, with the same flag the refusal shows", () => {

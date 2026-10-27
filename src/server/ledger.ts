@@ -55,6 +55,11 @@ export function updateAsk(id: number, body: any) {
     set.push(`${f} = ?`);
     values.push(v);
   }
+  // A row from before options were stored trimmed: a new pick is trimmed, so trim its options with it or the pick matches none.
+  if (body.recommended !== undefined && body.options === undefined && ask.options) {
+    set.push("options = ?");
+    values.push(JSON.stringify((JSON.parse(ask.options) as string[]).map((o) => o.trim()).filter(Boolean)));
+  }
   // --lane L moves the question to lane L; --lane hq (or "") takes it off every lane.
   let moved: string | null | undefined;
   if (body.lane !== undefined) {
