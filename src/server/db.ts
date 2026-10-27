@@ -6,6 +6,8 @@ import { DATA } from "./config.ts";
 
 export const db = new Database(`${DATA}/hud.db`, { create: true });
 db.exec("PRAGMA journal_mode = WAL;");
+// Another connection may hold the write lock for a moment (a second process, a test's setup): wait for it rather than fail.
+db.exec("PRAGMA busy_timeout = 5000;");
 const SCHEMA = join(import.meta.dir, "schema");
 for (const f of readdirSync(SCHEMA).filter((f) => f.endsWith(".sql")).sort()) db.exec(readFileSync(join(SCHEMA, f), "utf8"));
 // Migrations for databases made before a column existed; they run after the tables exist.
