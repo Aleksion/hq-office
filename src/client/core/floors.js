@@ -88,18 +88,20 @@ export function inScope(S, item, view) {
 }
 
 const WAIT_ON_HQ = ["hq_turn", "stale", "gone"];
+// The lanes in scope, and the WORKING n/m they make: moving, over those not done or parked. The strip and PARTY both read this.
+export const lanesIn = (S, view) => lanesOf(S).filter((l) => inScope(S, { lane: l.name }, view));
+export const tally = (lanes) => ({ working: lanes.filter((l) => l.status === "moving").length, live: lanes.filter((l) => !["done", "parked"].includes(l.status)).length });
 // Every number the top bar and the tabs show. Unscoped, these are today's numbers.
 export function counts(S, view) {
   const scoped = !!(view && (view.floor || view.agent));
   const open = S.open.filter((a) => inScope(S, a, view));
-  const lanes = lanesOf(S).filter((l) => inScope(S, { lane: l.name }, view));
+  const lanes = lanesIn(S, view);
   const by = S.updatesUnreadByLane;
   const unread = !scoped || !by ? S.updatesUnread ?? 0 : Object.entries(by).reduce((n, [lane, c]) => n + (inScope(S, { lane: lane || null }, view) ? c : 0), 0);
   return {
     waiting: open.length,
     oldest: open.length ? Math.min(...open.map((a) => a.created_at)) : null,
-    working: lanes.filter((l) => l.status === "moving").length,
-    live: lanes.filter((l) => !["done", "parked"].includes(l.status)).length,
+    ...tally(lanes),
     onHq: lanes.filter((l) => WAIT_ON_HQ.includes(l.status)).length,
     unread,
     otherWaiting: S.open.length - open.length,
@@ -202,7 +204,7 @@ export function frames(S, floor) {
   });
 }
 
-// ---- RUNDOWN: the panel over the room ----
+// ---- RUNDOWN and PARTY: the panels over the room ----
 
 // The floors a scope shows: the floor zoomed into, the chosen agent's floor, or all of them, HQ's first.
 function viewFloors(S, view) {
@@ -229,6 +231,16 @@ export function rundown(S, view, briefs = {}) {
     }),
   }));
 }
+// PARTY: the lanes in scope by floor, HQ's first (a floor with none in scope is left out), the general first on its floor,
+// then by name; and the WORKING n/m the strip shows for the same scope.
+export function party(S, view) {
+  const lanes = lanesIn(S, view);
+  const groups = floorList(S)
+    .map((f) => ({ ...f, lanes: lanes.filter((l) => floorOf(l) === f.id).sort((a, b) => !!b.heads - !!a.heads || a.name.localeCompare(b.name)).map((l) => ({ name: l.name, status: l.status, head: !!l.heads, title: l.title ?? "" })) }))
+    .filter((g) => g.lanes.length);
+  return { groups, ...tally(lanes) };
+}
+
 // A scope that still holds: a lane that is gone drops the agent, a floor that is gone zooms out, an agent's floor is
 // where the agent is, and one floor has no floor scope. SHOW ALL means nothing with nothing scoped.
 export function normalizeScope(S, scope) {
