@@ -40,6 +40,41 @@ export function terminalName(S, floor) {
   return name.length > 14 ? name.slice(0, 13) + "…" : name;
 }
 export const floorTagShown = (S) => floorList(S).length >= 2;
+// The tag on a question or an update: its floor's label in the floor's colour. None with one floor, where every row
+// would carry the same one. An item with no lane (or a lane that is gone), and your notes, are on HQ's floor.
+export function floorTag(S, item) {
+  if (!floorTagShown(S)) return null;
+  const f = floorList(S).find((x) => x.id === floorOfLane(S, item?.lane));
+  return f ? { id: f.id, label: f.label, color: f.color } : null;
+}
+
+// What the stage shows. One floor is today's room and adds nothing ("single"). With two or more it is the building,
+// every floor at once ("out"), or the floor zoomed into ("in"): the scope's floor decides, so a page loaded with a
+// floor in its tab opens zoomed in and any other opens zoomed out.
+export function stageMode(S, scope) {
+  if (floorList(S).length < 2) return "single";
+  return scope.floor ? "in" : "out";
+}
+// The floors whose rooms draw: all of them in the building, the one zoomed into, HQ's alone with one floor. A floor
+// out of sight rests.
+export function floorsInView(S, scope) {
+  const mode = stageMode(S, scope);
+  if (mode === "single") return [HQ];
+  return mode === "out" ? floorList(S).map((f) => f.id) : [scope.floor];
+}
+// The stage bar's buttons: ◀ ALL FLOORS only while zoomed in, BUILDING marked while zoomed out. None with one floor.
+export function stageBar(S, scope) {
+  const mode = stageMode(S, scope);
+  return mode === "single" ? null : { back: mode === "in", building: mode === "out" };
+}
+// A floor's label in the building: its tag, the questions waiting on you there, and who needs help (worst first).
+export function floorLabel(S, id) {
+  const f = floorList(S).find((x) => x.id === id) ?? floorList(S)[0];
+  return { ...f, waiting: S.open.filter((a) => floorOfLane(S, a.lane) === f.id).length, help: needHelp(S, { floor: f.id, agent: null }) };
+}
+// The colour of a help state's dot: magenta blocked, red waiting on you, brown stalled, amber waiting on HQ.
+export const HELP_COLORS = { blocked: "#b8327a", waiting: "#d63c3c", stalled: "#8b6a45", hq: "#e0901e" };
+
 // Tell HQ goes to HQ in every scope, until other generals exist on the server.
 export const tellRecipient = () => "HQ";
 
