@@ -12,7 +12,7 @@ export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const res = db
-    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .run(
       body.lane ?? null,
       body.kind ?? "decision",
@@ -24,6 +24,7 @@ export function createAsk(body: any) {
       body.due ?? null,
       body.created_at ?? Date.now(),
       wanted.length ? JSON.stringify(wanted) : null,
+      String(body.from ?? "").trim() || null,
     );
   event("hq", `asked: ${body.title}`, body.lane);
   return Number(res.lastInsertRowid);
