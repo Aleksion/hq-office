@@ -7,6 +7,7 @@
 //   "panel" (id, detail) a panel over the room opened (core/panel.js) or all closed (null); a panel that is open and is not
 //                    `id` closes itself, so they take turns
 //   "settings" (settings) when the owner's settings change, here, on another page or from the server
+//   "room:leave"     a feature that shows the floor (the project panel) asks rooms/ to step out of a conference room
 const handlers = new Map();
 
 export function on(name, fn) {
