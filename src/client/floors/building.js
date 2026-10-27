@@ -1,6 +1,7 @@
 // The building's DOM and sizes: the stage bar, a tile per floor (its label and the scene its canvas lives in), and the
-// box each floor's canvas fits. Made the first time there are two floors and taken down when there is one again, so a
-// page with one floor is exactly the page without this feature. What the scope is and which floors there are come from
+// box each floor's canvas fits. The bar is always there, over the room: with one floor it holds only what other panels put in
+// its slot (RUNDOWN). The tiles are made the first time there are two floors and taken down when there is one again, so a
+// page with one floor is today's room under that bar. What the scope is and which floors there are come from
 // core/floors.js; this file only draws and measures.
 import { esc, setHTML } from "../core/format.js";
 import { HELP_COLORS, canvasId, floorLabel } from "../core/floors.js";
@@ -11,7 +12,8 @@ const LABEL = 30; // a tile's label row and the gap under it
 const DESKTOP = "(min-width: 1151px)";
 const ONE_COLUMN = "(max-width: 600px)";
 
-let parts = null; // { bar, grid, room, tiles: Map(id -> tile) } while built
+let parts = null; // { grid, room, tiles: Map(id -> tile) } while built
+let bar = null; // the stage bar, made once
 const scenes = new Map(); // id -> the scene holding a floor's canvas; kept when the building comes down, because a copy's module keeps its canvas
 
 const make = (tag, cls, html = "") => Object.assign(document.createElement(tag), { className: cls, innerHTML: html });
@@ -50,23 +52,28 @@ export function copyCanvas(id) {
   return c;
 }
 
-// Put the building in: the bar over the room, a grid in the room, HQ's canvas into its tile.
+// The stage bar over the room: ◀ ALL FLOORS and BUILDING (shown only with two floors) and a slot for panels' buttons.
+export function ensureBar() {
+  if (bar) return bar;
+  bar = make("div", "stagebar", `<button class="btn zout" type="button" data-zoomout hidden>◀ ALL FLOORS</button><button class="btn place" type="button" data-building hidden>BUILDING</button><span class="stageslot"></span>`);
+  document.querySelector(".stage").prepend(bar);
+  return bar;
+}
+
+// Put the building in: a grid in the room, HQ's canvas into its tile.
 export function build() {
-  const stage = document.querySelector(".stage"), roomEl = stage.querySelector(".room");
-  const bar = make("div", "stagebar", `<button class="btn zout" type="button" data-zoomout>◀ ALL FLOORS</button><button class="btn place" type="button" data-building>BUILDING</button><span class="stageslot"></span>`);
+  const roomEl = document.querySelector(".stage .room");
   const grid = make("div", "building");
-  stage.prepend(bar);
   roomEl.prepend(grid);
-  parts = { bar, grid, room: roomEl, stage, tiles: new Map() };
+  parts = { grid, room: roomEl, tiles: new Map() };
 }
 
 // Take it down: HQ's scene (its canvas and the layer) goes back where it was, before the legend.
 export function dismantle() {
   if (!parts) return;
-  const { bar, grid, room: roomEl } = parts;
+  const { grid, room: roomEl } = parts;
   roomEl.insertBefore(scene("hq"), roomEl.querySelector(".legend"));
   roomEl.removeAttribute("data-stage");
-  bar.remove();
   grid.remove();
   parts = null;
 }
@@ -100,15 +107,19 @@ export function paintLabels(S, ids) {
   }
 }
 
-// Zoomed out (`zoomed` null) or into one floor; the bar's buttons follow core/floors.js's stageBar.
-export function paintMode(zoomed, bar) {
-  const { room: roomEl, tiles, bar: barEl } = parts;
+// Zoomed out (`zoomed` null) or into one floor.
+export function paintMode(zoomed) {
+  const { room: roomEl, tiles } = parts;
   roomEl.dataset.stage = zoomed ? "in" : "out";
   for (const [id, t] of tiles) t.classList.toggle("on", id === zoomed);
-  barEl.querySelector("[data-zoomout]").hidden = !bar.back;
-  const b = barEl.querySelector("[data-building]");
-  b.classList.toggle("on", bar.building);
-  b.setAttribute("aria-current", String(bar.building));
+}
+// The bar's buttons follow core/floors.js's stageBar: none with one floor (`state` null).
+export function paintBar(state) {
+  const b = ensureBar().querySelector("[data-building]");
+  bar.querySelector("[data-zoomout]").hidden = !state?.back;
+  b.hidden = !state;
+  b.classList.toggle("on", !!state?.building);
+  b.setAttribute("aria-current", String(!!state?.building));
 }
 
 // The box each floor's canvas fits, and the building's width. Zoomed in on a laptop the floor is as big as the room
@@ -137,5 +148,4 @@ export const canvasOf = (id) => scenes.get(id)?.querySelector(":scope > canvas")
 // What moves when a floor grows from its tile: the canvas and the layer over it.
 export const moving = (id) => [canvasOf(id), scenes.get(id)?.querySelector(":scope > .layer")].filter(Boolean);
 export const canvasRect = (id) => canvasOf(id)?.getBoundingClientRect() ?? null;
-export const barEl = () => parts?.bar ?? null;
 export const gridEl = () => parts?.grid ?? null;

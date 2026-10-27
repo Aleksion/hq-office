@@ -1,7 +1,9 @@
 // RUNDOWN's data (src/client/core/floors.js): each floor in scope with who needs help and its open projects, their state,
 // owner, open calls and brief. A scope lists its floor alone. No browser.
 import { describe, expect, test } from "bun:test";
-import { briefExcerpt, rundown } from "../../src/client/core/floors.js";
+import { on } from "../../src/client/core/bus.js";
+import { closePanel, openPanel, showPanel } from "../../src/client/core/panel.js";
+import { briefExcerpt, escapeAction, rundown } from "../../src/client/core/floors.js";
 
 const lane = (name: string, status: string, floor: string, extra: object = {}) => ({ name, floor, heads: false, status, title: name, ...extra });
 const room = (slug: string, owner: string, createdAt: number, extra: object = {}) => ({ slug, title: slug.toUpperCase(), owner, members: [], issues: [], prs: [], createdAt, archivedAt: null, ...extra });
@@ -84,5 +86,45 @@ describe("a brief as a line", () => {
   test("nothing, or only space, is no brief", () => {
     expect(briefExcerpt(null)).toBeNull();
     expect(briefExcerpt(" \n ")).toBeNull();
+  });
+});
+
+describe("RUNDOWN takes its turn among the panels over the room", () => {
+  const seen = () => {
+    const ids: any[] = [];
+    const off = on("panel", (id: any) => ids.push(id));
+    return { ids, off };
+  };
+  test("opening it announces it, so an open panel closes itself; opening another announces that one", () => {
+    showPanel(null);
+    const { ids, off } = seen();
+    showPanel("project", { slug: "release" });
+    showPanel("rundown");
+    expect(openPanel()).toBe("rundown");
+    showPanel("accounts");
+    expect(openPanel()).toBe("accounts");
+    expect(ids).toEqual(["project", "rundown", "accounts"]);
+    showPanel(null);
+    off();
+  });
+
+  test("it closes itself only while it is the one open: a conference room opening must not close the project panel", () => {
+    showPanel(null);
+    showPanel("project", { slug: "release" });
+    closePanel("rundown");
+    expect(openPanel()).toBe("project");
+    showPanel("rundown");
+    closePanel("rundown");
+    expect(openPanel()).toBeNull();
+  });
+
+  test("Escape closes it before it touches the scope, and the next Escape steps the scope out", () => {
+    const quiet = { stage: false, settings: false, dialog: false, typing: false };
+    const scoped = { floor: "fin", agent: null, all: false };
+    showPanel(null);
+    showPanel("rundown");
+    expect(escapeAction(scoped, { ...quiet, panel: openPanel() !== null })).toBe("panel");
+    closePanel();
+    expect(escapeAction(scoped, { ...quiet, panel: openPanel() !== null })).toBe("out");
   });
 });

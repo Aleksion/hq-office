@@ -229,7 +229,7 @@ test.skipIf(!chromeFound)("one floor: the room sits in a scene of its own, the l
     await Bun.sleep(600);
     expect(await ev(`document.getElementById("room").parentElement.matches(".room > .scene")`)).toBe(true);
     expect(await ev(`document.querySelectorAll(".scene, .layer").length`)).toBe(2);
-    expect(await ev(`!!document.querySelector(".building, .stagebar, .tile")`)).toBe(false);
+    expect(await ev(`!!document.querySelector(".building, .tile")`)).toBe(false);
     const l = await layer("hq");
     // with one floor the room is "zoomed in": the frames are buttons and only blocked and stalled workers are marked
     expect(l).toEqual({ frames: FACTS.rooms.hq, marks: [FACTS.blocked], hits: FACTS.rooms.hq.length + 1 });

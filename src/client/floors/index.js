@@ -11,7 +11,7 @@ import { floor as hq } from "../room/floor.js";
 import { chooseAgent, outOne, scope, setFloor } from "../core/scope.js";
 import { closePanel, openPanel } from "../core/panel.js";
 import { HQ, escapeAction, floorList, floorOfLane, floorsInView, stageBar, stageMode } from "../core/floors.js";
-import { arrange, barEl, boxes, build, built, canvasRect, copyCanvas, dismantle, gridEl, moving, paintLabels, paintMode, room } from "./building.js";
+import { arrange, boxes, build, built, canvasRect, copyCanvas, dismantle, ensureBar, gridEl, moving, paintBar, paintLabels, paintMode, room } from "./building.js";
 import { floors, register } from "./registry.js";
 
 register(hq.id, hq);
@@ -47,8 +47,10 @@ function load(id) {
   }).catch((e) => { failed.add(id); console.error(`the ${id} floor did not load`, e); });
 }
 
+// The bar is always on the stage (its slot holds RUNDOWN); its buttons show with two floors.
+ensureBar().addEventListener("click", (e) => { if (e.target.closest("[data-zoomout], [data-building]")) setFloor(null); });
+
 function wire() {
-  barEl().addEventListener("click", (e) => { if (e.target.closest("[data-zoomout], [data-building]")) setFloor(null); });
   gridEl().addEventListener("click", (e) => {
     const tile = e.target.closest(".tile");
     if (tile && stageMode(S, scope()) === "out") setFloor(tile.dataset.floor);
@@ -76,12 +78,13 @@ function apply() {
     arrange(ids, hq.canvas);
     paintLabels(S, ids);
     const at = sc.floor, from = zoomed !== undefined && at !== zoomed ? canvasRect(at ?? zoomed) : null;
-    paintMode(at, stageBar(S, sc));
+    paintMode(at);
     const box = boxes(ids, at);
     for (const [id, f] of floors) if (box[id]) f.fitTo(box[id]);
     if (from) flip(at ?? zoomed, from);
     zoomed = at;
   }
+  paintBar(stageBar(S, sc));
   // A floor out of sight draws nothing; a floor told once is not told again.
   const seen = floorsInView(S, sc);
   for (const [id, f] of floors) {

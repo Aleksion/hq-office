@@ -244,14 +244,18 @@ for (const [width, height] of SIZES) {
   }, 30_000);
 }
 
-test.skipIf(!chromeFound)("one floor: today's page, with no building, no way back, no floor tags and no floor border", async () => {
+test.skipIf(!chromeFound)("one floor: today's page under a stage bar that holds RUNDOWN alone: no building, no way back, no floor tags and no floor border", async () => {
   for (const [width, height] of SIZES) {
     await open(single.base, width, height);
     await until(`document.querySelectorAll("#hud .ask").length === 3 && !!document.getElementById("room")`);
     await Bun.sleep(500);
-    for (const sel of [".stagebar", ".building", ".tile", ".tlabel", ".floortag", "[data-zoomout]", "[data-building]", "canvas#room-fin", ".scopeborder", ".scopechip"]) {
+    for (const sel of [".building", ".tile", ".tlabel", ".floortag", "canvas#room-fin", ".scopeborder", ".scopechip"]) {
       expect({ width, sel, found: await ev(`!!document.querySelector(${JSON.stringify(sel)})`) }).toEqual({ width, sel, found: false });
     }
+    // the bar is there for RUNDOWN; ◀ ALL FLOORS and BUILDING are not shown
+    expect(await shown(".stagebar #rundownBtn")).toBe(true);
+    expect(await shown(".stagebar [data-zoomout]")).toBe(false);
+    expect(await shown(".stagebar [data-building]")).toBe(false);
     expect(await ev(`document.querySelector(".room").hasAttribute("data-stage")`)).toBe(false);
     // the layer (U10) wraps the canvas in a scene of its own, in the room where the canvas always sat
     expect(await ev(`document.getElementById("room").parentElement === document.querySelector(".room > .scene")`)).toBe(true);
@@ -265,7 +269,7 @@ test.skipIf(!chromeFound)("one floor: today's page, with no building, no way bac
     // a worker chosen scopes to the lane alone: its chip names no floor, and there is still no building
     await choose("hq-pm");
     await until(`document.querySelector(".scopechip")?.textContent === "hq-pm ✕"`);
-    expect(await ev(`!!document.querySelector(".building, .stagebar")`)).toBe(false);
+    expect(await ev(`!!document.querySelector(".building")`)).toBe(false);
     await press("Escape");
     await until(`document.querySelector(".scopechip").hidden`);
   }

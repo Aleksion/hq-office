@@ -1,5 +1,5 @@
-/* The building: the stage bar, a tile per floor, and the zoomed floor. Nothing here applies with one floor (building.js
-   makes none of these elements until there are two). */
+/* The building: the stage bar, a tile per floor, and the zoomed floor. With one floor only the bar is on the page, and it
+   holds RUNDOWN alone (building.js makes the tiles when there are two floors). */
 .stagebar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; min-width: 0; }
 .stagebar .btn { padding: 7px 9px; font-size: 8px; border-width: 2px; border-radius: 6px; min-height: 32px; white-space: nowrap; }
 .stagebar .zout { background: var(--ink); color: #fff; border-color: var(--ink); }
