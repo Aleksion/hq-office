@@ -373,8 +373,10 @@ function renderSend(r) {
       <div class="rquote"></div>
       ${composer(key(r.slug), `<textarea rows="1" placeholder="Write to the lane. ⌘↩ sends.">${esc(d.text)}</textarea>`, `<button class="send go" type="button" data-room-send>SEND</button>`)}`;
   } else {
+    // Not while it is open (it has focus): rewriting its options would close it or move the highlight under the
+    // pointer. It catches up when it closes (the blur listener below).
     const sel = el.querySelector("[data-room-to]");
-    if (sel.innerHTML !== options) { sel.innerHTML = options; sel.value = d.to; }
+    if (sel.innerHTML !== options && document.activeElement !== sel) { sel.innerHTML = options; sel.value = d.to; }
   }
   const away = laneInfo(d.to).away;
   setHTML(el.querySelector(".tostate"), away ? `<span class="aw">AWAY</span> kept until the lane is back` : `typed into ${esc(d.to)}`);
@@ -559,7 +561,7 @@ view.addEventListener("click", (e) => {
     const m = detail?.messages.find((x) => String(x.id) === reply.dataset.roomReply), d = draft(openSlug);
     if (m) { d.reply = m.id; if (lanesOf(roomOf(openSlug)).includes(m.who)) d.to = m.who; }
     renderSend(roomOf(openSlug));
-    part("rsend").querySelector("textarea")?.focus();
+    part("rsend").querySelector("textarea")?.focus({ preventScroll: true });
     return;
   }
   if (t.closest("[data-room-unreply]")) { draft(openSlug).reply = null; renderSend(roomOf(openSlug)); return; }
@@ -605,6 +607,8 @@ view.addEventListener("change", (e) => {
   draft(openSlug).to = e.target.value;
   renderSend(roomOf(openSlug));
 });
+// The TO dropdown catches up with lanes that came, went or changed while it was open (renderSend leaves it alone then).
+document.addEventListener("focusout", (e) => { if (e.target.matches?.("[data-room-to]") && openSlug) setTimeout(() => renderSend(roomOf(openSlug)), 0); });
 const toEnd = () => { if (atEnd && openSlug) toBottom(); };
 thread.addEventListener("scroll", () => {
   if (thread.scrollTop !== setTop) atEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;

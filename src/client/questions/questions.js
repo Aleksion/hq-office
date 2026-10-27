@@ -1,6 +1,6 @@
 // The question panel: the open asks, their timers, and the pill for asks out of view.
 import { emit, on } from "../core/bus.js";
-import { $, keepPlace } from "../core/dom.js";
+import { $, keepPlace, keepScroll, pageScrolls } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
 import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
@@ -34,7 +34,9 @@ on("attach", (key) => {
 
 export function renderHud() {
   const hud = $("hud");
-  const focused = document.activeElement?.closest?.("[data-ask]")?.dataset.ask;
+  // Focus goes back only to a field being typed in (not a clicked button), and never scrolls anything to it.
+  const typing = document.activeElement?.matches?.("textarea, input");
+  const focused = typing ? document.activeElement.closest("[data-ask]")?.dataset.ask : undefined;
   const caret = document.activeElement?.selectionStart;
   const focusedSecret = document.activeElement?.dataset?.secret;
   const focusedMin = document.activeElement?.dataset?.secretMin !== undefined;
@@ -66,7 +68,8 @@ export function renderHud() {
   // Values being pasted are kept in memory only and put back as the input's value, never as markup.
   for (const id of secretDrafts.keys()) if (!S.open.some((a) => a.id === id)) secretDrafts.delete(id);
   for (const key of imageKeys()) if (/^\d+$/.test(key) && !S.open.some((a) => String(a.id) === key)) clearImages(key);
-  const place = keepPlace(hud, "data-ask");
+  // The page scrolls on a phone, the list itself on a desktop: whichever moves, what you look at stays put.
+  const place = pageScrolls() ? keepPlace(hud, "data-ask") : keepScroll(hud, "data-ask");
   if (!setHTML(hud, html)) return;
   place();
   for (const inp of hud.querySelectorAll("[data-secret]")) {
@@ -76,7 +79,7 @@ export function renderHud() {
   if (focused) {
     const q = `[data-ask="${focused}"]`;
     const ta = focusedSecret != null ? hud.querySelector(`${q} [data-secret="${CSS.escape(focusedSecret)}"]`) : focusedMin ? hud.querySelector(`${q} [data-secret-min]`) : hud.querySelector(`${q} textarea`);
-    if (ta) { ta.focus(); if (caret != null) try { ta.setSelectionRange(caret, caret); } catch {} }
+    if (ta) { ta.focus({ preventScroll: true }); if (caret != null) try { ta.setSelectionRange(caret, caret); } catch {} }
   }
   tick();
   renderBelow();

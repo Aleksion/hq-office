@@ -3,6 +3,18 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.11.2] - 2026-10-27
+
+### Fixed
+
+- **Clicking an option in a question no longer slides the list away from it.** Picking an option built the whole
+  question list again and then put the focus back on that question's text box, and the browser scrolled the list
+  to the box. Now an option changes its card in place. When the list is built again (a new question arriving), it
+  keeps its place. Focus only goes back to a box you were typing in, without scrolling anything.
+- The same in MESSAGES: the reply box gets its focus back without moving the list.
+- In a conference room, the TO dropdown is no longer rewritten while it is open. It used to close or jump when a
+  lane came or went; it now catches up when it closes.
+
 ## [0.11.1] - 2026-10-27
 
 ### Fixed
