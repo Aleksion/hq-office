@@ -54,6 +54,7 @@ on("panel", (id, detail) => {
   slug = id === "project" ? detail?.slug ?? null : null;
   if (slug) emit("room:leave"); // a conference room covers the floor: step out of it (rooms/ does)
   if (slug !== was) shelf.reset();
+  else if (slug) shelf.retry();
   render();
 });
 on("state", render);

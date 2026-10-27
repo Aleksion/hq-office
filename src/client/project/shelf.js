@@ -20,5 +20,7 @@ export function shelfLoader(get, changed) {
       return shelf.slug === r.slug ? shelf : null;
     },
     reset() { shelf = null; },
+    // The project is shown again: a shelf that failed is asked for once more (the server may be back at the same revision).
+    retry() { if (shelf?.failed) shelf = null; },
   };
 }

@@ -128,3 +128,24 @@ describe("the project panel's shelf", () => {
     expect(calls).toBe(3);
   });
 });
+
+describe("the project panel's shelf, shown again", () => {
+  const { shelfLoader } = require("../../src/client/project/shelf.js");
+  const settle = () => new Promise((r) => setTimeout(r, 5));
+  test("a failed shelf is asked for again when its project is shown again, at the same revision; a loaded one is not", async () => {
+    let calls = 0, up = false;
+    const s = shelfLoader(async () => { calls++; if (!up) throw new Error("down"); return [{ title: "a" }]; }, () => {});
+    const r = { slug: "release", rev: 1 };
+    s.of(r);
+    await settle();
+    expect(s.of(r).failed).toBe(true);
+    up = true;
+    s.retry();
+    s.of(r);
+    await settle();
+    expect(s.of(r)).toMatchObject({ failed: false, list: [{ title: "a" }] });
+    s.retry();
+    s.of(r);
+    expect(calls).toBe(2);
+  });
+});
