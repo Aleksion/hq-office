@@ -64,6 +64,7 @@ function wake() {
   scheduleFrame();
 }
 on("state", wake);
+on("select", wake);
 export function showRoom(v) { shown = !!v; wake(); }
 on("stage", (shown) => { covered = shown !== "office"; wake(); });
 on("settings", wake); // PERFORMANCE switches at once

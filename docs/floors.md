@@ -11,6 +11,14 @@ count reads `view()` and builds its numbers with the pure functions in `src/clie
 panel. The scope is kept in `sessionStorage` (`hq-scope`) and checked against the lanes when read back, so a reload
 keeps it and a new tab starts unscoped.
 
+## Choosing an agent
+
+A click on a worker (`"worker"` on the room's bus), a question's lane tag, ANSWER on the card and the BLOCKED box all
+end in `chooseAgent(name, { jump: true })`. The card shows `scope().agent`; `floors/index.js` rings that worker on its
+floor; the question panel switches to QUESTIONS and flashes the lane's first question. The chip, the border and the
+"+N FROM OTHER AGENTS · SHOW ALL" line say that the lists are narrowed. Escape and the chip's ✕ go out one level
+(`escapeAction`); a room on the stage, SETTINGS, a dialog or a text field keep the key.
+
 ## Decisions the code carries
 
 - **Everything follows the scope** (the owner, on the phone tabs: "When I click a floor everything is scoped to that

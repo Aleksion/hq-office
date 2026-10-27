@@ -7,7 +7,8 @@ import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
 import { clipText, linkify, renderBody } from "../core/text.js";
 import { renderSecretTimes } from "../secrets/secrets.js";
 import { clearImages, composer, hasImages, imageKeys } from "../images/images.js";
-import { counts, inScope, nothingLine, othersLine } from "../core/floors.js";
+import { counts, inScope, jumpAsk, nothingLine, othersLine } from "../core/floors.js";
+import { setQTab } from "../messages/messages.js";
 import { scope, toggleAll, view } from "../core/scope.js";
 
 // A question below the fold gets a red pill at the bottom of the list. Click it to go to the next one.
@@ -133,13 +134,15 @@ export function scheduleTick() {
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && S) tick(); scheduleTick(); });
 
-// A change of scope draws the list again; asked to jump, it shows the chosen lane's first open question.
+// A change of scope draws the list again; asked to jump, it shows the chosen lane's first open question, in the
+// QUESTIONS tab, however it was reached.
 $("hud").addEventListener("click", (e) => { if (e.target.closest("[data-showall]")) toggleAll(); });
 on("scope", ({ jump }) => {
   if (!S) return;
+  const ask = jump && jumpAsk(S, scope().agent);
+  if (ask) setQTab("questions");
   renderHud();
   tick();
-  const lane = scope().agent;
-  const card = jump && lane && document.querySelector(`.ask[data-lane="${CSS.escape(lane)}"]`);
+  const card = ask && document.querySelector(`.ask[data-ask="${ask.id}"]`);
   if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash"); }
 });

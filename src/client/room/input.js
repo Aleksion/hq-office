@@ -1,7 +1,8 @@
-// Pointer input on the room (hover, click to select) and fitting the canvas to its box.
+// Pointer input on the room (hover, click a worker) and fitting the canvas to its box. A click says which worker on the
+// bus ("worker", on this floor's own bus); choosing it is the page's business (floors/). The ring is set from outside.
+import { emit } from "../core/bus.js";
 import { H, TS, W, cv } from "./canvas.js";
 import { workers } from "./workers.js";
-import { renderCard } from "../card/card.js";
 
 export let selected = null;
 export let hovered = null;
@@ -20,17 +21,14 @@ cv.addEventListener("mousemove", (e) => { const w = workerAt(e); hovered = w?.la
 cv.addEventListener("mouseleave", () => { hovered = null; });
 cv.addEventListener("click", (e) => {
   const w = workerAt(e);
-  if (!w) return;
-  select(w.lane.name, true);
+  if (w) emit("worker", w.lane.name);
 });
 
-export function select(name, jump) {
+// The selection ring: on this worker, or on none. Nothing else follows from it.
+export function select(name) {
+  if (selected === name) return;
   selected = name;
-  renderCard();
-  if (jump) {
-    const card = document.querySelector(`.ask[data-lane="${CSS.escape(name)}"]`);
-    if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash"); }
-  }
+  emit("select");
 }
 
 // Desktop: the canvas is as big as the room box allows, keeping its 3:2 shape, so the page never scrolls. A floor

@@ -1,7 +1,8 @@
-// The worker card: the selected lane's status, links and open asks.
+// The worker card: the chosen agent's status, links and open asks (core/scope.js), whichever floor it is on.
 import { $ } from "../core/dom.js";
 import { CONFIG, S } from "../core/state.js";
-import { selected } from "../room/input.js";
+import { on } from "../core/bus.js";
+import { scope } from "../core/scope.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { dur, esc, setHTML } from "../core/format.js";
 import { linkify } from "../core/text.js";
@@ -9,7 +10,7 @@ import { hasTree } from "../room/looks.js";
 
 export function renderCard() {
   const card = $("card");
-  const lane = S?.lanes.find((l) => l.name === selected);
+  const lane = S?.lanes.find((l) => l.name === scope().agent);
   if (!lane) {
     setHTML(card, `<h3>CLICK A WORKER</h3><div class="sub">Each worker is one lane. Click one to see what it does, where it is, and what it waits on.</div>`);
     return;
@@ -32,3 +33,5 @@ export function renderCard() {
     ${lane.note ? `<div class="note">${linkify(lane.note)}</div>` : ""}
     ${asks.length ? `<div class="row">${asks.map((a) => `<button class="tag lane" data-select="${esc(lane.name)}">ANSWER: ${esc(a.title.slice(0, 40))}${a.title.length > 40 ? "…" : ""}</button>`).join("")}</div>` : ""}`);
 }
+
+on("scope", () => S && renderCard());

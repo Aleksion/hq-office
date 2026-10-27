@@ -63,6 +63,8 @@ test.skipIf(!chromeFound)("a room with no tree wears the everyday look, and the 
   await page.evaluate(`(() => { const b = document.createElement("button"); b.dataset.select = "web-pm"; document.body.append(b); b.click(); b.remove(); })()`);
   await until(`document.querySelector("#card h3")?.textContent === "web-pm"`);
   expect(await page.evaluate(`!!document.querySelector("#card .path")`)).toBe(false);
+  // Choosing a lane scopes the page to it; with one floor the chip names only the lane.
+  expect(await page.evaluate(`document.querySelector(".scopechip").textContent`)).toBe("web-pm ✕");
 });
 
 test.skipIf(!chromeFound)("each theme paints a distinct look for each depth, from the front and from behind", async () => {
@@ -100,10 +102,13 @@ test.skipIf(!chromeFound)("with a tree, workers dress by depth and theme, and th
   await until(`document.querySelector("#card h3")?.textContent === "api-auth" && !!document.querySelector("#card .path")`);
   expect(await page.evaluate(`document.querySelector("#card .path .level").textContent`)).toBe("ENGINEER");
   expect(await page.evaluate(`document.querySelector("#card .path .chain").textContent`)).toBe("HQ > web-pm > api-lead > api-auth");
+  // web-pm directs a lead, so it heads a floor of its own: the chip names the floor, then the lane.
+  expect(await page.evaluate(`document.querySelector(".scopechip").textContent`)).toBe("WEB-PM FLOOR › api-auth ✕");
   // a step in the path selects that lane
   await page.evaluate(`document.querySelector('#card .path [data-select="web-pm"]').click()`);
   await until(`document.querySelector("#card h3")?.textContent === "web-pm"`);
   expect(await page.evaluate(`document.querySelector("#card .path .level").textContent`)).toBe("MANAGER");
+  expect(await page.evaluate(`document.querySelector(".scopechip").textContent`)).toBe("WEB-PM FLOOR › web-pm ✕");
   expect(errors).toEqual([]);
 });
 
