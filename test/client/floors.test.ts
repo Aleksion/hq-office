@@ -249,11 +249,13 @@ test.skipIf(!chromeFound)("one floor: today's page, with no building, no way bac
     await open(single.base, width, height);
     await until(`document.querySelectorAll("#hud .ask").length === 3 && !!document.getElementById("room")`);
     await Bun.sleep(500);
-    for (const sel of [".stagebar", ".building", ".tile", ".tlabel", ".scene", ".floortag", "[data-zoomout]", "[data-building]", "canvas#room-fin", ".scopeborder", ".scopechip"]) {
+    for (const sel of [".stagebar", ".building", ".tile", ".tlabel", ".floortag", "[data-zoomout]", "[data-building]", "canvas#room-fin", ".scopeborder", ".scopechip"]) {
       expect({ width, sel, found: await ev(`!!document.querySelector(${JSON.stringify(sel)})`) }).toEqual({ width, sel, found: false });
     }
     expect(await ev(`document.querySelector(".room").hasAttribute("data-stage")`)).toBe(false);
-    expect(await ev(`document.getElementById("room").parentElement === document.querySelector(".room")`)).toBe(true);
+    // the layer (U10) wraps the canvas in a scene of its own, in the room where the canvas always sat
+    expect(await ev(`document.getElementById("room").parentElement === document.querySelector(".room > .scene")`)).toBe(true);
+    expect(await ev(`document.querySelectorAll(".scene").length`)).toBe(1);
     expect(await shown(".room .legend")).toBe(true);
     expect(await ev(`document.querySelectorAll("#hud .ask .meta .floortag").length`)).toBe(0);
     await click(`[data-qtab="messages"]`);

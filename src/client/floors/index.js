@@ -10,9 +10,10 @@ import { S } from "../core/state.js";
 import { floor as hq } from "../room/floor.js";
 import { chooseAgent, outOne, scope, setFloor } from "../core/scope.js";
 import { HQ, escapeAction, floorList, floorOfLane, floorsInView, stageBar, stageMode } from "../core/floors.js";
-import { arrange, barEl, boxes, build, built, canvasOf, canvasRect, copyCanvas, dismantle, gridEl, paintLabels, paintMode, room } from "./building.js";
+import { arrange, barEl, boxes, build, built, canvasRect, copyCanvas, dismantle, gridEl, moving, paintLabels, paintMode, room } from "./building.js";
+import { floors, register } from "./registry.js";
 
-const floors = new Map([[hq.id, hq]]);
+register(hq.id, hq);
 const loading = new Set(), failed = new Set();
 const sight = new Map(); // id -> whether the floor was last told it is in sight (all are, until told otherwise)
 let zoomed; // the floor zoomed into (null: the building), as last laid out; undefined before the first layout
@@ -37,7 +38,7 @@ function load(id) {
   import(`/floor/${encodeURIComponent(id)}/src/client/room/floor.js`).then(({ floor }) => {
     // A path the browser resolves elsewhere (an id of "..") would hand back another floor's copy: not this floor.
     if (floor.id !== id) throw new Error(`the copy at /floor/${id}/ is the ${floor.id} floor`);
-    floors.set(id, floor);
+    register(id, floor);
     floor.onWorker(worker);
     floor.stage(stageShown);
     floor.load(S);
@@ -53,14 +54,12 @@ function wire() {
   });
 }
 
-// The floor grows from where its tile was, or shrinks back to it.
+// The floor grows from where its tile was, or shrinks back to it: its canvas and the layer over it together.
 function flip(id, from) {
   const to = canvasRect(id);
   if (!to?.width || !from?.width || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  canvasOf(id).animate(
-    [{ transformOrigin: "0 0", transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width})` }, { transformOrigin: "0 0", transform: "none" }],
-    { duration: 380, easing: "cubic-bezier(.2,.7,.2,1)" },
-  );
+  const frames = [{ transformOrigin: "0 0", transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width})` }, { transformOrigin: "0 0", transform: "none" }];
+  for (const el of moving(id)) el.animate(frames, { duration: 380, easing: "cubic-bezier(.2,.7,.2,1)" });
 }
 
 // Lay the stage out for the state and the scope: the building, a floor, or (one floor) today's room.
@@ -68,7 +67,7 @@ function apply() {
   if (!S) return;
   const sc = scope(), mode = stageMode(S, sc);
   if (mode === "single") {
-    if (built()) { dismantle(hq.canvas); hq.fitTo(null); zoomed = undefined; }
+    if (built()) { dismantle(); hq.fitTo(null); zoomed = undefined; }
   } else {
     const ids = floorList(S).map((f) => f.id);
     if (!built()) { build(); wire(); }

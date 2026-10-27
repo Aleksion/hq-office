@@ -13,7 +13,7 @@ import { drawAccessories, wornBy } from "./accessories.js";
 import { drawEventCounter } from "./events.js";
 import { workers } from "./workers.js";
 import { deskCount } from "./collision.js";
-import { GLYPH, drawBubble, drawLabel, drawRoom, stillOpaque, stillPicture } from "./scene.js";
+import { GLYPH, drawBubble, drawLabel, drawRoom, labelBox, stillOpaque, stillPicture } from "./scene.js";
 import { danceMove, drawNotes, drawShadow, drawSleep, drawSparkles, isNight, slideChange, sliding } from "./hero.js";
 import { drawProp, drawWatchCheck, idleBrain, idleLift } from "./breakroom.js";
 import { changeAt, danceClock, nextChange, steadyClock, walkMs, mode } from "./beat.js";
@@ -74,6 +74,16 @@ document.addEventListener("click", wake);
 document.fonts?.addEventListener?.("loadingdone", wake);
 cv.addEventListener("mousemove", () => { if (hovered !== drawnHover) wake(); });
 cv.addEventListener("mouseleave", wake);
+// A worker's name as its label shows it: cut at 14 characters.
+const shortName = (name) => (name.length > 14 ? name.slice(0, 13) + "…" : name);
+// Every label the room draws now, as boxes in the scene's units, measured the way drawLabel paints them. Bold, which is
+// the widest a label gets (a hovered or waiting one), so the boxes do not move when the pointer does.
+export function labelBoxes() {
+  if (!S) return [];
+  const boxes = [labelBox("YOU", 20 * TS, 3 * TS + 10, true), labelBox(terminalName(S, FLOOR), 16 * TS + 8, 5 * TS + 10, true)];
+  for (const w of workers.values()) boxes.push(labelBox(shortName(w.lane.name), w.x * TS + 8, w.y * TS + 10, true, w.mark));
+  return boxes;
+}
 function drawScene(now, dt) {
   const still = stillPicture(deskCount(workers.size));
   if (!stillOpaque) ctx.clearRect(0, 0, cv.width, cv.height);
@@ -155,7 +165,7 @@ function drawScene(now, dt) {
       }
       drawProp(w, sx, sy);
       if (st === "waiting" && !moving) drawWatchCheck(w, sx, sy, now);
-      const name = w.lane.name.length > 14 ? w.lane.name.slice(0, 13) + "…" : w.lane.name;
+      const name = shortName(w.lane.name);
       drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you" || st === "blocked", w.mark);
     }
   }

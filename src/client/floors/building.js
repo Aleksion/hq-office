@@ -29,6 +29,16 @@ export function scene(id) {
   }
   return s;
 }
+// A floor's canvas lives in its scene, and so does whatever the page lays over it (layer/). HQ's canvas is the page's own,
+// so its scene is made round it where it stands: before the legend in the room, or in its tile.
+export function wrap(id, canvas) {
+  const s = scene(id);
+  if (canvas.parentElement !== s) {
+    if (!s.isConnected) canvas.before(s);
+    s.append(canvas);
+  }
+  return s;
+}
 export function copyCanvas(id) {
   const s = scene(id);
   let c = s.querySelector("canvas");
@@ -50,11 +60,11 @@ export function build() {
   parts = { bar, grid, room: roomEl, stage, tiles: new Map() };
 }
 
-// Take it down: HQ's canvas goes back where it was, before the legend.
-export function dismantle(hqCanvas) {
+// Take it down: HQ's scene (its canvas and the layer) goes back where it was, before the legend.
+export function dismantle() {
   if (!parts) return;
   const { bar, grid, room: roomEl } = parts;
-  roomEl.insertBefore(hqCanvas, roomEl.querySelector(".legend"));
+  roomEl.insertBefore(scene("hq"), roomEl.querySelector(".legend"));
   roomEl.removeAttribute("data-stage");
   bar.remove();
   grid.remove();
@@ -123,7 +133,9 @@ export function boxes(ids, zoomed) {
 }
 
 // A floor's canvas, and where it is on screen (null before it has one).
-export const canvasOf = (id) => scenes.get(id)?.querySelector("canvas") ?? null;
+export const canvasOf = (id) => scenes.get(id)?.querySelector(":scope > canvas") ?? null;
+// What moves when a floor grows from its tile: the canvas and the layer over it.
+export const moving = (id) => [canvasOf(id), scenes.get(id)?.querySelector(":scope > .layer")].filter(Boolean);
 export const canvasRect = (id) => canvasOf(id)?.getBoundingClientRect() ?? null;
 export const barEl = () => parts?.bar ?? null;
 export const gridEl = () => parts?.grid ?? null;

@@ -11,6 +11,7 @@
 //   HQ floor:    hq-pm (PM) > hq-api (builder), hq-web (builder, BLOCKED on a prompt); hq-ops (PM, idle)
 //   FIN floor:   fin (the general, at the terminal) > fin-books (PM) > fin-recon (builder, STALLED), fin-audit (builder)
 //   SALES floor: sales (the general) > sales-pm (PM) > sales-outb (builder, idle with a question), sales-lead (builder)
+// The projects (conference rooms) hang on the floor of their owner's lane; see FACTS.rooms.
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,9 +20,9 @@ import { spawnServer } from "../scripts/room-hash.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
-type Lane = { name: string; parent?: string; herdr: "working" | "idle" | "blocked" };
+type Lane = { name: string; parent?: string; herdr: "working" | "idle" | "blocked"; issue?: string; pr?: string };
 const HQ_LANES: Lane[] = [
-  { name: "hq-pm", herdr: "working" },
+  { name: "hq-pm", herdr: "working", issue: "REL-1", pr: "acme-example/app#12" },
   { name: "hq-api", parent: "hq-pm", herdr: "working" },
   { name: "hq-web", parent: "hq-pm", herdr: "blocked" },
   { name: "hq-ops", herdr: "idle" },
@@ -49,6 +50,11 @@ export const FACTS = {
   asks: { hq: ["hq-pm", "Ship the release?"], fin: ["fin-audit", "Reclassify the March invoices?"], sales: ["sales-outb", "Take the EU call?"] },
   // unread updates by floor
   updates: { hq: 2, fin: 1, sales: 1 },
+  // The projects, by the floor they hang on, oldest first, and the state each one's frame shows. `release` has linked work
+  // (an issue and a pull request, both on its owner's lane too), a brief and one thing on its shelf.
+  rooms: { hq: ["release", "web-fix"], fin: ["recon"], sales: ["pipeline", "outbound"] },
+  roomStates: { release: "waiting", "web-fix": "blocked", recon: "stalled", pipeline: "moving", outbound: "waiting" } as Record<string, string>,
+  release: { title: "Ship the release", owner: "hq-pm", members: ["hq-api", "hq-web"], issue: "REL-1", pr: "acme-example/app#12", shelf: "Release checklist" },
 };
 
 export async function startFloors(opts: { general?: boolean } = {}) {
@@ -59,14 +65,17 @@ export async function startFloors(opts: { general?: boolean } = {}) {
   const agents = lanes.map((l, i) => `{"name":"${l.name}","agent_status":"${l.herdr}","pane_id":"w1:p${i}","agent":"claude"}`).join(",");
   const blocked = lanes.findIndex((l) => l.name === FACTS.blocked);
   writeFileSync(join(data, "pane.txt"), "│ Bash command\n│   rm -rf build\n│   Remove the build folder\n│ Do you want to proceed?\n│ ❯ 1. Yes\n│   2. No, and tell Claude what to do differently (esc)\n");
+  const gh = join(data, "gh"); // a stand-in, so the work board never runs the real one
+  writeFileSync(gh, "#!/bin/sh\nexit 1\n");
+  chmodSync(gh, 0o755);
   writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[${agents}]}}' ;;\n  *"pane read w1:p${blocked}"*) cat "${data}/pane.txt" ;;\nesac\nexit 0\n`);
   chmodSync(herdr, 0o755);
-  const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_OWNER: "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq" };
+  const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_GH_BIN: gh, HUD_OWNER: "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq" };
   const server = await spawnServer({ cwd: ROOT, env });
   const { base } = server;
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
 
-  for (const l of lanes) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.name });
+  for (const l of lanes) await post("/api/lanes", { name: l.name, parent: l.parent ?? "hq", machine: "local", title: l.name, ...(l.issue ? { issue: l.issue, pr: l.pr } : {}) });
   // Parents first in the lists above, so each parent is registered before its reports.
   const ask = (lane: string | null, kind: string, title: string, extra: object = {}) => post("/api/asks", { lane, kind, title, ...extra });
   await ask("hq-pm", "decision", FACTS.asks.hq[1], { body: "Two ways to go.", options: ["Ship it", "Hold"], recommended: "Ship it" });
@@ -75,7 +84,15 @@ export async function startFloors(opts: { general?: boolean } = {}) {
   await post("/api/updates", { lane: "hq-pm", title: "The release branch is cut", body: "Tests are green." });
   await post("/api/updates", { lane: null, title: "Nothing is on fire" });
   await post("/api/notes", { text: "Keep going." });
+  const R = FACTS.release;
+  await post("/api/rooms", { slug: "release", title: R.title, owner: R.owner, members: R.members, issues: [R.issue], prs: [R.pr] });
+  await post("/api/rooms/release/brief", { body: "Cut the branch, tag it, and tell the owner when the checks are green." });
+  await post("/api/rooms/release/artifacts", { title: R.shelf, url: "https://example.com/release-checklist" });
+  await post("/api/rooms", { slug: "web-fix", title: "Fix the web build", owner: "hq-web" });
   if (general) {
+    await post("/api/rooms", { slug: "recon", title: "Reconcile March", owner: "fin-recon" });
+    await post("/api/rooms", { slug: "pipeline", title: "Pipeline review", owner: "sales-lead" });
+    await post("/api/rooms", { slug: "outbound", title: "Outbound calls", owner: "sales-outb", members: ["sales-pm"] });
     await ask("fin-audit", "decision", FACTS.asks.fin[1], { options: ["Yes", "No"], recommended: "Yes" });
     await ask("sales-outb", "decision", FACTS.asks.sales[1], { options: ["I take it", "Hand it over"], recommended: "Hand it over" });
     await ask("sales-pm", "info", "The pipeline moved");

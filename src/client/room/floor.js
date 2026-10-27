@@ -4,10 +4,10 @@
 import { emit, on } from "../core/bus.js";
 import { CONFIG, setCONFIG, setS } from "../core/state.js";
 import { HQ } from "../core/floors.js";
-import { cv } from "./canvas.js";
+import { TS, cv } from "./canvas.js";
 import { fitTo, select } from "./input.js";
-import { showRoom } from "./loop.js";
-import { syncWorkers } from "./workers.js";
+import { labelBoxes, showRoom } from "./loop.js";
+import { syncWorkers, workers } from "./workers.js";
 import { FLOOR } from "./here.js";
 
 // The lanes and questions this copy last built its workers from: boot.js replaces them when they change.
@@ -18,6 +18,11 @@ export const floor = {
   canvas: cv,
   select, // the ring on a worker by name, or on none (null)
   onWorker: (fn) => on("worker", fn), // a click on a worker, with its name
+  onDraw: (fn) => on("room:draw", fn), // after every frame this floor draws
+  // Where each worker's sprite is now (its top-left corner) and every label's box, in the scene's units (the room is
+  // 384 by 256): what the layer over the room keeps clear of.
+  positions: () => [...workers.values()].map((w) => ({ name: w.lane.name, sx: Math.round(w.x * TS), sy: Math.round(w.y * TS - 6) })),
+  labels: labelBoxes,
   // A copy takes the page's state; HQ's floor already has it.
   load(state) {
     if (FLOOR === HQ) return;
