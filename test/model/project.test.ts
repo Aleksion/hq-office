@@ -18,19 +18,22 @@ const S: any = {
 const CONFIG = { linearWorkspace: "acme-example", githubRepo: "acme-example/app" };
 
 describe("links on a question", () => {
-  test("the open projects the lane is in, as owner or member, and its issue and pull requests", () => {
-    expect(askLinks(S, CONFIG, { lane: "pm" }).projects.map((p: any) => p.slug)).toEqual(["release"]);
-    expect(askLinks(S, CONFIG, { lane: "api" }).projects.map((p: any) => p.slug)).toEqual(["release"]);
-    expect(askLinks(S, CONFIG, { lane: "web" }).projects.map((p: any) => p.slug)).toEqual(["release", "other"]);
-    const pm = askLinks(S, CONFIG, { lane: "pm" });
+  test("the open project whose room the question names, and its lane's issue and pull requests", () => {
+    const ask = (lane: string | null, room: string | null) => ({ lane, room });
+    expect(askLinks(S, CONFIG, ask("api", "release")).projects.map((p: any) => p.slug)).toEqual(["release"]);
+    expect(askLinks(S, CONFIG, ask(null, "release")).projects).toEqual([{ slug: "release", title: "RELEASE" }]);
+    // a lane in two rooms gets the one its question names, not both
+    expect(askLinks(S, CONFIG, ask("web", "other")).projects.map((p: any) => p.slug)).toEqual(["other"]);
+    const pm = askLinks(S, CONFIG, ask("pm", "release"));
     expect(pm.issues).toEqual([{ key: "REL-1", href: "https://linear.app/acme-example/issue/REL-1" }, { key: "REL-2", href: "https://linear.app/acme-example/issue/REL-2" }]);
     expect(pm.prs.map((p: any) => [p.num, p.href])).toEqual([["12", "https://github.com/acme-example/app/pull/12"], ["7", "https://github.com/acme-example/app/pull/7"]]);
   });
 
-  test("no tag for a lane in no project, a question with no lane, or an archived room; no link without a workspace or repo", () => {
-    expect(askLinks(S, CONFIG, { lane: "solo" })).toEqual({ projects: [], issues: [], prs: [] });
-    expect(askLinks(S, CONFIG, { lane: null })).toEqual({ projects: [], issues: [], prs: [] });
-    expect(askLinks({ ...S, rooms: [room("old", "solo", { archivedAt: 9 })] }, CONFIG, { lane: "solo" }).projects).toEqual([]);
+  test("no tag for a question that names no room, a room that is gone or archived; no link without a workspace or repo", () => {
+    expect(askLinks(S, CONFIG, { lane: "api", room: null })).toEqual({ projects: [], issues: [], prs: [] }); // api is in release, but this question does not name it
+    expect(askLinks(S, CONFIG, { lane: null, room: null })).toEqual({ projects: [], issues: [], prs: [] });
+    expect(askLinks(S, CONFIG, { lane: "api", room: "old" }).projects).toEqual([]);
+    expect(askLinks(S, CONFIG, { lane: "api", room: "nope" }).projects).toEqual([]);
     expect(issueLink({}, "REL-1").href).toBeNull();
     expect(prLink({}, "12").href).toBeNull();
     expect(prLink({}, "acme-example/app#7").href).toBe("https://github.com/acme-example/app/pull/7");

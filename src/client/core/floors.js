@@ -276,8 +276,9 @@ export function escapeAction(scope, busy) {
   if (busy.panel) return "panel";
   return scope.floor || scope.agent ? "out" : null;
 }
-// Where choosing a lane with `jump` takes the question panel: the lane's first open question, or null.
-export const jumpAsk = (S, lane) => (hasLane(S, lane) ? S.open.find((a) => a.lane === lane) ?? null : null);
+// Where a `jump` takes the question panel: with an ask's id, that question; with true, the chosen lane's first open
+// question. Null when there is none.
+export const jumpAsk = (S, lane, jump = true) => (typeof jump === "number" ? S.open.find((a) => a.id === jump) ?? null : hasLane(S, lane) ? S.open.find((a) => a.lane === lane) ?? null : null);
 
 // ---- links: on a question, and in the project panel ----
 
@@ -288,14 +289,13 @@ export function prLink(config, raw) {
   const key = String(raw).replace(/^#/, ""), num = key.split("#").pop(), repo = key.includes("#") ? key.split("#")[0] : config?.githubRepo;
   return { key, num, href: repo ? `https://github.com/${repo}/pull/${num}` : null };
 }
-// What a question links to through its lane: the open projects the lane is in (as owner or member), and the lane's own
-// issue and pull requests. Nothing for a question with no lane, and no project for a lane that is in none.
+// What a question links to: the open project whose room it names (the rule roomCalls counts by), and its lane's own
+// issue and pull requests. No project for a question that names no room or an archived one.
 export function askLinks(S, config, ask) {
-  const name = ask?.lane;
-  if (!name) return { projects: [], issues: [], prs: [] };
-  const lane = lanesOf(S).find((l) => l.name === name);
+  const lane = ask?.lane ? lanesOf(S).find((l) => l.name === ask.lane) : null;
+  const room = ask?.room ? (S.rooms ?? []).find((r) => r.slug === ask.room && !r.archivedAt) : null;
   return {
-    projects: (S.rooms ?? []).filter((r) => !r.archivedAt && roomLanes(r).includes(name)).map((r) => ({ slug: r.slug, title: r.title })),
+    projects: room ? [{ slug: room.slug, title: room.title }] : [],
     issues: words(lane?.issue).map((k) => issueLink(config, k)),
     prs: words(lane?.pr).map((k) => prLink(config, k)),
   };

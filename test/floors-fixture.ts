@@ -45,7 +45,7 @@ export const FACTS = {
   floors: ["hq", "fin", "sales"],
   labels: ["HQ", "FIN", "SALES"],
   generals: { fin: "fin", sales: "sales" },
-  waiting: { hq: 3, fin: 1, sales: 2 }, // open questions by floor (one of HQ's names no lane)
+  waiting: { hq: 3, fin: 1, sales: 2 }, // open questions by floor (one of HQ's names no lane, and the room release)
   blocked: "hq-web",
   stalled: "fin-recon",
   // a lane with a question on each floor, and the question's title
@@ -59,8 +59,10 @@ export const FACTS = {
   // The questions that name each project (`, N for you` on its frame, the count tag, RUNDOWN's tag and the panel's OPEN CALLS).
   // A project turns red only for these. "The pipeline moved" is asked by sales-pm, a member of `outbound`, and names no room:
   // it is in the open count and nowhere on a frame.
-  roomCalls: { release: 1, "web-fix": 0, recon: 0, pipeline: 0, outbound: 1 } as Record<string, number>,
+  roomCalls: { release: 2, "web-fix": 0, recon: 0, pipeline: 0, outbound: 1 } as Record<string, number>,
   unnamed: ["sales-pm", "The pipeline moved"],
+  // HQ's own question: no lane, and it names the release room. It is the second of release's open calls.
+  hqCall: "The weekly numbers are in",
   // The briefs the fixture pins, by project. The others have none, and RUNDOWN shows them without one.
   briefs: { release: "Cut the branch, tag it, and tell the owner when the checks are green.", recon: "Close March: match every invoice to a payment, then list what is left.", pipeline: "Review the open deals and name the three that need the owner." } as Record<string, string>,
   release: { title: "Ship the release", owner: "hq-pm", members: ["hq-api", "hq-web"], issue: "REL-1", pr: "acme-example/app#12", shelf: "Release checklist" },
@@ -135,7 +137,7 @@ async function openOffice(opts: { general?: boolean; frame?: boolean }, data: st
   }
   await ask("hq-pm", "decision", FACTS.asks.hq[1], { body: "Two ways to go.", options: ["Ship it", "Hold"], recommended: "Ship it", room: "release" });
   await ask("hq-ops", "action", "Approve the vendor contract");
-  await ask(null, "info", "The weekly numbers are in");
+  await ask(null, "info", FACTS.hqCall, { room: "release" });
   await post("/api/updates", { lane: "hq-pm", title: "The release branch is cut", body: "Tests are green." });
   await post("/api/updates", { lane: null, title: "Nothing is on fire" });
   await post("/api/notes", { text: "Keep going." });

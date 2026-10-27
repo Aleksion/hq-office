@@ -141,7 +141,7 @@ for (const [width, height] of SIZES) {
     await until(`document.querySelectorAll(".building .tile").length === 3`);
     await click(`.tile[data-floor="hq"] .tlabel`);
     await until(`document.querySelectorAll('.layer[data-floor="hq"] .hit.frame').length === 2`);
-    expect(await frameLabels("hq")).toEqual(["Ship the release: WAITING ON YOU, 1 for you", "Fix the web build: BLOCKED AT A PROMPT"]);
+    expect(await frameLabels("hq")).toEqual([`Ship the release: WAITING ON YOU, ${FACTS.roomCalls.release} for you`, "Fix the web build: BLOCKED AT A PROMPT"]);
     // the count tag is on the counted frame alone, and says the same number as the name
     expect(await ev(`[...document.querySelectorAll('.layer[data-floor="hq"] .hit.frame')].map((b) => b.querySelector(".tag.count")?.textContent ?? null)`)).toEqual([String(FACTS.roomCalls.release), null]);
     await click(`.layer[data-floor="hq"] .hit.frame[data-project="release"]`);
@@ -149,7 +149,7 @@ for (const [width, height] of SIZES) {
     expect(await ev(`document.querySelector("#projectPanel h2").textContent`)).toBe(FACTS.release.title);
     expect(await ev(`document.querySelector("#projectPanel .tag.st").textContent`)).toBe("WAITING ON YOU");
     await until(`document.querySelectorAll("#projectPanel .shelfc").length === 1`);
-    expect(await panelHeads()).toEqual(["OPEN CALLS · 1", "ROOM", "PULL REQUESTS · 1", "ARTIFACTS · 1", "WHO IS ON IT"]);
+    expect(await panelHeads()).toEqual([`OPEN CALLS · ${FACTS.roomCalls.release}`, "ROOM", "PULL REQUESTS · 1", "ARTIFACTS · 1", "WHO IS ON IT"]);
     expect(await ev(`[...document.querySelectorAll("#projectPanel .pgrp:last-child .lrow b")].map((b) => b.textContent)`)).toEqual([FACTS.release.owner, ...FACTS.release.members]);
     expect(await ev(`document.querySelector("#projectPanel a.btn").getAttribute("href")`)).toBe("#room/release");
     expect(await ev(`document.querySelector("#projectPanel .shelfc").textContent`)).toContain(FACTS.release.shelf);
@@ -206,10 +206,15 @@ for (const [width, height] of SIZES) {
   test.skipIf(!chromeFound)(`${at}: a question links to its project, room, issue and pull request; a lane with none shows none`, async () => {
     await open(general.base, width, height);
     await until(`document.querySelectorAll("#hud .ask").length === 6`);
-    const tags = (lane: string) => ev(`[...document.querySelectorAll('#hud .ask[data-lane="${lane}"] .meta .tag')].map((t) => t.className.replace("tag ", "").split(" ")[0] + ":" + t.textContent)`) as Promise<string[]>;
+    const tagsOf = (sel: string) => ev(`[...document.querySelectorAll('${sel} .meta .tag')].map((t) => t.className.replace("tag ", "").split(" ")[0] + ":" + t.textContent)`) as Promise<string[]>;
+    const tags = (lane: string) => tagsOf(`#hud .ask[data-lane="${lane}"]`);
     const pm = await tags("hq-pm");
     expect(pm).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "room:ROOM", `key:${FACTS.release.issue}`, "pr:#12"]));
     expect((await tags("hq-ops")).filter((t) => /^(project|room|key|pr):/.test(t))).toEqual([]);
+    // the tag follows the question's own room: HQ's question has no lane and names release, and a lane's unnamed question shows none
+    const hq = await ev(`[...document.querySelectorAll("#hud .ask")].find((a) => a.querySelector("h3").textContent === ${JSON.stringify(FACTS.hqCall)}).dataset.ask`);
+    expect(await tagsOf(`#hud .ask[data-ask="${hq}"]`)).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "room:ROOM"]));
+    expect((await tags(FACTS.unnamed[0])).filter((t) => /^(project|room):/.test(t))).toEqual([]); // a member of outbound, but the question names no room
     // the links sit in the meta row, and the question's title and options are still there
     expect(await ev(`document.querySelector('#hud .ask[data-lane="hq-pm"] h3') !== null && document.querySelectorAll('#hud .ask[data-lane="hq-pm"] .opt').length`)).toBe(2);
     // ROOM goes to the conference room; the project panel's OPEN THE ROOM does too, and the panel closes behind it

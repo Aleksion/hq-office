@@ -1,5 +1,5 @@
-// The links on a question, as tags for its meta row: the open projects its lane is in (PROJECT opens the project panel,
-// ROOM goes to the conference room) and its lane's issue and pull requests. Nothing for a lane that has none (core/floors.js).
+// The links on a question, as tags for its meta row: the open project its room names (PROJECT opens the project panel,
+// ROOM goes to the conference room) and its lane's issue and pull requests. Nothing for a question that names no room (core/floors.js).
 import { esc } from "../core/format.js";
 import { askLinks } from "../core/floors.js";
 import { CONFIG } from "../core/state.js";
