@@ -1,13 +1,37 @@
-// One floor's room, as the page uses it: the page asks for the ring and listens for a click, and never reaches into
-// the room's other modules. HQ's floor is the page's own graph; a floor's copy (U8) has the same API on its own bus.
-import { on } from "../core/bus.js";
+// One floor's room, as the page uses it: the page asks for the ring, the state, the size and whether it is in sight, and
+// listens for a click; it never reaches into the room's other modules. HQ's floor is the page's own graph (boot.js feeds
+// it); a floor's copy is this file loaded from /floor/<id>/..., with its own canvas, workers, loop and bus.
+import { emit, on } from "../core/bus.js";
+import { CONFIG, setCONFIG, setS } from "../core/state.js";
+import { HQ } from "../core/floors.js";
 import { cv } from "./canvas.js";
-import { select } from "./input.js";
+import { fitTo, select } from "./input.js";
+import { showRoom } from "./loop.js";
+import { syncWorkers } from "./workers.js";
 import { FLOOR } from "./here.js";
+
+// The lanes and questions this copy last built its workers from: boot.js replaces them when they change.
+let lanes = null, open = null;
 
 export const floor = {
   id: FLOOR,
   canvas: cv,
   select, // the ring on a worker by name, or on none (null)
   onWorker: (fn) => on("worker", fn), // a click on a worker, with its name
+  // A copy takes the page's state; HQ's floor already has it.
+  load(state) {
+    if (FLOOR === HQ) return;
+    setS(state);
+    setCONFIG(state.config ?? CONFIG);
+    if (state.lanes !== lanes || state.open !== open) {
+      syncWorkers(lanes === null);
+      lanes = state.lanes;
+      open = state.open;
+    }
+    emit("state", state);
+  },
+  show: showRoom, // false while the floor is out of sight: its loop rests
+  // The page's "stage" event (a conference room covers the office), passed on to a copy.
+  stage(shown) { if (FLOOR !== HQ) emit("stage", shown); },
+  fitTo, // the box the canvas fits (width and height); null gives the canvas back to the room's own rule
 };

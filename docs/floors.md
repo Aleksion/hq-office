@@ -19,6 +19,30 @@ floor; the question panel switches to QUESTIONS and flashes the lane's first que
 "+N FROM OTHER AGENTS · SHOW ALL" line say that the lists are narrowed. Escape and the chip's ✕ go out one level
 (`escapeAction`); a room on the stage, SETTINGS, a dialog or a text field keep the key.
 
+## The building
+
+With one floor the page is today's page: `floors/` adds nothing to it, not an element, a tag or a border. With two or
+more (`stageMode` in `core/floors.js`) the stage is the building or one floor of it, and the scope's floor decides
+which: no floor in the scope is zoomed out, which is how a new tab opens; a floor in the scope is zoomed into.
+
+- **Zoomed out**, every floor is a tile: its tag in the floor's colour, the questions waiting on you there, a dot per
+  agent that needs help, and a live room. A click anywhere on a tile calls `setFloor(id)`, which zooms in and scopes in
+  one action. Two tiles a row, one on a narrow screen.
+- **Zoomed in**, the floor is today's room at its full size, with today's legend under it and ◀ ALL FLOORS above it.
+  Clicking a worker chooses that agent.
+- **◀ ALL FLOORS and BUILDING** call `setFloor(null)`: all the way out from a floor, an agent or SHOW ALL. The chip's
+  ✕ and Escape go out one level (`outOne`).
+- **A floor other than HQ's** is the room's modules loaded again from `/floor/<id>/src/client/...` (`room/floor.js`),
+  so it has its own canvas, workers, frame loop and bus. `floors/index.js` feeds each copy the page's state and the
+  "stage" event, tells it its size (`fitTo`) and whether it is in sight (`show`): only the floors in `floorsInView`
+  draw. Each copy's terminal reads its floor's general (`terminalName`).
+- **Floor tags** on a question and on an update (MESSAGES and FROM HQ) name its lane's floor in the floor's colour,
+  only with two or more floors. A question or update with no lane, a lane that is gone, and your notes, are on HQ's floor.
+
+A second floor appears only when a lane runs PMs that have builders under them (the floor rule above). `test/floors-fixture.ts`
+builds an office with such a lane (three floors) for the Chrome tests and the captures; it also builds the one-floor
+office for the "nothing changes" checks.
+
 ## Decisions the code carries
 
 - **Everything follows the scope** (the owner, on the phone tabs: "When I click a floor everything is scoped to that
@@ -38,3 +62,5 @@ BLOCKED box, HQ ISN'T RECEIVING, ACCOUNTS, MACHINES, SENT & ANSWERED and SECRETS
 - Marking read in a scope marks only what is in that scope (`read-all` takes `{ floor, lane }`; `marksRead` on the page).
 - With no scope set, every count and list is what it was before floors (`counts`, `readAllBody`).
 - A scope that no longer holds (a lane gone, a floor gone, one floor) is dropped on every state (`normalizeScope`).
+- The stage shows what `stageMode` says, the floors that draw are `floorsInView`, and a floor tag shows only with two or
+  more floors (`floorTag`). `test/model/building.test.ts` holds each; `test/client/floors.test.ts` checks them on a page.
