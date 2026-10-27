@@ -8,6 +8,7 @@ import { scheduleTick } from "../questions/questions.js";
 import { liveSecrets, lostSecrets, renderSecrets } from "../secrets/secrets.js";
 import { on } from "../core/bus.js";
 import { counts, inScope, othersLine } from "../core/floors.js";
+import { floorTagHTML } from "../floors/tag.js";
 import { scope, toggleAll, view } from "../core/scope.js";
 
 let seenUpdates = null, shownTab = null;
@@ -20,7 +21,7 @@ function updateRows() {
   const all = S.updates ?? [], shown = all.filter((u) => inScope(S, u, view()));
   const line = othersLine(S, scope(), all.length - shown.length);
   const rows = shown.map((u) => `<article class="upd ${u.read_at ? "" : "unread"}" data-upd="${u.id}">
-      <div class="meta"><span class="tag">${clock(u.at)}</span>${u.lane ? `<span class="tag lane">${esc(u.lane)}</span>` : ""}${u.read_at ? "" : `<span class="tag new">NEW</span>`}</div>
+      <div class="meta"><span class="tag">${clock(u.at)}</span>${floorTagHTML(S, u)}${u.lane ? `<span class="tag lane">${esc(u.lane)}</span>` : ""}${u.read_at ? "" : `<span class="tag new">NEW</span>`}</div>
       <h3>${linkify(u.title)}</h3>
       ${u.body ? `<div class="text">${u.body.includes("```") ? renderBody(u.body) : clipText(u.body, `u${u.id}`)}</div>` : ""}
     </article>`).join("");

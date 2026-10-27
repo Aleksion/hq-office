@@ -10,6 +10,7 @@ import { on } from "../core/bus.js";
 import { clearImages, composer, hasImages, notReady, withImages } from "../images/images.js";
 import { emit } from "../core/bus.js";
 import { counts, inScope, marksRead, othersLine } from "../core/floors.js";
+import { floorTagHTML } from "../floors/tag.js";
 import { scope, toggleAll, view } from "../core/scope.js";
 
 // QUESTIONS and MESSAGES share the question column; one shows at a time. The choice is remembered in this browser.
@@ -89,7 +90,7 @@ function msgItem(m, nameParent) {
   // A reply names what it answers when that is not the message right above it, or is too old to be in the list.
   const to = m.up ? (nameParent ? `${m.up.who} ${clock(m.up.at)}: ${short(m.up.title || m.up.text, 70)}` : "") : m.parent ? `an earlier message${m.said ? `: ${m.said}` : ""}` : "";
   return `<article class="msg ${m.who === "HQ" ? "hq" : "you"}${m.unread ? " unread" : ""}" data-msg="${m.key}">
-      <div class="meta"><span class="who">${m.who}</span><span class="tag">${clock(m.at)}</span>${m.lane ? `<span class="tag lane">${esc(m.lane)}</span>` : ""}${m.unread ? `<span class="tag new">NEW</span>` : ""}${m.who === "YOU" ? `<span class="seen ${m.acked ? "ok" : ""}">${m.acked ? "HQ HAS IT" : "NOT PICKED UP YET"}</span>` : ""}<button class="btn-s" type="button" data-reply="${m.key}">${replyTo === m.key ? "CANCEL" : "REPLY"}</button></div>
+      <div class="meta"><span class="who">${m.who}</span><span class="tag">${clock(m.at)}</span>${m.who === "HQ" ? floorTagHTML(S, m) : ""}${m.lane ? `<span class="tag lane">${esc(m.lane)}</span>` : ""}${m.unread ? `<span class="tag new">NEW</span>` : ""}${m.who === "YOU" ? `<span class="seen ${m.acked ? "ok" : ""}">${m.acked ? "HQ HAS IT" : "NOT PICKED UP YET"}</span>` : ""}<button class="btn-s" type="button" data-reply="${m.key}">${replyTo === m.key ? "CANCEL" : "REPLY"}</button></div>
       ${to ? `<div class="quote">↩ to ${esc(to)}</div>` : ""}
       ${m.title ? `<h3>${linkify(m.title)}</h3>` : ""}${body}
     </article>${replyTo === m.key ? replyBox(m) : ""}`;

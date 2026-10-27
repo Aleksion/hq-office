@@ -1,6 +1,6 @@
 // The building, in Chrome, on an office with a general (test/floors-fixture.ts: three floors, HQ, FIN and SALES) at 1440
 // and at 390: zoomed out every floor is a live tile; a click zooms into a floor and scopes the queue and messages to it;
-// ◀ ALL FLOORS and BUILDING go all the way out, ✕ and Escape one level; each
+// ◀ ALL FLOORS and BUILDING go all the way out, ✕ and Escape one level; floor tags show on questions and messages; each
 // terminal reads its floor's general; a floor out of sight draws nothing. And on an office with one floor (this
 // installation's shape) none of it is on the page. Needs Chrome (CHROME_BIN); skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -223,6 +223,24 @@ for (const [width, height] of SIZES) {
     await until(`document.querySelector(".room")?.dataset.stage === "in" && !!document.getElementById("card")?.innerHTML`);
     expect(await chip()).toBe("SALES FLOOR ✕");
     expect(await ev(`[...document.querySelectorAll(".tile")].filter((t) => getComputedStyle(t).display !== "none").map((t) => t.dataset.floor)`)).toEqual(["sales"]);
+  }, 30_000);
+
+  test.skipIf(!chromeFound)(`${at}: floor tags show on questions and on messages, in the floor's colour, and notes carry none`, async () => {
+    await open(general.base, width, height);
+    await until(`document.querySelectorAll("#hud .ask").length === ${Object.values(FACTS.waiting).reduce((a, b) => a + b, 0)}`);
+    const floorOf = (lane: string) => (lane.startsWith("fin") ? "FIN" : lane.startsWith("sales") ? "SALES" : "HQ");
+    for (const a of await asks()) expect(a.tag).toBe(floorOf(a.lane)); // "" (no lane) is HQ's
+    expect(await ev(`getComputedStyle(document.querySelector('#hud .ask[data-lane="fin-audit"] .floortag')).backgroundColor`)).toBe(COLORS.fin);
+    expect(await ev(`document.querySelector("#hud .ask .meta").firstElementChild.classList.contains("floortag")`)).toBe(true);
+    await click(`[data-qtab="messages"]`);
+    await until(`document.querySelectorAll("#msgs [data-msg]").length >= 5`);
+    expect(await ev(`[...document.querySelectorAll("#msgs .msg.hq")].map((m) => (m.querySelector(".lane")?.textContent ?? "") + ":" + m.querySelector(".floortag")?.textContent)`)).toEqual(
+      expect.arrayContaining(["hq-pm:HQ", "fin-books:FIN", "sales-pm:SALES", ":HQ"]),
+    );
+    expect(await ev(`document.querySelectorAll("#msgs .msg.you .floortag").length`)).toBe(0);
+    // FROM HQ, under the room
+    expect(await ev(`[...document.querySelectorAll("#feedBody .upd")].every((u) => !!u.querySelector(".floortag"))`)).toBe(true);
+    expect(await ev(`document.querySelectorAll("#feedBody .upd").length`)).toBe(4);
   }, 30_000);
 }
 

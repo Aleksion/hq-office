@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { setS } from "../../src/client/core/state.js";
 import { allFloors, chooseAgent, restore, scope, setFloor, toggleAll, view } from "../../src/client/core/scope.js";
+import { floorTagHTML } from "../../src/client/floors/tag.js";
 import { floorLabel, floorList, floorOfLane, floorTag, floorsInView, stageBar, stageMode } from "../../src/client/core/floors.js";
 
 const lane = (name: string, floor = "hq", extra: object = {}) => ({ name, floor, heads: false, status: "moving", ...extra });
@@ -142,5 +143,22 @@ describe("floor tags", () => {
     expect(floorTag(three, { lane: "vanished" })?.id).toBe("hq");
     expect(floorTag(three, { text: "a note", at: 1 })?.id).toBe("hq");
     expect(floorOfLane(three, undefined)).toBe("hq");
+  });
+});
+
+describe("the tag as markup", () => {
+  test("a row's meta line gets no markup at all with one floor", () => {
+    expect(floorTagHTML(one, one.open[0])).toBe("");
+    expect(floorTagHTML(one, one.updates[0])).toBe("");
+  });
+
+  test("with two floors it names the floor in its colour, and a floor's name cannot break the markup", () => {
+    const html = floorTagHTML(three, three.open[1]);
+    expect(html).toContain(">FIN</span>");
+    expect(html).toContain(`background:${floorList(three)[1].color}`);
+    const odd: any = { lanes: [lane("pm"), lane("a<b>", "a<b>", { heads: true }), lane("x", "a<b>")], open: [], updates: [] };
+    const tag = floorTagHTML(odd, { lane: "x" });
+    expect(tag).toContain("A&lt;B&gt;");
+    expect(tag).not.toContain("<b>");
   });
 });
