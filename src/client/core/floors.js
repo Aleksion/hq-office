@@ -218,11 +218,56 @@ export function readAllBody(view) {
   return body;
 }
 
-// What Escape does: step the scope out one level ("out"), or leave the key alone (null) when nothing is scoped or
-// something else owns it: a conference room on the stage, SETTINGS or a dialog, a text field.
+// What Escape does: close the panel over the room ("panel"), else step the scope out one level ("out"), else leave the key
+// alone (null): nothing is open or scoped, or something else owns it: a conference room on the stage, SETTINGS or a
+// dialog, a text field.
 export function escapeAction(scope, busy) {
   if (busy.stage || busy.settings || busy.dialog || busy.typing) return null;
+  if (busy.panel) return "panel";
   return scope.floor || scope.agent ? "out" : null;
 }
 // Where choosing a lane with `jump` takes the question panel: the lane's first open question, or null.
 export const jumpAsk = (S, lane) => (hasLane(S, lane) ? S.open.find((a) => a.lane === lane) ?? null : null);
+
+// ---- links: on a question, and in the project panel ----
+
+const words = (v) => String(v ?? "").split(/[ ,]+/).filter(Boolean);
+// An issue or a pull request as a tag: its key, and where it opens (null when the server names no workspace or repo).
+export const issueLink = (config, key) => ({ key, href: config?.linearWorkspace ? `https://linear.app/${config.linearWorkspace}/issue/${key}` : null });
+export function prLink(config, raw) {
+  const key = String(raw).replace(/^#/, ""), num = key.split("#").pop(), repo = key.includes("#") ? key.split("#")[0] : config?.githubRepo;
+  return { key, num, href: repo ? `https://github.com/${repo}/pull/${num}` : null };
+}
+// What a question links to through its lane: the open projects the lane is in (as owner or member), and the lane's own
+// issue and pull requests. Nothing for a question with no lane, and no project for a lane that is in none.
+export function askLinks(S, config, ask) {
+  const name = ask?.lane;
+  if (!name) return { projects: [], issues: [], prs: [] };
+  const lane = lanesOf(S).find((l) => l.name === name);
+  return {
+    projects: (S.rooms ?? []).filter((r) => !r.archivedAt && roomLanes(r).includes(name)).map((r) => ({ slug: r.slug, title: r.title })),
+    issues: words(lane?.issue).map((k) => issueLink(config, k)),
+    prs: words(lane?.pr).map((k) => prLink(config, k)),
+  };
+}
+
+// Everything the project panel shows for a room, or null when there is no such open room.
+export function projectView(S, config, slug) {
+  const room = (S.rooms ?? []).find((r) => r.slug === slug && !r.archivedAt);
+  if (!room) return null;
+  const state = projectState(S, room), items = boardItems(S, room);
+  return {
+    room, state, color: PROJECT_COLORS[state], name: PROJECT_NAMES[state],
+    floor: floorOfLane(S, room.owner),
+    calls: roomCalls(S, room),
+    lanes: roomLanes(room).map((name, i) => {
+      const l = lanesOf(S).find((x) => x.name === name);
+      return { name, owner: i === 0, title: l?.title ?? "", status: l?.status ?? null, help: l ? helpState(l) : null };
+    }),
+    issues: room.issues.map((k) => ({ ...issueLink(config, k), board: items.find((i) => i.issue === k) ?? null })),
+    prs: room.prs.map((k) => {
+      const item = items.find((i) => i.prs.some((p) => p.key === k)) ?? null;
+      return { ...prLink(config, k), board: item, pr: item?.prs.find((p) => p.key === k) ?? null };
+    }),
+  };
+}
