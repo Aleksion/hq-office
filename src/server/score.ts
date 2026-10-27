@@ -1,17 +1,12 @@
 // The daily bank: points lost to waiting asks, won by quick answers.
 import { db } from "./db.ts";
 import type { Ask } from "./types.ts";
+import { waitedMinutes } from "./waited.ts";
 
 function startOfDay(now: number) {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
-}
-
-// The minutes an ask waited between `from` and `to`, leaving out the spans the owner deferred it for.
-export function waitedMinutes(from: number, to: number, defers: { from_at: number; to_at: number }[]) {
-  const off = defers.reduce((ms, d) => ms + Math.max(0, Math.min(to, d.to_at) - Math.max(from, d.from_at)), 0);
-  return Math.floor((to - from - off) / 60_000);
 }
 
 // The game: a daily bank of 1000. Every minute an ask waits past a
