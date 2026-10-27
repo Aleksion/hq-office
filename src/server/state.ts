@@ -13,7 +13,10 @@ import { board } from "./work-board.ts";
 export function state() {
   const now = Date.now();
   const lanes = db.query("SELECT * FROM lanes ORDER BY name").all() as Lane[];
-  const open = db.query("SELECT * FROM asks WHERE status = 'open' ORDER BY COALESCE(due, 9e15), created_at").all() as Ask[];
+  // A question the owner deferred is out of `open` until its time (it is in `deferred`); once back it sorts first, soonest back first.
+  const everyOpen = db.query("SELECT * FROM asks WHERE status = 'open' ORDER BY (defer_until IS NULL), defer_until, COALESCE(due, 9e15), created_at").all() as Ask[];
+  const open = everyOpen.filter((a) => !(a.defer_until > now));
+  const deferred = everyOpen.filter((a) => a.defer_until > now);
   const answered = db
     .query("SELECT * FROM asks WHERE status != 'open' AND COALESCE(answered_at, created_at) >= ? ORDER BY answered_at DESC LIMIT 40")
     .all(now - 24 * 3600_000) as Ask[];
@@ -25,6 +28,7 @@ export function state() {
     version,
     lanes: withTree(lanes).map((l) => ({ ...l, status: laneStatus(l, openByLane, now), asks: openByLane.get(l.name) ?? 0 })),
     open: open.map(parse),
+    deferred: deferred.map(parse),
     answered: answered.map(parse),
     notes: db.query("SELECT * FROM notes ORDER BY at DESC LIMIT 20").all(),
     updates: db.query("SELECT * FROM updates ORDER BY at DESC, id DESC LIMIT 40").all(),
