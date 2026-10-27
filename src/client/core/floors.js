@@ -219,7 +219,7 @@ export function briefExcerpt(text) {
   return !t ? null : t.length > BRIEF_MAX ? t.slice(0, BRIEF_MAX - 1).trimEnd() + "…" : t;
 }
 // RUNDOWN: for each floor in scope, who needs help there and each open project with its state, its owner, how many
-// questions of its lanes wait on you and its brief. `briefs` maps a slug to the brief's text, once the page has fetched it
+// questions of its lanes wait on you, the thread's last line, when it last moved and its brief. `briefs` maps a slug to the brief's text, once the page has fetched it
 // (S.rooms carries only when it was set). A project with no brief has none: nothing stands in for it.
 export function rundown(S, view, briefs = {}) {
   return viewFloors(S, view).map((f) => ({
@@ -227,7 +227,7 @@ export function rundown(S, view, briefs = {}) {
     help: needHelp(S, { floor: f.id, agent: null }),
     projects: openRooms(S, f.id).map((r) => {
       const state = projectState(S, r);
-      return { slug: r.slug, title: r.title, owner: r.owner, state, color: PROJECT_COLORS[state], name: PROJECT_NAMES[state], calls: roomCalls(S, r).length, brief: briefExcerpt(briefs[r.slug]) };
+      return { slug: r.slug, title: r.title, owner: r.owner, state, color: PROJECT_COLORS[state], name: PROJECT_NAMES[state], calls: roomCalls(S, r).length, last: r.last ? { who: r.last.who, to: r.last.to, text: r.last.text } : null, at: r.lastAt ?? r.createdAt, brief: briefExcerpt(briefs[r.slug]) };
     }),
   }));
 }

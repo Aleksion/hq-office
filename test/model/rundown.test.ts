@@ -16,7 +16,7 @@ const S: any = {
   ],
   open: [{ id: 1, lane: "outb", title: "Take the call?", created_at: 5 }],
   rooms: [
-    room("release", "pm", 1), room("web-fix", "web", 2),
+    room("release", "pm", 1, { last: { id: 4, at: 8, who: "pm", to: null, text: "Branch cut." }, lastAt: 8 }), room("web-fix", "web", 2),
     room("recon", "recon", 3), room("old", "recon", 4, { archivedAt: 9 }),
     room("outbound", "outb", 6), room("pipeline", "lead", 5),
   ],
@@ -40,6 +40,8 @@ describe("RUNDOWN's entries", () => {
     expect(by.recon).toMatchObject({ state: "stalled", brief: "Close March." });
     expect(by.outbound).toMatchObject({ state: "waiting", calls: 1, brief: null });
     expect(by.pipeline.brief).toBeNull(); // not fetched yet: nothing stands in for it
+    expect(by.release).toMatchObject({ last: { who: "pm", to: null, text: "Branch cut." }, at: 8 });
+    expect(by["web-fix"]).toMatchObject({ last: null, at: 2 }); // no thread yet: it moved when it was made
   });
 
   test("a floor lists who needs help there, worst first, and its general only when it is not simply idle", () => {
