@@ -1,7 +1,11 @@
 // Defer: the owner puts an open question off until a time. It leaves the open list, HQ is told until when, and at its time it
 // is back at the top, by itself and after a restart.
+import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
-import { office } from "./office.ts";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { office, ROOT } from "./office.ts";
 
 const offices: Awaited<ReturnType<typeof office>>[] = [];
 afterAll(async () => {
@@ -121,5 +125,61 @@ describe("defer", () => {
     const s = await o.state();
     expect(s.deferred).toEqual([]);
     expect(s.answered.map((x: any) => x.answer)).toEqual(["yes"]);
+  });
+
+  test("bringing back a question that is not deferred is refused, and so is bringing back one whose deferral is over", async () => {
+    const o = await start();
+    const a = (await o.post("/api/asks", { title: "Never deferred" })).id;
+    const res = await o.send(`/api/asks/${a}/defer`, { until: null });
+    expect(res.status).not.toBe(200);
+    expect(await res.text()).toContain(`ask ${a} is not deferred`);
+    expect((await o.state()).open[0].defer_until).toBeNull(); // the refusal did not float it to the top as "back"
+    await o.post(`/api/asks/${a}/defer`, { until: Date.now() + 3_600_000 });
+    await o.post(`/api/asks/${a}/defer`, { until: null });
+    expect((await o.send(`/api/asks/${a}/defer`, { until: null })).status).not.toBe(200); // already brought back
+  });
+
+  test("a database the earlier build made, with an asks.defer_until column, still reports defer_until from ask_defers", async () => {
+    const data = mkdtempSync(join(tmpdir(), "hq-oldcol-test-"));
+    const old = new Database(join(data, "hud.db"), { create: true });
+    old.exec(readFileSync(join(ROOT, "src/server/schema/asks.sql"), "utf8"));
+    old.exec("ALTER TABLE asks ADD COLUMN defer_until INTEGER");
+    old.exec(readFileSync(join(ROOT, "src/server/schema/ask_defers.sql"), "utf8"));
+    const t = Date.now() + 3_600_000;
+    // The stale column says one thing for each question; the rows say another.
+    old.query("INSERT INTO asks (title, created_at, defer_until) VALUES ('Deferred', 1000, 5), ('Plain', 1000, ?)").run(t);
+    old.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (1, 1000, ?)").run(t);
+    old.close();
+    try {
+      const o = await start({ data });
+      const s = await o.state();
+      expect(s.deferred.map((x: any) => [x.title, x.defer_until])).toEqual([["Deferred", t]]);
+      expect(s.open.map((x: any) => [x.title, x.defer_until])).toEqual([["Plain", null]]);
+    } finally {
+      rmSync(data, { recursive: true, force: true });
+    }
+  });
+
+  test("the cut and the new row are one step: a failing insert leaves the running deferral as it was", async () => {
+    const data = mkdtempSync(join(tmpdir(), "hq-defer-tx-"));
+    const script = `
+      const { db } = await import(${JSON.stringify(join(ROOT, "src/server/db.ts"))});
+      const { deferAsk } = await import(${JSON.stringify(join(ROOT, "src/server/asks.ts"))});
+      const id = Number(db.query("INSERT INTO asks (title, created_at) VALUES ('q', 1000)").run().lastInsertRowid);
+      const to = Date.now() + 3600000;
+      db.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (?, ?, ?)").run(id, Date.now() - 1000, to);
+      db.exec("CREATE TRIGGER refuse_insert BEFORE INSERT ON ask_defers BEGIN SELECT RAISE(ABORT, 'no room'); END");
+      let failed = false;
+      try { deferAsk(id, Date.now() + 7200000); } catch { failed = true; }
+      console.log(JSON.stringify({ failed, rows: db.query("SELECT to_at FROM ask_defers").all().map((r) => r.to_at === to) }));
+      process.exit(0);`;
+    try {
+      const proc = Bun.spawn([process.execPath, "-e", script], { cwd: data, env: { ...process.env, HUD_DATA_DIR: data }, stdout: "pipe", stderr: "pipe" });
+      const [out, err] = [await new Response(proc.stdout).text(), await new Response(proc.stderr).text()];
+      if ((await proc.exited) !== 0) throw new Error(err);
+      expect(JSON.parse(out.trim().split("\n").pop()!)).toEqual({ failed: true, rows: [true] });
+    } finally {
+      rmSync(data, { recursive: true, force: true });
+    }
   });
 });

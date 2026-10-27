@@ -209,7 +209,7 @@ export async function seedFrame(post: Post, data: string, base: string) {
   DATA.PROJECTS.forEach((p: any, i: number) => db.query("UPDATE rooms SET created_at = ? WHERE slug = ?").run(now - (DATA.PROJECTS.length - i) * MIN, p.id));
   for (const l of frameLanes().filter((l) => l.stalled)) db.query("UPDATE lanes SET herdr_since = ? WHERE name = ?").run(now - 40 * MIN, l.name);
   for (const l of frameLanes().filter((l) => l.account !== "codex")) db.query("INSERT INTO lane_accounts (lane, account, moved_at) VALUES (?, ?, ?)").run(l.name, l.account, now);
-  for (const id of back) db.query("UPDATE asks SET defer_until = ? WHERE id = ?").run(now - MIN, id);
+  for (const id of back) db.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (?, ?, ?)").run(id, now - 2 * MIN, now - MIN);
   db.close();
   await must("/api/lanes", { name: frameLanes().find((l) => l.stalled)!.name }); // a write, so the page's next state carries them
 }

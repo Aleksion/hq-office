@@ -21,9 +21,6 @@ if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) 
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "parent")) db.exec("ALTER TABLE lanes ADD COLUMN parent TEXT");
 // blocked-prompts: the excerpt of the prompt a lane's agent waits on in herdr (null when none); see prompt.ts.
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "prompt")) db.exec("ALTER TABLE lanes ADD COLUMN prompt TEXT");
-// floors v4 G1: the time (ms) until which the owner deferred a question; NULL means never deferred. Once past, the question is
-// back, and it stays on top of the open list until it is answered.
-if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "defer_until")) db.exec("ALTER TABLE asks ADD COLUMN defer_until INTEGER");
 // floors v4 G3: the lane that handed a question in (hud ask --from LANE); NULL when none did.
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "handed_by")) db.exec("ALTER TABLE asks ADD COLUMN handed_by TEXT");
 // floors: the room (its slug) a question is about, set by hud ask --room; NULL when it names none. Never inferred from the lane.

@@ -163,7 +163,7 @@ export function answerWithSecrets(id: number, body: any) {
 
 // The owner puts an open question off until a time (ms since the epoch; null brings it back now). It leaves the open list
 // until then and is back at the top at its time, whether or not anyone is looking: the server bumps the page then, and a
-// restart re-arms the timer from the column, so a deferred question cannot be lost. HQ is told when, so it does not chase.
+// restart re-arms the timer from ask_defers, so a deferred question cannot be lost. HQ is told when, so it does not chase.
 export function deferAsk(id: number, until: unknown) {
   const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
   if (!ask) throw new Error(`no ask ${id}`);
@@ -171,10 +171,14 @@ export function deferAsk(id: number, until: unknown) {
   const now = Date.now();
   if (until !== null && (typeof until !== "number" || !Number.isFinite(until) || until <= now)) throw new Error("until is a time in the future, in milliseconds since the epoch, or null to bring the question back now");
   const at = until === null ? now : (until as number);
-  db.query("UPDATE asks SET defer_until = ? WHERE id = ?").run(at, id);
-  // The bank's record: a deferral still running ends now, and a new one runs until its time.
-  db.query("UPDATE ask_defers SET to_at = ? WHERE ask_id = ? AND to_at > ?").run(now, id, now);
-  if (until !== null) db.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (?, ?, ?)").run(id, now, at);
+  const running = db.query("SELECT 1 FROM ask_defers WHERE ask_id = ? AND to_at > ?");
+  if (until === null && !running.get(id, now)) throw new Error(`ask ${id} is not deferred`);
+  // ask_defers is the one record of a deferral (the page's defer_until, the bank and the return timer all read it): a deferral
+  // still running ends now, and a new one runs until its time. Both or neither.
+  db.transaction(() => {
+    db.query("UPDATE ask_defers SET to_at = ? WHERE ask_id = ? AND to_at > ?").run(now, id, now);
+    if (until !== null) db.query("INSERT INTO ask_defers (ask_id, from_at, to_at) VALUES (?, ?, ?)").run(id, now, at);
+  })();
   const from = ask.lane ? ` (${ask.lane})` : "";
   if (until === null) {
     event(OWNER, `brought back "${ask.title}"`, ask.lane);
@@ -191,7 +195,7 @@ export function deferAsk(id: number, until: unknown) {
 let wake: ReturnType<typeof setTimeout> | undefined;
 export function armReturn() {
   clearTimeout(wake);
-  const next = db.query("SELECT MIN(defer_until) AS t FROM asks WHERE status = 'open' AND defer_until > ?").get(Date.now()) as { t: number | null };
+  const next = db.query("SELECT MIN(d.to_at) AS t FROM ask_defers d JOIN asks a ON a.id = d.ask_id WHERE a.status = 'open' AND d.to_at > ?").get(Date.now()) as { t: number | null };
   if (!next.t) return;
   wake = setTimeout(() => {
     bump();
