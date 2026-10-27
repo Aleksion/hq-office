@@ -7,7 +7,9 @@ import { S } from "../core/state.js";
 import { closePanel, showPanel } from "../core/panel.js";
 import { view } from "../core/scope.js";
 import { HELP_COLORS, floorTagShown, rundown } from "../core/floors.js";
-import { dur, esc, setHTML } from "../core/format.js";
+import { dur, esc, setHTML, setText } from "../core/format.js";
+import { ensureBar } from "../floors/building.js";
+import { briefLoader } from "./briefs.js";
 
 const room = document.querySelector(".room");
 const panel = document.createElement("section");
@@ -22,42 +24,35 @@ button.className = "btn place";
 button.id = "rundownBtn";
 button.textContent = "RUNDOWN";
 button.setAttribute("aria-pressed", "false");
-document.querySelector(".stageslot")?.append(button);
+ensureBar().querySelector(".stageslot").append(button);
 
 let open = false;
-const briefs = {}; // slug -> the brief's text, as last fetched
-const fetched = {}; // slug -> the room's rev last asked for; a failure waits for a new rev or the panel opening again
-
-async function fetchBrief(slug, rev) {
-  if (fetched[slug] === rev) return;
-  fetched[slug] = rev;
-  try {
-    const res = await fetch(`/api/rooms/${encodeURIComponent(slug)}`);
-    if (!res.ok) throw new Error(String(res.status));
-    briefs[slug] = (await res.json()).brief ?? "";
-    render();
-  } catch {} // kept as asked: not asked again in a loop while the server is down
-}
+const briefs = briefLoader(async (slug) => {
+  const res = await fetch(`/api/rooms/${encodeURIComponent(slug)}`);
+  if (!res.ok) throw new Error(String(res.status));
+  return (await res.json()).brief ?? "";
+}, () => render());
 
 const dots = (help) => help.map((h) => `<i class="dot" style="background:${HELP_COLORS[h.state]}" title="${esc(h.lane)}"></i>`).join("");
 const lastLine = (l) => `<p class="rlast"><b>${l.who === "owner" ? `YOU → ${esc(l.to)}` : esc(l.who)}</b> ${esc(l.text)}</p>`;
-const project = (p) => `<div class="rproj"><div class="rhead"><b>${esc(p.title)}</b><span class="tag st" style="background:${p.color}">${esc(p.name)}</span>${p.calls ? `<span class="tag count">${p.calls} OPEN CALL${p.calls > 1 ? "S" : ""}</span>` : ""}<span class="tag lane">${esc(p.owner)}</span><span class="timer" data-since="${p.at}">${dur(Date.now() - p.at)}</span></div>${p.last ? lastLine(p.last) : ""}${p.brief ? `<p class="rbrief">${esc(p.brief)}</p>` : ""}<div class="racts"><button class="btn" type="button" data-project="${esc(p.slug)}">PROJECT</button><a class="btn go" href="#room/${esc(p.slug)}">ROOM</a></div></div>`;
+const project = (p) => `<div class="rproj"><div class="rhead"><b>${esc(p.title)}</b><span class="tag st" style="background:${p.color}">${esc(p.name)}</span>${p.calls ? `<span class="tag count">${p.calls} OPEN CALL${p.calls > 1 ? "S" : ""}</span>` : ""}<span class="tag lane">${esc(p.owner)}</span><span class="timer" data-since="${p.at}"></span></div>${p.last ? lastLine(p.last) : ""}${p.brief ? `<p class="rbrief">${esc(p.brief)}</p>` : ""}<div class="racts"><button class="btn" type="button" data-project="${esc(p.slug)}">PROJECT</button><a class="btn go" href="#room/${esc(p.slug)}">ROOM</a></div></div>`;
 
 function render() {
   room.classList.toggle("rundown-open", open);
   button.classList.toggle("on", open);
   button.setAttribute("aria-pressed", String(open));
   if (!open || !S) return void setHTML(panel, "");
-  const floors = rundown(S, view(), briefs), tagged = floorTagShown(S);
-  for (const f of floors) for (const p of f.projects) {
-    const r = S.rooms.find((x) => x.slug === p.slug);
-    if (r?.briefAt) fetchBrief(r.slug, r.rev);
-  }
+  // The briefs of the projects in view, each asked for once per time it was set.
+  const shown = rundown(S, view()).flatMap((f) => f.projects.map((p) => p.slug));
+  const text = Object.fromEntries(shown.map((slug) => [slug, briefs.of(slug, S.rooms.find((r) => r.slug === slug)?.briefAt)]));
+  const floors = rundown(S, view(), text), tagged = floorTagShown(S);
+  // The timers are filled in after, so a state push that changes nothing else does not rebuild the panel (and its focus).
   setHTML(panel, `<div class="rdhdr"><h2>RUNDOWN</h2><button class="btn" type="button" data-rundown-close>BACK TO THE ROOM</button></div>${floors.map((f) => `<div class="box rdfloor"><h3>${tagged ? `<span class="tag floortag" style="background:${f.color}">${esc(f.label)}</span>` : ""}${dots(f.help)}</h3>${f.projects.length ? f.projects.map(project).join("") : `<p class="rnone">NO PROJECTS</p>`}</div>`).join("")}`);
+  for (const el of panel.querySelectorAll("[data-since]")) setText(el, dur(Date.now() - Number(el.dataset.since)));
 }
 
 on("panel", (id) => {
-  if (id === "rundown" && !open) for (const k of Object.keys(fetched)) delete fetched[k]; // opening asks again
+  if (id === "rundown" && !open) briefs.reset(); // opening asks again
   open = id === "rundown";
   render();
 });

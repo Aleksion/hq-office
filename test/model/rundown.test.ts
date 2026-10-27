@@ -130,3 +130,50 @@ describe("RUNDOWN takes its turn among the panels over the room", () => {
     expect(escapeAction(scoped, { ...quiet, panel: openPanel() !== null })).toBe("out");
   });
 });
+
+describe("RUNDOWN's briefs", () => {
+  const { briefLoader } = require("../../src/client/rundown/briefs.js");
+  const settle = () => new Promise((r) => setTimeout(r, 5));
+
+  test("asked once per time the brief was set, not again for each render or message; a new brief is asked for", async () => {
+    let calls = 0, renders = 0, at = 100; // `at`: the room's briefAt as the page has it now
+    // A reply comes on a timer, as a fetch does; changed() renders, as the panel does.
+    const b: any = briefLoader(() => new Promise((r) => setTimeout(() => r(`brief ${++calls}`), 0)), () => { renders++; b.of("p", at); });
+    expect(b.of("p", at)).toBeNull();
+    await settle();
+    expect(b.of("p", at)).toBe("brief 1");
+    expect([calls, renders]).toEqual([1, 1]);
+    at = 200;
+    expect(b.of("p", at)).toBe("brief 1"); // the old one shows while the new one loads
+    await settle();
+    expect(b.of("p", at)).toBe("brief 2");
+    expect(b.of("q", null)).toBeNull(); // no brief: nothing asked
+    expect(calls).toBe(2);
+  });
+
+  test("a reply that comes back after the brief changed again is dropped", async () => {
+    const replies: Record<number, (v: string) => void> = {};
+    let n = 0;
+    const b = briefLoader(() => new Promise<string>((res) => { replies[++n] = res; }), () => {});
+    b.of("p", 100);
+    b.of("p", 200);
+    replies[2]("newer");
+    await settle();
+    replies[1]("older");
+    await settle();
+    expect(b.of("p", 200)).toBe("newer");
+  });
+
+  test("a failure is kept, not asked again in a loop, and asked again on a new brief or a reset", async () => {
+    let calls = 0;
+    const b: any = briefLoader(() => new Promise((_, no) => setTimeout(() => { calls++; no(new Error("down")); }, 0)), () => b.of("p", 100));
+    b.of("p", 100);
+    await settle();
+    expect(b.of("p", 100)).toBeNull();
+    expect(calls).toBe(1);
+    b.reset();
+    b.of("p", 100);
+    await settle();
+    expect(calls).toBe(2);
+  });
+});
