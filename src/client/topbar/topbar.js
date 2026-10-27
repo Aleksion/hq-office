@@ -1,4 +1,4 @@
-// The top bar: waiting count, oldest wait, working, on HQ, bank, FROM HQ, machines.
+// The top bar: waiting count, oldest wait, working, on HQ, bank, machines.
 import { $ } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { dur, esc, setClass, setHTML, setText } from "../core/format.js";
@@ -36,9 +36,6 @@ export function renderStats() {
   setText($("sMove"), `${c.working}/${c.live}`);
   setText($("sHq"), c.onHq);
   setText($("sBank"), S.score.bank);
-  const unread = c.unread;
-  setClass($("sFrom"), "box fromhq" + (unread ? " unread" : ""));
-  setText($("sFrom").querySelector(".v"), `${unread} NEW`);
   const all = S.open.length;
   const title = (S.hq?.ok === false ? "HQ ISN'T RECEIVING · " : "") + (all ? `(${all}) HQ Office` : "HQ Office");
   if (document.title !== title) document.title = title;

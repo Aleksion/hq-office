@@ -13,7 +13,7 @@ import { scope, toggleAll, view } from "../core/scope.js";
 let seenUpdates = null, shownTab = null;
 
 // FROM HQ: information, not questions. Newest first; unread ones are tinted. Nothing here waits, times or scores.
-// It shares the box under the room with your sent log; the top bar's FROM HQ box opens this tab.
+// It shares the box under the room with your sent log; the MESSAGES tab carries the unread count.
 export let feedTab = "updates";
 // Scoped (core/scope.js), the list holds the updates in scope, and its first line says how many are left out.
 function updateRows() {
