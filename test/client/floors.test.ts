@@ -32,7 +32,9 @@ const SPY = `(() => {
     return fill.call(this, t, ...a);
   };
 })()`;
-const frames = () => ev(`Object.fromEntries(Object.entries(window.__texts).map(([id, o]) => [id, o.YOU ?? 0]))`) as Promise<Record<string, number>>;
+// Each floor's frames so far. A floor that has not drawn yet has 0: a test that zooms in and out quickly can sample
+// before a floor's first frame.
+const frames = () => ev(`Object.fromEntries(${JSON.stringify(Object.values(CANVAS))}.map((id) => [id, window.__texts[id]?.YOU ?? 0]))`) as Promise<Record<string, number>>;
 const press = (key: string) => ev(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, bubbles: true }))`);
 const click = (sel: string) => ev(`document.querySelector(${JSON.stringify(sel)}).click()`);
 const choose = (lane: string) => ev(`(() => { const b = document.createElement("button"); b.dataset.select = ${JSON.stringify(lane)}; document.body.append(b); b.click(); b.remove(); })()`);
