@@ -73,7 +73,7 @@ for (const [width, height] of SIZES) {
     expect((await projects()).map((p) => p.brief)).toEqual([FACTS.briefs.release, null, FACTS.briefs.recon, FACTS.briefs.pipeline, null]);
     // only the questions that name a project count: release and outbound have one each; "The pipeline moved" is asked by a member of outbound and names no room
     const slugs = FACTS.rooms.hq.concat(FACTS.rooms.fin, FACTS.rooms.sales);
-    expect(list.map((p) => p.calls)).toEqual(slugs.map((s) => (FACTS.roomCalls[s] ? `${FACTS.roomCalls[s]} OPEN CALL` : null)));
+    expect(list.map((p) => p.calls)).toEqual(slugs.map((s) => (FACTS.roomCalls[s] ? `${FACTS.roomCalls[s]} OPEN CALL${FACTS.roomCalls[s] === 1 ? "" : "S"}` : null)));
     expect(list.map((p) => p.room)).toEqual(["#room/release", "#room/web-fix", "#room/recon", "#room/pipeline", "#room/outbound"]);
     expect(await ev(`document.querySelector("#rundownBtn").getAttribute("aria-pressed")`)).toBe("true");
     // the explanatory words stay out of it
