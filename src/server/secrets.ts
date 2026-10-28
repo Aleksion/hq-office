@@ -178,6 +178,29 @@ export function secretGuard(req: Request, ip: string | undefined | null, boundHo
   return null;
 }
 
+// COPY on the SECRETS tab: the one route that gives a value to a browser, and only to the owner's own page. It has an
+// Origin that is this HUD's (on this machine) or one the owner listed in HUD_TRUSTED_ORIGINS (the tailnet, through a
+// proxy on this machine), Sec-Fetch-Site same-origin (a browser sets it; another site cannot) and x-hud. A request
+// with no Origin is refused: the CLI reads with `hud secret get`. The page asks only on a click, puts the value on
+// the clipboard and keeps no copy; it is never in the markup, the state, the log or the database. onCopy logs the name.
+async function copyRoute(req: Request, ip: string | undefined | null, store: SecretStore, opts: { host: string; trusted?: string[]; onCopy?: (name: string) => void }): Promise<Response> {
+  const origin = req.headers.get("origin");
+  const trusted = origin !== null && (opts.trusted ?? []).includes(origin);
+  const ownPage = origin !== null && (trusted || originAllowed(req, opts.host));
+  if (req.method !== "POST" || !ownPage || (!isLoopbackAddress(ip) && !trusted)) return FORBIDDEN();
+  if (req.headers.get("sec-fetch-site") !== "same-origin" || req.headers.get("x-hud") !== "1") return FORBIDDEN();
+  const body = await req.json().catch(() => ({}));
+  try {
+    const name = checkName(body.name);
+    const value = store.get(name, false);
+    if (value === null) return json({ error: `no secret ${name} (expired, removed or never set)` }, 404);
+    opts.onCopy?.(name);
+    return json({ value });
+  } catch (e) {
+    return json({ error: (e as Error).message }, 400);
+  }
+}
+
 export const isSecretPath = (path: string) => path === "/api/secrets" || path.startsWith("/api/secrets/");
 
 // A name the ledger knew but this process has no value for: lost when the server restarted.
@@ -231,8 +254,9 @@ export async function secretRoute(
   path: string,
   ip: string | undefined | null,
   store: SecretStore,
-  opts: { host: string; onSet?: (m: SecretMeta) => void; lost?: LostBook; handover?: Handover },
+  opts: { host: string; onSet?: (m: SecretMeta) => void; lost?: LostBook; handover?: Handover; trusted?: string[]; onCopy?: (name: string) => void },
 ): Promise<Response> {
+  if (path === "/api/secrets/copy") return copyRoute(req, ip, store, opts);
   const refused = secretGuard(req, ip, opts.host);
   if (refused) return refused;
   if (req.method === "GET" && path === "/api/secrets") return json([...store.list(), ...(opts.lost?.list() ?? [])]);

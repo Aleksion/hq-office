@@ -3,6 +3,18 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-10-28
+
+### Added
+
+- **COPY on a secret.** Each secret in the SECRETS tab has a COPY button that puts its value on your clipboard, for
+  example to hand a login to someone. The server gives the value only to the HUD's own page: its own origin, or one
+  in `HUD_TRUSTED_ORIGINS`, so it works from your phone on the tailnet too. It does so only when you click, and never
+  to another site or to a client without an origin (that is `hud secret get`). The value goes straight to the
+  clipboard and is never written into the page, its storage, `/api/state`, the log or the database. Each copy adds
+  an event line ("copied NAME"). Over plain http from another device, the browser may refuse the clipboard; open
+  the HUD over https (the tailnet address) or on this machine.
+
 ## [0.13.0] - 2026-10-28
 
 ### Changed

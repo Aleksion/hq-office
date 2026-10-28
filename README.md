@@ -110,6 +110,13 @@ Every expiry is said both ways, in local time: `expires in 6d 23h (Mon 2 Nov, 13
 
 Values live in the server's memory only: never in the database, the log, `/api/state` or any listing. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
 
+One exception, for you: **COPY** on a secret in the SECRETS tab puts its value on your clipboard. It is the only way a value reaches a browser, and the server gives it only to the HUD's own page:
+- the page's own origin, or one you listed in `HUD_TRUSTED_ORIGINS` (such as your tailnet address);
+- a same-origin request (`Sec-Fetch-Site`) with the page's header;
+- only when you click.
+
+The value goes straight to the clipboard and is never written into the page, its storage, `/api/state`, the log or the database. Each copy adds an event line, "copied NAME". Anything that can read your clipboard, a clipboard manager for instance, can read a copied value.
+
 **Restarts.** A planned restart (the plugin's reload or install service action, which a plugin update needs) hands the secrets over: the plugin takes them from the running server over loopback, holds them in its own memory while the new server starts, and gives them back with their original deadlines. Nothing is written to disk on the way. The handover routes also need a token that each server start writes to `secret-handover.token` in the data folder (readable by you only; it is not a secret value), and the new server takes a handover only while it holds no secrets, within 2 minutes of its start.
 
 A crash, a kill or a stop and start loses the values. The server keeps each secret's name, setter and deadline (never its value) in the database, so after such a restart it knows what it lost: the SECRETS tab lists those names as LOST in red, `hud secret list` marks them, `hud secret get NAME` fails with `NAME was lost when the server restarted at 13:45; ask the owner to set it again`, and HQ gets a one-line note. Setting the secret again clears it, and DISMISS (or `hud secret rm NAME`) removes the name.

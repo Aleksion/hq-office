@@ -5,6 +5,7 @@ import { handle } from "./router.ts";
 import { json } from "./json.ts";
 import { bump, secrets } from "./push.ts";
 import { notifyHq } from "./hq-link.ts";
+import { event } from "./events.ts";
 import { answerWithSecrets } from "./asks.ts";
 import { isSecretPath, originAllowed, secretGuard, secretRoute } from "./secrets.ts";
 import { handover, lostBook } from "./secret-ledger.ts";
@@ -22,6 +23,11 @@ Bun.serve({
     if (isSecretPath(path)) {
       return secretRoute(req, path, ip, secrets, {
         host: HOST,
+        trusted: TRUSTED_ORIGINS,
+        onCopy: (name) => {
+          event(OWNER, `copied ${name}`);
+          bump();
+        },
         lost: lostBook,
         handover,
         onSet: (m) => {
