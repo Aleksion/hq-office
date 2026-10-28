@@ -268,6 +268,7 @@ test.skipIf(!chromeFound)("five floors at 1440: a label stays inside its tile, a
       await until(`document.querySelector(".room").dataset.stage === "out"`);
     }
   } finally {
+    await page.s("Page.navigate", { url: "about:blank" }); // off the stream before its server goes, or the cut is the next test's console error
     await office.stop();
   }
 }, 90_000);
