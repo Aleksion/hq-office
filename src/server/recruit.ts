@@ -128,7 +128,8 @@ function waitForRoom(id: number) {
 }
 
 function start(id: number) {
-  run(id).catch((e) => fail(id, [], "start", message(e)));
+  const undo: Undo[] = [];
+  runSteps(id, undo).catch((e) => fail(id, undo, "start", message(e))); // anything unforeseen undoes what was made so far
 }
 
 // ---- the steps ----
@@ -170,9 +171,8 @@ async function makeFolder(machine: string, name: string, brief: string): Promise
 const START_STEPS = ["workspace", "agent", "ready"];
 const before = (step: string) => START_STEPS.slice(0, step === "trust" ? 2 : Math.max(0, START_STEPS.indexOf(step)));
 
-async function run(id: number) {
+async function runSteps(id: number, undo: Undo[]) {
   const r = row(id)!;
-  const undo: Undo[] = [];
   const give = (step: string, error: string) => fail(id, undo, step, error);
 
   let dir: string;
