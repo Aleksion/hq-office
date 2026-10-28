@@ -8,4 +8,5 @@
 .scopering { inset: 5px; border: 2px solid; opacity: 0.6; }
 .scopechip[hidden], .scopeborder[hidden], .scopering[hidden] { display: none; }
 /* The first line of a scoped list: what is left out, and the way to see it. */
-.scopeline { display: block; width: 100%; margin: 0 0 8px; padding: 6px 8px; border: 2px solid currentColor; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+.scopeline { display: block; width: 100%; margin: 0 0 8px; padding: 9px 12px; border: 2px solid var(--muted); border-radius: 8px; background: #fff; color: var(--ink); font: 7px/1.5 var(--pixel); text-align: left; cursor: pointer; }
+.scopeline:hover { background: #f4f4fa; }

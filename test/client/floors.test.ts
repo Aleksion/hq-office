@@ -293,6 +293,8 @@ test.skipIf(!chromeFound)("the scope chip reads on one line inside its column an
       await until(`document.querySelector(".scopechip")?.textContent === "SALES FLOOR ✕"`);
       await choose("sales-outb");
       await until(`document.querySelector(".scopechip")?.textContent === "SALES FLOOR › sales-outb ✕"`);
+      // the "+N ON OTHER FLOORS" line is a light card with dark text, first in the list, as the frame draws it
+      expect(await ev(`(() => { const l = document.querySelector("#hud .scopeline"), s = getComputedStyle(l); return { first: l === document.getElementById("hud").firstElementChild, bg: s.backgroundColor, color: s.color }; })()`)).toEqual({ first: true, bg: "rgb(255, 255, 255)", color: "rgb(35, 35, 58)" });
       for (const text of ["SALES FLOOR › sales-outb ✕", "SALES FLOOR ✕"]) {
         await until(`document.querySelector(".scopechip")?.textContent === ${JSON.stringify(text)}`);
         await settled();
