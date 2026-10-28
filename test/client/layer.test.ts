@@ -17,9 +17,11 @@ const until = async (expr: string, ms = 10_000) => {
   throw new Error(`timed out waiting for ${expr}`);
 };
 const ev = (expr: string) => page.evaluate(expr);
-const click = (sel: string) => ev(`document.querySelector(${JSON.stringify(sel)}).click()`);
+const click = (sel: string) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) throw new Error("nothing matches " + ${JSON.stringify(sel)}); e.click(); })()`);
 const press = (key: string) => ev(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, bubbles: true }))`);
-const scopeOf = () => ev(`JSON.parse(sessionStorage.getItem("hq-scope") ?? "null")`);
+// The tab keeps a scope only once one was set, so no key is nothing scoped.
+const scopeOf = () => ev(`JSON.parse(sessionStorage.getItem("hq-scope") ?? '{"floor":null,"agent":null,"all":false}')`);
+const choose = (lane: string) => ev(`(() => { const b = document.createElement("button"); b.dataset.select = ${JSON.stringify(lane)}; document.body.append(b); b.click(); b.remove(); })()`);
 const shown = (sel: string) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return !!e && !e.hidden && getComputedStyle(e).display !== "none"; })()`);
 const SIZES: [number, number][] = [[1440, 900], [390, 844]];
 // The layer of a floor: the frames hung and the agents marked, as the page says it drew them.
@@ -122,7 +124,7 @@ for (const [width, height] of SIZES) {
     await click(`.needhelp .lrow[data-select="${FACTS.stalled}"]`);
     await until(`document.querySelector(".scopechip")?.textContent === "FIN FLOOR › ${FACTS.stalled} ✕"`);
     // an agent that needs nothing: 0 NEED HELP, disabled, and pressing it moves nothing
-    await click(`#hud .ask[data-lane="fin-audit"] .tag.lane`);
+    await choose("fin-audit");
     await until(`document.querySelector(".scopechip")?.textContent === "FIN FLOOR › fin-audit ✕"`);
     await until(`document.querySelector(".needhelp .helpzero")?.textContent === "0 NEED HELP"`);
     expect(await ev(`document.querySelector(".needhelp .helpzero").disabled`)).toBe(true);
@@ -217,16 +219,16 @@ for (const [width, height] of SIZES) {
     const tagsOf = (sel: string) => ev(`[...document.querySelectorAll('${sel} .meta .tag')].map((t) => t.className.replace("tag ", "").split(" ")[0] + ":" + t.textContent)`) as Promise<string[]>;
     const tags = (lane: string) => tagsOf(`#hud .ask[data-lane="${lane}"]`);
     const pm = await tags("hq-pm");
-    expect(pm).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "room:ROOM", `key:${FACTS.release.issue}`, "pr:#12"]));
-    expect((await tags("hq-ops")).filter((t) => /^(project|room|key|pr):/.test(t))).toEqual([]);
+    expect(pm).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "roomlink:ROOM", `key:${FACTS.release.issue}`, "pr:#12"]));
+    expect((await tags("hq-ops")).filter((t) => /^(project|roomlink|key|pr):/.test(t))).toEqual([]);
     // the tag follows the question's own room: HQ's question has no lane and names release, and a lane's unnamed question shows none
     const hq = await ev(`[...document.querySelectorAll("#hud .ask")].find((a) => a.querySelector("h3").textContent === ${JSON.stringify(FACTS.hqCall)}).dataset.ask`);
-    expect(await tagsOf(`#hud .ask[data-ask="${hq}"]`)).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "room:ROOM"]));
-    expect((await tags(FACTS.unnamed[0])).filter((t) => /^(project|room):/.test(t))).toEqual([]); // a member of outbound, but the question names no room
+    expect(await tagsOf(`#hud .ask[data-ask="${hq}"]`)).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "roomlink:ROOM"]));
+    expect((await tags(FACTS.unnamed[0])).filter((t) => /^(project|roomlink):/.test(t))).toEqual([]); // a member of outbound, but the question names no room
     // the links sit in the meta row, and the question's title and options are still there
     expect(await ev(`document.querySelector('#hud .ask[data-lane="hq-pm"] h3') !== null && document.querySelectorAll('#hud .ask[data-lane="hq-pm"] .opt').length`)).toBe(2);
     // ROOM goes to the conference room; the project panel's OPEN THE ROOM does too, and the panel closes behind it
-    await click(`#hud .ask[data-lane="hq-pm"] a.tag.room`);
+    await click(`#hud .ask[data-lane="hq-pm"] a.tag.roomlink`);
     await until(`location.hash === "#room/release" && !document.getElementById("roomView").hidden`);
     await ev(`history.replaceState(null, "", location.pathname); dispatchEvent(new HashChangeEvent("hashchange"))`);
     await until(`document.getElementById("roomView").hidden`);
@@ -274,4 +276,28 @@ test.skipIf(!chromeFound)("one floor: a frame opens the project panel, and Escap
     expect(await ev(`document.querySelectorAll("#hud .ask").length`)).toBe(3);
   }
   expect(errors).toEqual([]);
+}, 60_000);
+
+// Under the arena theme a worker's name carries a rank symbol (a star, a square, ...), not pips: the layer keeps its markers
+// clear of the label's box, so the box must have a real width with either kind of mark.
+test.skipIf(!chromeFound)("arena theme: a label's box has a finite width with a symbol mark, wider than without one", async () => {
+  await general.post("/api/settings", { settings: { theme: "arena" } });
+  try {
+    await open(general.base, 1440, 900);
+        const r = (await ev(`(async () => {
+      const { floor } = await import("/src/client/room/floor.js");
+      const { labelBox } = await import("/src/client/room/scene.js");
+      const { THEMES } = await import("/src/client/room/themes.js");
+      const mark = THEMES.arena.marks.find((m) => m.symbol);
+      return { boxes: floor.labels(), symbol: !!mark, bare: labelBox("hq-pm", 100, 50, true), marked: labelBox("hq-pm", 100, 50, true, mark) };
+    })()`)) as { boxes: { x: number; y: number; w: number; h: number }[]; symbol: boolean; bare: { w: number }; marked: { w: number } };
+    expect(r.symbol).toBe(true);
+    expect(r.boxes.length).toBeGreaterThan(0);
+    for (const b of r.boxes) for (const n of [b.x, b.y, b.w, b.h]) expect(Number.isFinite(n)).toBe(true);
+    expect(Number.isFinite(r.marked.w)).toBe(true);
+    expect(r.marked.w).toBeGreaterThan(r.bare.w);
+    expect(errors).toEqual([]);
+  } finally {
+    await general.post("/api/settings", { settings: { theme: "office" } });
+  }
 }, 60_000);

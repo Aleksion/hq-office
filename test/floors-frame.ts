@@ -29,10 +29,10 @@ const MIN = 60_000;
 // Each lane's parent; a lane not listed reports straight to HQ.
 const PARENTS: Record<string, string> = {
   "chat-ope-1812": "chat-pm", "search-ope-1831": "chat-pm", "docs-ope-1822": "chat-pm", "home-ope-1799": "wf-pm", "hooks-ope-3540": "jobs-pm",
-  outb: "SALES", "outb-ope-3004": "outb", "outb-lists": "outb", mkt: "SALES",
-  books: "FINANCE", invoices: "books", runway: "FINANCE",
-  hiring: "PEOPLE", contracts: "hiring",
-  onboarding: "SUPPORT", tickets: "onboarding",
+  outb: "sales", "outb-ope-3004": "outb", "outb-lists": "outb", mkt: "sales",
+  books: "finance", invoices: "books", runway: "finance",
+  hiring: "people", contracts: "hiring",
+  onboarding: "support", tickets: "onboarding",
 };
 type Q = { id: string; floor: string; t: string; pm: string; work: string; project: string; age: number; title: string; means: string; opts: string[]; rec: number; why: string; from?: string; due?: string; back?: boolean; thread?: [string, string, string][]; bg?: string };
 const QUESTIONS = (): Q[] => [...DATA.RICH, ...DATA.EXTRA];
@@ -81,7 +81,9 @@ export function frameStubs(data: string, paneFile: string) {
   const bin = join(data, "bin");
   mkdirSync(bin);
   const lanes = frameLanes(), blocked = lanes.findIndex((l) => l.name === frameBlocked());
-  const agents = (machine: string) => JSON.stringify({ result: { agents: lanes.flatMap((l, i) => (l.machine === machine ? [{ name: l.name, agent_status: l.herdr, pane_id: `w1:p${i}`, agent: l.account === "codex" ? "codex" : "claude" }] : [])) } });
+  // HQ's own agent is on the laptop, so the page's "HQ ISN'T RECEIVING" banner stays out of the way of the room
+  const hq = { name: "hq", agent_status: "idle", pane_id: "w1:hq", agent: "claude" };
+  const agents = (machine: string) => JSON.stringify({ result: { agents: [...lanes.flatMap((l, i) => (l.machine === machine ? [{ name: l.name, agent_status: l.herdr, pane_id: `w1:p${i}`, agent: l.account === "codex" ? "codex" : "claude" }] : [])), ...(machine === "laptop" ? [hq] : [])] } });
   const script = (name: string, body: string) => {
     writeFileSync(join(bin, name), `#!/bin/sh
 ${body}`);
@@ -168,7 +170,7 @@ export async function seedFrame(post: Post, data: string, base: string) {
       recommended: opt,
       created_at: now - q.age * MIN,
       ...(q.due ? { due: dueOf(now, q.due) } : {}),
-      ...(q.from ? { from: q.from.replace(/^HANDED IN BY /, "") } : {}),
+      ...(q.from ? { from: lowered(q.from.replace(/^HANDED IN BY /, "")) } : {}),
       ...(q.t === "s" ? { secrets: ["FUND_A_SSO_CLIENT_SECRET"] } : {}),
     });
     for (const [who, , text] of q.thread ?? []) {
@@ -220,7 +222,7 @@ const SENT = [["17:31", "HQ", "Where are we with the meetings?"], ["16:40", "SAL
 // The prototype's data block, as its page evaluates it: made by running snap-f8b/floors.html's script from `const NOW` up to
 // `const SENT` and printing NOW, FLOORS, LANES, PROJECTS, RICH, EXTRA, DEFERRED, ANSWERED, ROOMS and UPDATES as JSON. Remake it
 // the same way rather than editing it by hand.
-const DATA: any = {
+const FRAME_DATA: any = {
  "NOW": 1060,
  "FLOORS": {
   "hq": {
@@ -1859,3 +1861,8 @@ const DATA: any = {
   ]
  ]
 };
+// A floor's id is its general's lane name, and the default fixture's are lower case: so are these. The label the owner sees
+// stays upper case, and the prototype's own block above stays as it was made.
+const GENERALS = new Set(["SALES", "FINANCE", "PEOPLE", "SUPPORT"]);
+const lowered = (v: any): any => (typeof v === "string" ? (GENERALS.has(v) ? v.toLowerCase() : v) : Array.isArray(v) ? v.map(lowered) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, lowered(x)])) : v);
+const DATA: any = lowered(FRAME_DATA);

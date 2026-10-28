@@ -93,7 +93,8 @@ async function openOffice(opts: { general?: boolean; frame?: boolean }, data: st
   const general = opts.general ?? true;
   const lanes: Lane[] = opts.frame ? frameLanes() : general ? [...HQ_LANES, ...GENERAL_LANES] : HQ_LANES;
   const herdr = join(data, "herdr");
-  const agents = lanes.map((l, i) => `{"name":"${l.name}","agent_status":"${l.herdr}","pane_id":"w1:p${i}","agent":"claude"}`).join(",");
+  // HQ's own agent is in herdr too, so the page's "HQ ISN'T RECEIVING" banner stays out of the way of the room
+  const agents = [...lanes.map((l, i) => `{"name":"${l.name}","agent_status":"${l.herdr}","pane_id":"w1:p${i}","agent":"claude"}`), `{"name":"hq","agent_status":"idle","pane_id":"w1:hq","agent":"claude"}`].join(",");
   const blocked = lanes.findIndex((l) => l.name === (opts.frame ? frameBlocked() : FACTS.blocked));
   writeFileSync(join(data, "pane.txt"), "│ Bash command\n│   rm -rf build\n│   Remove the build folder\n│ Do you want to proceed?\n│ ❯ 1. Yes\n│   2. No, and tell Claude what to do differently (esc)\n");
   const gh = join(data, "gh"); // a stand-in, so the work board never runs the real one

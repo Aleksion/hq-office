@@ -62,7 +62,12 @@ function flip(id, from) {
   const to = canvasRect(id);
   if (!to?.width || !from?.width || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const frames = [{ transformOrigin: "0 0", transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width})` }, { transformOrigin: "0 0", transform: "none" }];
-  for (const el of moving(id)) el.animate(frames, { duration: 380, easing: "cubic-bezier(.2,.7,.2,1)" });
+  // While it moves it takes no clicks: a floor shrinking back to its tile would otherwise cover the tiles around it.
+  for (const el of moving(id)) {
+    const done = () => { el.style.pointerEvents = ""; };
+    el.style.pointerEvents = "none";
+    el.animate(frames, { duration: 380, easing: "cubic-bezier(.2,.7,.2,1)" }).finished.then(done, done);
+  }
 }
 
 // Lay the stage out for the state and the scope: the building, a floor, or (one floor) today's room.
@@ -79,6 +84,7 @@ function apply() {
     paintLabels(S, ids);
     const at = sc.floor, from = zoomed !== undefined && at !== zoomed ? canvasRect(at ?? zoomed) : null;
     paintMode(at);
+    if (from) room().parentElement.scrollTop = 0; // the floor chosen, or the building, is seen from its top
     const box = boxes(ids, at);
     for (const [id, f] of floors) if (box[id]) f.fitTo(box[id]);
     if (from) flip(at ?? zoomed, from);

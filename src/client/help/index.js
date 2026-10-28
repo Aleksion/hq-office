@@ -13,6 +13,13 @@ strip.setAttribute("aria-label", "Need help");
 strip.hidden = true;
 document.querySelector(".stage > .under").before(strip);
 
+// What the strip takes of the page's height, with the gap above the card: on a phone FROM HQ is sized to fit one screen with the
+// room (core/layout.css), so help.css takes the strip's share from it.
+new ResizeObserver(() => {
+  const gap = parseFloat(getComputedStyle(strip.parentElement).rowGap) || 0;
+  document.documentElement.style.setProperty("--help-h", strip.hidden ? "0px" : `${strip.offsetHeight + gap}px`);
+}).observe(strip);
+
 function render() {
   if (!S) return;
   strip.hidden = false;
