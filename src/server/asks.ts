@@ -1,17 +1,22 @@
 // Asks: HQ's questions, and answering them.
 import { checkMinutes, checkName, checkValue } from "./secrets.ts";
+import { expiresText } from "../client/secrets/expiry.js";
 import { OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import type { Ask } from "./types.ts";
 import { secrets } from "./push.ts";
 import { event } from "./events.ts";
-import { notifyHq } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
+import { commentAsk } from "./ledger.ts";
+import { floorOr, laneFloor } from "./floors.ts";
 
-export function createAsk(body: any) {
+// On its lane's floor, else the caller's (the first floor when no caller is known).
+export function createAsk(body: any, callerFloor?: string) {
   if (!body.title) throw new Error("title is required");
+  const floor = laneFloor(body.lane) ?? floorOr(callerFloor);
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const res = db
-    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, floor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .run(
       body.lane ?? null,
       body.kind ?? "decision",
@@ -23,8 +28,9 @@ export function createAsk(body: any) {
       body.due ?? null,
       body.created_at ?? Date.now(),
       wanted.length ? JSON.stringify(wanted) : null,
+      floor,
     );
-  event("hq", `asked: ${body.title}`, body.lane);
+  event("hq", `asked: ${body.title}`, body.lane, floor);
   return Number(res.lastInsertRowid);
 }
 
@@ -33,8 +39,8 @@ export function answerAsk(id: number, answer: string) {
   if (!ask) throw new Error(`no ask ${id}`);
   if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
   db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ? WHERE id = ?").run(answer, Date.now(), id);
-  event(OWNER, `answered "${ask.title}": ${answer}`, ask.lane);
-  notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`);
+  event(OWNER, `answered "${ask.title}": ${answer}`, ask.lane, ask.floor);
+  notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`, `ask:${id}`, ask.floor);
 }
 
 // An ask that requests secrets is answered with their values: each one goes to the secret store, and the
@@ -53,7 +59,26 @@ export function answerWithSecrets(id: number, body: any) {
       throw new Error(`${name}: ${(e as Error).message}`);
     }
   });
-  wanted.forEach((name, i) => secrets.set(name, values[i], minutes, "owner"));
+  const set = wanted.map((name, i) => secrets.set(name, values[i], minutes, "owner"));
   const note = String(body.note ?? "").trim();
-  answerAsk(id, `secrets set: ${wanted.join(", ")}, readable for ${minutes} min with: hud secret get NAME | <command>${note ? `. ${note}` : ""}`);
+  answerAsk(id, `secrets set: ${wanted.join(", ")}, ${expiresText(set[0].expiresAt)}; read with: hud secret get NAME | <command>${note ? `. ${note}` : ""}`);
+}
+
+// NOT YET on something the owner must do: it stays open (the owner is still the one it waits on), HQ hears it at
+// once, and a line on the card says it, with the owner's note.
+export function notYet(id: number, note: unknown) {
+  const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
+  if (!ask) throw new Error(`no ask ${id}`);
+  if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
+  const n = String(note ?? "").trim();
+  commentAsk(id, `${OWNER}: not yet${n ? `. ${n}` : ""}`);
+  event(OWNER, `not yet on "${ask.title}"${n ? `: ${n}` : ""}`, ask.lane, ask.floor);
+  notifyHq(`HUD not yet #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}"${n ? ` -> ${n}` : ""}`, `notyet:${id}`, ask.floor);
+}
+
+// hud ack: an HQ acks what is on its own floor; another floor's needs --all.
+export function checkScope(kind: "ask" | "note", id: number, caller: { floor: string; all: boolean }) {
+  const row = db.query(`SELECT floor FROM ${kind === "ask" ? "asks" : "notes"} WHERE id = ?`).get(id) as { floor: string | null } | null;
+  if (!row || caller.all || !row.floor || row.floor === caller.floor) return;
+  throw new Error(`${kind === "ask" ? "answer" : "note"} ${id} is on floor ${row.floor}, not yours (${caller.floor}); its HQ acks it, or use --all`);
 }

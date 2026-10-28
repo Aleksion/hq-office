@@ -15,3 +15,30 @@ if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c)
 if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) => c.name === "secrets")) db.exec("ALTER TABLE asks ADD COLUMN secrets TEXT");
 // The lane a lane reports to; empty means straight under HQ. Depth is computed from the chain, never stored.
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "parent")) db.exec("ALTER TABLE lanes ADD COLUMN parent TEXT");
+// blocked-prompts: the excerpt of the prompt a lane's agent waits on in herdr (null when none); see prompt.ts.
+if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "prompt")) db.exec("ALTER TABLE lanes ADD COLUMN prompt TEXT");
+// A level set by hand (`hud lane NAME --level L`), over the one the tree gives; empty: the tree decides.
+if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "level")) db.exec("ALTER TABLE lanes ADD COLUMN level TEXT");
+// Delivery to HQ, confirmed (HQ started working on it) or typed in mid-turn and sent once more (hq-link.ts).
+// Rows from before it count as confirmed: an upgrade never replays the past.
+for (const [col, type] of [["confirmed_at", "INTEGER"], ["resend", "INTEGER NOT NULL DEFAULT 0"]]) {
+  if ((db.query("PRAGMA table_info(hq_outbox)").all() as { name: string }[]).some((c) => c.name === col)) continue;
+  db.exec(`ALTER TABLE hq_outbox ADD COLUMN ${col} ${type}`);
+  if (col === "confirmed_at") db.exec("UPDATE hq_outbox SET confirmed_at = COALESCE(sent_at, at)");
+}
+// FLOORS (floors.ts). A database from before floors gets its first floor here: "hq" / "HQ", or named by
+// HUD_FLOOR_NAME, with HUD_HQ_AGENT as its HQ and the pane HQ was last seen in. Every existing row is put on it, so
+// one floor is exactly what there was before.
+if (!db.query("SELECT 1 FROM floors LIMIT 1").get()) {
+  const name = (process.env.HUD_FLOOR_NAME ?? "").trim() || "HQ";
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "hq";
+  const last = db.query("SELECT pane, seen_at FROM hq_link WHERE id = 1").get() as { pane: string; seen_at: number } | null;
+  db.query("INSERT INTO floors (id, name, color, hq, position, created_at, hq_pane, hq_seen_at) VALUES (?, ?, ?, NULL, 0, ?, ?, ?)").run(id, name, "#e0b040", Date.now(), last?.pane ?? null, last?.seen_at ?? null);
+}
+const firstFloorId = (db.query("SELECT id FROM floors ORDER BY position, created_at LIMIT 1").get() as { id: string }).id;
+// The work_items table is the board's own (board.ts adds its floor column the same way).
+for (const table of ["lanes", "asks", "updates", "notes", "rooms", "hq_outbox", "events"]) {
+  if ((db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === "floor")) continue;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN floor TEXT`);
+  db.query(`UPDATE ${table} SET floor = ?`).run(firstFloorId);
+}

@@ -7,8 +7,16 @@ import { on } from "../core/bus.js";
 import { COUCH, DONE_SPOT, HQ_SPOT, QUEUE, SEATS, WAIT_SPOT, slot } from "./spots.js";
 import { rebuildBlocked, route } from "./collision.js";
 import { isIdle } from "./breakroom.js";
+import { multi } from "../core/floors.js";
+import { officeFloor } from "../core/scope.js";
 
 export const workers = new Map(); // name -> { x, y, path, dir, step, t, lane, seat, pal, bob }
+// With floors the office is the floor you are in: its lanes only, and none while the building shows (docs/floors.md).
+export function officeLanes() {
+  if (!multi(S)) return S.lanes;
+  const f = officeFloor();
+  return f ? S.lanes.filter((l) => l.floor === f) : [];
+}
 
 function targetFor(lane, i, counts) {
   const st = lane.status;
@@ -21,7 +29,7 @@ function targetFor(lane, i, counts) {
 }
 
 export function syncWorkers(initial) {
-  const lanes = S.lanes;
+  const lanes = officeLanes();
   const names = new Set(lanes.map((l) => l.name));
   for (const n of [...workers.keys()]) if (!names.has(n)) workers.delete(n);
   rebuildBlocked(lanes.length);
@@ -56,5 +64,6 @@ export function syncWorkers(initial) {
 // The theme changed: dress again (the room wakes on "settings" itself).
 on("settings", () => {
   if (!S) return;
-  dressWorkers(workers, S.lanes, settings.theme, new Map([...S.lanes].sort((a, b) => a.name.localeCompare(b.name)).map((l, i) => [l.name, i])));
+  const lanes = officeLanes();
+  dressWorkers(workers, lanes, settings.theme, new Map([...lanes].sort((a, b) => a.name.localeCompare(b.name)).map((l, i) => [l.name, i])));
 });

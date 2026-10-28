@@ -39,10 +39,14 @@ beforeAll(async () => {
   await server.post("/api/sync", {});
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  // Web fonts load in real time: in a busy full run one can land late and repaint the room (an extra frame).
+  // Block them, as the pixel harness does, and wait for any font loading to settle below.
+  await page.s("Network.setBlockedURLs", { urls: ["*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
   await page.s("Page.addScriptToEvaluateOnNewDocument", { source: FREEZE });
   await page.s("Page.addScriptToEvaluateOnNewDocument", { source: COUNT });
   await page.s("Page.navigate", { url: `${server.base}/?season=spring#t=${DAY}` });
   for (let i = 0; i < 300 && !(await page.evaluate("!!window.__hq && window.__hq.ready()").catch(() => false)); i++) await Bun.sleep(50);
+  await page.evaluate("document.fonts.ready.then(() => true)");
   await page.evaluate("__hq.advance(20)"); // the first frames: state, fonts
 }, 30_000);
 

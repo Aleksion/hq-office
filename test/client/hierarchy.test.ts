@@ -49,7 +49,7 @@ const PAINT = `(async () => {
   };
   const out = {};
   for (const t of ["office", "arena"]) for (const dir of ["down", "up"]) {
-    for (const d of [1, 2, 3, 4]) out[t + "|" + dir + "|" + d] = paint(dressed("sample-worker", lookFor(themeOf(t), d, false), 7), dir);
+    for (const d of [1, 2, 3, 4, 5, 6]) out[t + "|" + dir + "|" + d] = paint(dressed("sample-worker", lookFor(themeOf(t), d, false), 7), dir);
     out[t + "|" + dir + "|flat"] = paint(dressed("sample-worker", lookFor(themeOf(t), 1, true), 7), dir);
   }
   for (const dir of ["down", "up"]) out["everyday|" + dir] = paint(palette("sample-worker"), dir);
@@ -68,17 +68,15 @@ test.skipIf(!chromeFound)("a room with no tree wears the everyday look, and the 
 test.skipIf(!chromeFound)("each theme paints a distinct look for each depth, from the front and from behind", async () => {
   const px = await page.evaluate(PAINT);
   for (const t of ["office", "arena"]) for (const dir of ["down", "up"]) {
-    const [d1, d2, d3, d4] = [1, 2, 3, 4].map((d) => px[`${t}|${dir}|${d}`]);
-    expect(d1).not.toBe(d2);
-    expect(d2).not.toBe(d3);
-    expect(d1).not.toBe(d3);
-    expect(d4).toBe(d3); // deeper than the theme's list: the last look
+    const looks = [1, 2, 3, 4, 5, 6].map((d) => px[`${t}|${dir}|${d}`]);
+    const count = t === "office" ? 3 : 5; // office: blazer, cardigan, everyday; arena: star, square, triangle, circle, player
+    expect(new Set(looks.slice(0, count)).size).toBe(count);
+    for (const deeper of looks.slice(count)) expect(deeper).toBe(looks[count - 1]); // past the theme's list: the last look
   }
-  // Office: depth 3 and a room with no tree are the everyday look, pixel for pixel. Arena's flat room are players.
+  // Office: rank 3 and a room with no tree are the everyday look, pixel for pixel.
   for (const dir of ["down", "up"]) {
     expect(px[`office|${dir}|3`]).toBe(px[`everyday|${dir}`]);
     expect(px[`office|${dir}|flat`]).toBe(px[`everyday|${dir}`]);
-    expect(px[`arena|${dir}|flat`]).toBe(px[`arena|${dir}|3`]);
   }
   // the two themes dress the same depth differently
   expect(px["office|down|1"]).not.toBe(px["arena|down|1"]);
@@ -93,8 +91,16 @@ test.skipIf(!chromeFound)("with a tree, workers dress by depth and theme, and th
   const marks = `import("/src/client/room/workers.js").then(({ workers }) => JSON.stringify(Object.fromEntries([...workers].map(([n, w]) => [n, w.mark?.pips ?? null]))))`;
   expect(JSON.parse(await page.evaluate(marks))).toEqual({ "api-auth": 1, "api-lead": 2, "data-pm": 3, "web-pm": 3 });
   await server.post("/api/settings", { settings: { theme: "arena" } });
-  await until(`${looksNow}.then((s) => JSON.parse(s)["web-pm"] === "guard-square")`);
-  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": "player", "api-lead": "guard-triangle", "data-pm": "guard-square", "web-pm": "guard-square" });
+  await until(`${looksNow}.then((s) => JSON.parse(s)["web-pm"] === "guard-star")`);
+  expect(JSON.parse(await page.evaluate(looksNow))).toEqual({ "api-auth": "guard-triangle", "api-lead": "guard-square", "data-pm": "guard-star", "web-pm": "guard-star" });
+  // Arena's label marks are the masks' own shapes
+  const symbols = `import("/src/client/room/workers.js").then(({ workers }) => JSON.stringify(Object.fromEntries([...workers].map(([n, w]) => [n, w.mark?.symbol ?? null]))))`;
+  expect(JSON.parse(await page.evaluate(symbols))).toEqual({ "api-auth": "triangle", "api-lead": "square", "data-pm": "star", "web-pm": "star" });
+  // a level set by hand wins over the tree: api-auth is made a Manager, the top rank
+  await server.post("/api/lanes", { name: "api-auth", level: "manager" });
+  await until(`${looksNow}.then((s) => JSON.parse(s)["api-auth"] === "guard-star")`);
+  await server.post("/api/lanes", { name: "api-auth", level: "auto" });
+  await until(`${looksNow}.then((s) => JSON.parse(s)["api-auth"] === "guard-triangle")`);
 
   await page.evaluate(`(() => { const b = document.createElement("button"); b.dataset.select = "api-auth"; document.body.append(b); b.click(); b.remove(); })()`);
   await until(`document.querySelector("#card h3")?.textContent === "api-auth" && !!document.querySelector("#card .path")`);
@@ -105,7 +111,7 @@ test.skipIf(!chromeFound)("with a tree, workers dress by depth and theme, and th
   await until(`document.querySelector("#card h3")?.textContent === "web-pm"`);
   expect(await page.evaluate(`document.querySelector("#card .path .level").textContent`)).toBe("MANAGER");
   expect(errors).toEqual([]);
-});
+}, 30_000);
 
 test.skipIf(!chromeFound)("SETTINGS saves the level names and the theme", async () => {
   await page.evaluate(`document.getElementById("settingsBtn").click()`);

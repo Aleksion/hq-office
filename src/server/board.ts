@@ -15,10 +15,12 @@ const DONE_SHOWN_MS = 24 * 3600_000;
 const GH_TIMEOUT_MS = 20_000;
 const GH_FIELDS = "state,isDraft,statusCheckRollup,mergedAt,closedAt,updatedAt";
 
-export type BoardState = "done" | "owner" | "ci" | "paused" | "moving" | "stalled";
+export type BoardState = "done" | "blocked" | "owner" | "ci" | "paused" | "moving" | "stalled";
 // Most urgent first: the order of the board, top to bottom.
-export const STATE_ORDER: BoardState[] = ["stalled", "owner", "ci", "moving", "paused", "done"];
+// BLOCKED ON A PROMPT tops it: the lane's agent waits at a prompt in its pane, and nothing moves until it is answered.
+export const STATE_ORDER: BoardState[] = ["blocked", "stalled", "owner", "ci", "moving", "paused", "done"];
 export const STATE_LABEL: Record<BoardState, string> = {
+  blocked: "BLOCKED ON A PROMPT",
   stalled: "STALLED",
   owner: "WAITING ON OWNER",
   ci: "WAITING ON CI",
@@ -106,6 +108,8 @@ export function createBoard(opts: {
   repo?: string;
   onChange?: () => void;
   event?: (who: string, text: string, lane?: string | null) => void;
+  // The floor of an item with no lane and none stored (FLOORS; see floors.ts). An item is on its lane's floor.
+  firstFloor?: () => string | null;
 }) {
   const { db } = opts;
   const gh = opts.gh ?? ghCli();
@@ -127,6 +131,9 @@ export function createBoard(opts: {
   `);
   // Tracking an item again reopens it: PRs that ended before then no longer count towards done.
   if (!(db.query("PRAGMA table_info(work_items)").all() as { name: string }[]).some((c) => c.name === "reopened_at")) db.exec("ALTER TABLE work_items ADD COLUMN reopened_at INTEGER");
+  // FLOORS: the floor an item was filed on; its lane's floor wins when it has a lane.
+  if (!(db.query("PRAGMA table_info(work_items)").all() as { name: string }[]).some((c) => c.name === "floor")) db.exec("ALTER TABLE work_items ADD COLUMN floor TEXT");
+  const firstFloor = opts.firstFloor ?? (() => null);
 
   const cache = new Map<string, PrFact>();
   const inflight = new Map<string, Promise<void>>();
@@ -167,7 +174,7 @@ export function createBoard(opts: {
     if (!issue) throw new Error("issue is required");
     const lane = body.lane ? String(body.lane) : null;
     const existing = getItem(issue);
-    if (!existing) db.query("INSERT INTO work_items (issue, lane, created_at) VALUES (?, ?, ?)").run(issue, lane, now());
+    if (!existing) db.query("INSERT INTO work_items (issue, lane, created_at, floor) VALUES (?, ?, ?, ?)").run(issue, lane, now(), body.floor ?? null);
     else {
       // Tracking again reopens it, even when its PRs have all ended (a new PR is coming).
       db.query("UPDATE work_items SET lane = COALESCE(?, lane), done_at = NULL, reopened_at = ? WHERE issue = ?").run(lane, now(), issue);
@@ -202,11 +209,11 @@ export function createBoard(opts: {
   // `hud lane NAME --issue X --pr N`: the lane's issue becomes a tracked item owned by that lane, with those PRs.
   function linkLane(body: any) {
     if (!body?.name || (body.issue === undefined && body.pr === undefined)) return;
-    const lane = db.query("SELECT issue, pr FROM lanes WHERE name = ?").get(body.name) as any;
+    const lane = db.query("SELECT * FROM lanes WHERE name = ?").get(body.name) as any;
     const issues = splitList(body.issue ?? lane?.issue).map(normIssue);
     if (!issues.length) return;
     for (const issue of issues) {
-      if (!getItem(issue)) db.query("INSERT INTO work_items (issue, lane, created_at) VALUES (?, ?, ?)").run(issue, body.name, now());
+      if (!getItem(issue)) db.query("INSERT INTO work_items (issue, lane, created_at, floor) VALUES (?, ?, ?, ?)").run(issue, body.name, now(), lane?.floor ?? null);
       else db.query("UPDATE work_items SET lane = ? WHERE issue = ?").run(body.name, issue);
     }
     const prs = splitList(body.pr).filter((p) => parsePr(p, repo));
@@ -311,11 +318,21 @@ export function createBoard(opts: {
 
   // ---- derived view ----
 
-  function view() {
+  // Every floor's items, or one floor's ({ floor }).
+  function view(scope: { floor?: string | null } = {}) {
     const t = now();
     const lanes = new Map((db.query("SELECT * FROM lanes").all() as any[]).map((l) => [l.name, l]));
     const asks = db.query("SELECT id, lane, title, body, status, created_at, answered_at FROM asks WHERE status != 'withdrawn'").all() as any[];
-    const items = rows().map((it) => {
+    const all = rows();
+    // An ask names an item by its issue key or one of its PR numbers, in the title or the body.
+    const prNums = (it: any) => it.prs.map((k: string) => parsePr(k, repo)?.number).filter(Boolean) as number[];
+    const namesItem = (a: any, it: any) => {
+      const text = `${a.title ?? ""}\n${a.body ?? ""}`;
+      if (text.toUpperCase().includes(it.issue)) return true;
+      return prNums(it).some((n) => new RegExp(`(^|[^\\w])#?${n}(?![\\w])`).test(text));
+    };
+    const named = new Map(asks.map((a) => [a.id, new Set(all.filter((it) => namesItem(a, it)).map((it) => it.issue))]));
+    const items = all.map((it) => {
       const prs = it.prs.map((k: string) => {
         const c = cache.get(k);
         return {
@@ -330,16 +347,14 @@ export function createBoard(opts: {
           error: c?.error ?? null,
         };
       });
-      const nums = prs.map((p: any) => p.number).filter(Boolean);
-      const names = (a: any) => {
-        if (it.lane && a.lane === it.lane) return true;
-        const text = `${a.title ?? ""}\n${a.body ?? ""}`;
-        if (text.toUpperCase().includes(it.issue)) return true;
-        return nums.some((n: number) => new RegExp(`(^|[^\\w])#?${n}(?![\\w])`).test(text));
-      };
-      const myAsks = asks.filter(names);
-      const openAsks = myAsks.filter((a) => a.status === "open");
       const lane = it.lane ? lanes.get(it.lane) : null;
+      const working = lane?.herdr === "working" || !!lane?.bg;
+      // An ask is this item's when it names the item, or when it sits on the item's lane and names no tracked item
+      // at all (a question about the lane). One that names another item belongs to that item, even on this lane.
+      const laneAsk = (a: any) => !!it.lane && a.lane === it.lane && !named.get(a.id)!.size;
+      const myAsks = asks.filter((a) => named.get(a.id)!.has(it.issue) || laneAsk(a));
+      // A lane's question holds its work only while the lane is not working: a lane can have both at once.
+      const openAsks = myAsks.filter((a) => a.status === "open" && (named.get(a.id)!.has(it.issue) || !working));
 
       // What last happened: PR update, CI change, lane status change, ask, or a note on the lane.
       const happened: Happened[] = [];
@@ -368,16 +383,20 @@ export function createBoard(opts: {
       if (it.done_at || ended) {
         state = "done";
         why = it.done_at ? "closed by HQ" : "all PRs merged or closed";
+      } else if (lane?.prompt) {
+        state = "blocked";
+        why = lane.prompt.split("\n").join(" / ");
       } else if (openAsks.length) {
         state = "owner";
-        why = `ask #${openAsks[0].id}: ${openAsks[0].title}`;
+        const a = openAsks.find((x) => named.get(x.id)!.has(it.issue)) ?? openAsks[0];
+        why = `ask #${a.id}: ${a.title}`;
       } else if (prs.some((p: any) => p.state === "OPEN" && p.ci === "running")) {
         state = "ci";
         why = "a check is running";
       } else if (it.paused_reason) {
         state = "paused";
         why = it.paused_reason;
-      } else if (lane?.herdr === "working" || lane?.bg) {
+      } else if (working) {
         state = "moving";
         why = lane?.bg ? `lane is working (${lane.bg})` : "lane is working";
       } else if (lastMove && t - lastMove.at < STALL_MS) {
@@ -391,9 +410,12 @@ export function createBoard(opts: {
       return {
         issue: it.issue,
         lane: it.lane,
+        floor: (lane?.floor ?? it.floor ?? firstFloor()) as string | null,
         // The lane its lane reports to (null: HQ), so the board can group work under its managers.
         manager: lane?.parent && lanes.has(lane.parent) ? (lane.parent as string) : null,
         laneStatus: lane?.herdr ?? null,
+        // Where the prompt waits, so someone can go and answer it.
+        where: state === "blocked" ? { machine: lane?.machine ?? null, pane: lane?.pane ?? null } : null,
         prs,
         state,
         why,
@@ -405,11 +427,17 @@ export function createBoard(opts: {
         doneAt,
       };
     });
-    const shown = items.filter((i) => i.state !== "done" || t - (i.doneAt ?? t) < DONE_SHOWN_MS);
+    const onFloor = (f: string | null | undefined) => !scope.floor || f === scope.floor;
+    const shown = items.filter((i) => (i.state !== "done" || t - (i.doneAt ?? t) < DONE_SHOWN_MS) && onFloor(i.floor));
     // Within a state, the oldest last change first.
     shown.sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || (a.last?.at ?? 0) - (b.last?.at ?? 0));
     const counts = Object.fromEntries(STATE_ORDER.map((s) => [s, shown.filter((i) => i.state === s).length])) as Record<BoardState, number>;
-    return { now: t, stallMs: STALL_MS, counts, items: shown };
+    // Lanes blocked on a prompt with no open tracked item: `hud board` lists them too, so no block goes unseen.
+    const covered = new Set(shown.filter((i) => i.state === "blocked").map((i) => i.lane));
+    const blockedLanes = [...lanes.values()]
+      .filter((l) => l.prompt && !covered.has(l.name) && onFloor(l.floor ?? firstFloor()))
+      .map((l) => ({ lane: l.name as string, machine: (l.machine ?? null) as string | null, pane: (l.pane ?? null) as string | null, prompt: l.prompt as string }));
+    return { now: t, stallMs: STALL_MS, counts, items: shown, blockedLanes };
   }
 
   return { track, done, pause, resume, linkLane, refresh, view, syncTimer, stop, follow, onFacts, fact };
@@ -428,13 +456,17 @@ function ago(ms: number) {
 // `owner` names the person who answers asks (HUD_OWNER), in place of OWNER.
 export function boardText(v: ReturnType<ReturnType<typeof createBoard>["view"]>, owner = "") {
   const label = (s: BoardState) => (s === "owner" && owner ? `WAITING ON ${owner.toUpperCase()}` : STATE_LABEL[s]);
-  if (!v.items.length) return "WORK BOARD: nothing tracked. Add work with: hud track ISSUE --lane L --pr N";
+  const where = (machine: string | null, pane: string | null) => (machine || pane ? ` (${[machine, pane].filter(Boolean).join(", ")})` : "");
+  // Lanes blocked on a prompt that no tracked item covers come first, before the board itself.
+  const loose = (v.blockedLanes ?? []).map((b) => `  lane ${b.lane}${where(b.machine, b.pane)}  ${b.prompt.split("\n").join(" / ")}`);
+  const looseHead = loose.length ? [`${STATE_LABEL.blocked} (answer in the pane)`, ...loose] : [];
+  if (!v.items.length) return [...looseHead, ...(loose.length ? [""] : []), "WORK BOARD: nothing tracked. Add work with: hud track ISSUE --lane L --pr N"].join("\n");
   const head = `WORK BOARD: ${STATE_ORDER.filter((s) => v.counts[s]).map((s) => `${v.counts[s]} ${label(s).toLowerCase()}`).join(", ")}`;
-  const out = [head];
+  const out = [...looseHead, ...(loose.length ? [""] : []), head];
   for (const s of STATE_ORDER) {
     const its = v.items.filter((i) => i.state === s);
     if (!its.length) continue;
-    out.push("", `${label(s)}${s === "stalled" ? " (push these)" : ""}`);
+    out.push("", `${label(s)}${s === "stalled" ? " (push these)" : s === "blocked" ? " (answer in the pane)" : ""}`);
     // With lanes in a tree, the work in each state is grouped under the lane its lane reports to (in the order
     // of its oldest item), so a manager sees its reports' work together.
     const grouped = v.items.some((i) => i.manager);
@@ -449,7 +481,8 @@ export function boardText(v: ReturnType<ReturnType<typeof createBoard>["view"]>,
       for (const i of list) {
         const prs = i.prs.map((p) => `#${p.number}${p.draft ? " draft" : ""}${p.state && p.state !== "OPEN" ? ` ${p.state.toLowerCase()}` : ""}${p.ci && p.ci !== "none" && p.state === "OPEN" ? ` ci ${p.ci}` : ""}${p.error ? ` (gh: ${p.error})` : ""}`).join(", ");
         const last = i.last ? `last: ${i.last.what} (${ago(i.last.age)})` : "last: nothing yet";
-        out.push(`${grouped ? "    " : "  "}${i.issue}  lane ${i.lane ?? "-"}${i.laneStatus ? ` (${i.laneStatus})` : ""}  PR ${prs || "-"}  ${s === "paused" || s === "owner" ? `${i.why}  ` : ""}${last}`);
+        const lane = s === "blocked" && i.where ? where(i.where.machine, i.where.pane) : i.laneStatus ? ` (${i.laneStatus})` : "";
+        out.push(`${grouped ? "    " : "  "}${i.issue}  lane ${i.lane ?? "-"}${lane}  PR ${prs || "-"}  ${s === "paused" || s === "owner" || s === "blocked" ? `${i.why}  ` : ""}${last}`);
       }
     }
   }

@@ -5,8 +5,8 @@ import { board } from "../work-board.ts";
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
-  { method: "POST", path: "/api/lanes", handle: ({ body }) => {
-    upsertLane(body);
+  { method: "POST", path: "/api/lanes", handle: ({ body, caller }) => {
+    upsertLane(body, caller());
     board.linkLane(body);
   } },
   { method: "POST", path: "/api/lanes/delete", handle: ({ body }) => {

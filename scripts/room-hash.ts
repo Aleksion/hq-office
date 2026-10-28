@@ -224,8 +224,8 @@ export async function spawnServer(opts: { cwd: string; env: Record<string, strin
 export async function startServer(dir: string, extraEnv: Record<string, string> = {}) {
   const data = mkdtempSync(join(tmpdir(), "hq-office-pixels-"));
   const herdr = join(data, "herdr");
-  // A herdr that knows two agents: one working, one idle. Everything else it is asked succeeds quietly.
-  writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[{"name":"golf","agent_status":"working","pane_id":"p1","agent":"claude"},{"name":"alpha","agent_status":"idle","pane_id":"p2","agent":"claude"}]}}' ;;\n  *) exit 0 ;;\nesac\n`);
+  // A herdr that knows HQ and two agents: one working, one idle. Everything else it is asked succeeds quietly.
+  writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[{"name":"hq","agent_status":"idle","pane_id":"p0","agent":"claude"},{"name":"golf","agent_status":"working","pane_id":"p1","agent":"claude"},{"name":"alpha","agent_status":"idle","pane_id":"p2","agent":"claude"}]}}' ;;\n  *) exit 0 ;;\nesac\n`);
   chmodSync(herdr, 0o755);
   // PIXEL_OWNER names the owner on both sides, for a base whose default hero carried a fixed name instead of HUD_OWNER.
   const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_OWNER: process.env.PIXEL_OWNER || "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", ...extraEnv };
@@ -313,6 +313,8 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     await evaluate(`document.querySelector('[data-set="performance"]')?.closest(".srow").remove()`);
     // The LEVEL NAMES and LEVEL THEME rows are new in the lane tree's release; left out the same way.
     await evaluate(`document.querySelector("[data-levels]")?.remove(); document.querySelector('[data-set="theme"]')?.closest(".srow").remove()`);
+    // The FLOORS section is new with floors' page (where a second floor is added); left out the same way.
+    await evaluate(`document.querySelector("#settings [data-floors]")?.remove()`);
     styles["1440x900 settings open"] = await evaluate(STYLE_HASH);
     await evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
     styles["1440x900 messages tab"] = await evaluate(STYLE_HASH);
@@ -389,7 +391,7 @@ export async function newSession(cdp: Cdp, errors: string[]) {
 
 export async function treeOf(ref: string, repo: string) {
   const dir = mkdtempSync(join(tmpdir(), "hq-office-ref-"));
-  const archive = Bun.spawnSync(["git", "-C", repo, "archive", ref], { stdout: "pipe" });
+  const archive = Bun.spawnSync(["git", "-C", repo, "archive", ref], { stdout: "pipe", timeout: 60_000 });
   if (archive.exitCode !== 0) throw new Error(`git archive ${ref} failed`);
   Bun.spawnSync(["tar", "-x", "-C", dir], { stdin: archive.stdout });
   return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };

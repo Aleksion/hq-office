@@ -3,7 +3,374 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.19.0] - 2026-10-28
+
+### Added
+
+- **Floors: one HQ per domain.** One HQ agent can only direct so many lanes. A floor is one HQ agent and everything
+  it runs, so you can run several HQs side by side: one for the frontend, one for the backend, one for legal.
+  - Everything you have today becomes the first floor, and one floor works exactly as before. Name it with
+    `HUD_FLOOR_NAME` (default `HQ`).
+  - Add a floor with `hud floor add ID --hq AGENT [--name N] [--color #hex]`, where AGENT is that HQ's name in herdr.
+    `hud floor list` shows each floor's HQ, whether it is receiving, its lanes and how many questions wait on you;
+    `hud floor set ID` changes one; `hud floor rm ID` removes an empty one.
+  - An HQ needs no setup: when it runs `hud`, the HUD recognises its herdr pane and files its questions, updates,
+    lanes, rooms and board items on its floor. A lane belongs to the floor of whoever registered it, or of its
+    parent; `hud lane NAME --floor ID` moves it, with every lane under it.
+  - Your answers, NOT YETs and notes reach the HQ of the right floor only. A lane blocked on a prompt is reported to
+    its own floor's HQ. A secret you set is shared: every floor's HQ hears of it.
+  - Each HQ reads its own floor: `hud inbox`, `hud wait`, `hud ack`, `hud board`, `hud tree` and `hud room list`
+    show that floor only, and `--all` shows every floor.
+  - Each floor has its own "HQ isn't receiving" check, its own held messages and its own sweep nudge, about its own
+    floor only.
+  - One HQ can reach another floor's HQ: `hud floor tell FLOOR TEXT`.
+- **Floors on the page.** With one floor the page is exactly as before. Add a second floor and the office becomes a
+  building:
+  - **THE BUILDING** shows one tile per floor, in its colour, with its HQ and how many questions need you, lanes are
+    blocked, lanes are working and lanes it has. A red mark says when that floor's HQ isn't receiving. Click a tile to
+    go in.
+  - **Inside a floor** the office shows that floor's lanes, with its HQ at the terminal, under ◀ BUILDING and the
+    floor's name. Esc takes you back out.
+  - NEEDS YOU, MESSAGES, WORK, ROOMS, FROM HQ and SENT & ANSWERED, and their counts, follow the floor you are in. A
+    line at the top says how many wait on other floors; click it to SHOW ALL. In the building, and with SHOW ALL, every
+    card carries its floor's name and colour. WAITING ON YOU at the top always counts every floor.
+  - Opening MESSAGES or MARK ALL READ inside a floor marks only that floor's messages read.
+  - TELL HQ goes to the HQ of the floor you are in, and says which (`Tell HQ (Backend)…`). In the building, or with
+    SHOW ALL, pick the floor beside SEND; it remembers the last one. A reply in MESSAGES goes to the HQ that wrote.
+  - The "HQ isn't receiving" strip is about the floor you are in; in the building it lists every floor whose HQ isn't.
+  - **SETTINGS · FLOORS** adds a floor (a name, its HQ from herdr's agents or typed, a colour), renames it, recolours
+    it, gives it another HQ, and removes an empty one after asking in the page.
+  - SECRETS stay shared by every floor.
+
+## [0.18.0] - 2026-10-28
+
+### Added
+
+- **Files as well as images, on every send box.** Tell HQ, the answer on a NEEDS YOU card, a reply in MESSAGES and
+  a room's send box now take files too.
+  - Drop them on the box or anywhere on its panel or card, paste them into the box, or pick them with the attach
+    button (on a phone it offers photos and files). The box lights up while files are over it.
+  - A drop anywhere else on the page does nothing, and never opens the file in place of the page.
+  - Each file shows in the box as a chip with its name and size and a × to remove it; images keep their thumbnail.
+  - Allowed: pdf, txt, md, csv, tsv, json, log, yaml, yml, xml, zip, gz, tar, docx, xlsx, pptx, mp4, mov, webm,
+    mp3, wav and m4a. Anything else (html, svg, js, sh, exe, dmg, pkg, app...) is refused with a one-line reason in
+    the box.
+  - Limits: 25 MB per file, 10 attachments per message. Images are as before: shrunk in the browser to at most
+    2048 px, 10 MB at most.
+  - When you send, each file is added to your text as `[file: /path]`, the full path on the HUD's machine, as images
+    are with `[image: /path]`. HQ and lanes get it in their terminal, in `hud inbox` and in `hud room read`.
+  - Sent messages show a file as a link with its name.
+  - Files stay on this machine: in the data directory's `uploads/`, or in a room's `files/` (so they show on its
+    shelf). They keep their own name, with `-2`, `-3` added when it is taken.
+  - Files open sandboxed: images and video show in the browser; everything else downloads.
+
+## [0.17.0] - 2026-10-28
+
+### Added
+
+- **Everyday gadgets.** Each worker in the office has a habit: a coffee mug, a water bottle, a donut or a big
+  tumbler with a handle and a straw.
+  - While a worker sits at its desk, the gadget stands on the desk beside the monitor.
+  - Standing or walking, the worker holds it.
+  - About once a minute it takes a sip or a bite. At the desk it lifts the gadget to its hand, then puts it back.
+  - Now and then it brings something else for a couple of hours, or nothing at all.
+  - A worker holding a seasonal item carries the gadget in its other hand.
+  - Gadgets work in both themes and never cover a status bubble, a name label, a mask's mark or a player's number.
+  - Your hero and HQ hold none.
+  - Sips add no frames: POWER SAVER shows none.
+
+### Fixed
+
+- `hud room brief SLUG` (and other commands that can read text piped in) no longer waits forever when stdin is left
+  open but silent, as an agent's tool or a background job may leave it. With no input within a second it counts as
+  nothing given, and the brief is printed.
+
+## [0.16.2] - 2026-10-28
+
+### Fixed
+
+- **No more backlog replays.** 0.16.1 treated every message typed into HQ before the upgrade as unconfirmed, and
+  sent the whole backlog again. Now:
+  - messages from before confirmed delivery count as delivered;
+  - only a message typed in while HQ was busy in the last 3 hours is sent again;
+  - at most 3 go again each time HQ is free.
+
+### Added
+
+- **`hud secret redact NAME`.** For a secret's value that was typed somewhere it should not be, such as an answer, a
+  note or an update. The server replaces it wherever it is stored with `[secret NAME]`, using the value it holds,
+  which never passes through the command. Overwritten data is zeroed and the database journal truncated, so the
+  value is gone from the files. It works from this machine only, never from a browser, and the event log says how
+  many rows were redacted.
+
+## [0.16.1] - 2026-10-28
+
+### Fixed
+
+- **Your answers and notes reach HQ, confirmed.** Five answers were typed into HQ's pane while it was busy, which
+  herdr accepts, and were then lost in HQ's session. Now:
+  - when HQ is idle, the HUD waits until HQ starts working on what it typed in;
+  - if HQ does not start, the message is held, the red strip says so, and it is tried again;
+  - anything typed in while HQ was mid-turn is sent once more as soon as HQ is free, unless HQ acked it in the
+    meantime, marked "sent again" with the command to ack it.
+- **SENT & ANSWERED shows where each one stands:** typed in while HQ was busy, delivered to HQ, HQ has it / HQ acted
+  (acked), or HELD.
+
+## [0.16.0] - 2026-10-28
+
+### Added
+
+- **CLOSE ROOM.** You can close a room yourself from its view. CLOSE ROOM asks first, in the page: CLOSE IT
+  archives the room, and KEEP IT OPEN backs out. A closed room shows ARCHIVED, stops taking messages and moves under
+  ARCHIVED in ROOMS. Its folder and thread stay, and `hud room create SLUG` reopens it as before. The event log says
+  you closed it, and HQ hears it at once.
+
+## [0.15.0] - 2026-10-28
+
+### Changed
+
+- **Markdown everywhere.** Every place the HUD shows text from HQ or a lane renders markdown the same way: question
+  titles and bodies, checklists and HQ's comments on a question, MESSAGES, FROM HQ, SENT & ANSWERED, your last
+  note, the worker card's title and note, the WORK board, the ROOMS list, a room's title, brief and thread, and
+  what is held while HQ isn't receiving. Bold, italic, `code`, headings, bullet, numbered and task lists (nested),
+  quotes, links and code boxes with COPY all work; line breaks show. Titles and one-line places show inline
+  markdown only. Links open in a new tab and go only to http(s), mailto or the HUD's own files; anything that
+  looks like HTML stays text.
+- **Long text and code boxes.** MORE now also folds long text that contains code, but never cuts a code box or
+  hides one: the text up to and including the last code box always shows. A long line in a code box scrolls
+  sideways inside the box, so a phone never scrolls the whole page; long words and URLs wrap.
+- **A blocked prompt** on the worker card shows in a code box with COPY, exactly as the agent printed it.
+
+## [0.14.0] - 2026-10-28
+
+### Added
+
+- **COPY on a secret.** Each secret in the SECRETS tab has a COPY button that puts its value on your clipboard, for
+  example to hand a login to someone. The server gives the value only to the HUD's own page: its own origin, or one
+  in `HUD_TRUSTED_ORIGINS`, so it works from your phone on the tailnet too. It does so only when you click, and never
+  to another site or to a client without an origin (that is `hud secret get`). The value goes straight to the
+  clipboard and is never written into the page, its storage, `/api/state`, the log or the database. Each copy adds
+  an event line ("copied NAME"). Over plain http from another device, the browser may refuse the clipboard; open
+  the HUD over https (the tailnet address) or on this machine.
+
+## [0.13.0] - 2026-10-28
+
+### Changed
+
+- **QUESTIONS is now NEEDS YOU.** It holds everything you are the blocker on, and each card says which kind it is:
+  a **QUESTION** to decide (options, SEND), a **TO DO** only you can do, like recording a video, merging a PR or
+  signing in (DONE or NOT YET), or **FYI** (OK). It is the same ask as before, so `hud ask` is still the way in, and
+  answers and comments work as they did. A TO DO is `hud ask --kind action`.
+
+### Added
+
+- **NOT YET on a TO DO.** It keeps the card open, since you are still the blocker. HQ hears it at once with whatever
+  you typed as a note, and a line on the card says when. DONE closes it as before.
+
+## [0.12.0] - 2026-10-28
+
+### Added
+
+- **HQ SWEEP: the HUD can nudge HQ to sweep.** A new row in SETTINGS, off by default. When it is on, the HUD types
+  one "HUD sweep:" line into HQ, listing what needs a look: idle or done lanes (an idle lane must be idle for a
+  reason, and only HQ can judge it), gone lanes, stalled board items, questions waiting on you, and rooms with
+  undelivered messages. It only goes when:
+  - HQ is idle or done right now, never in the middle of a turn, and is receiving;
+  - the interval (20, 30 or 60 min) has passed since the last nudge;
+  - the hour is in the window (8-24 by default, this machine's clock);
+  - something needs a look. A quiet office gets no nudge.
+- **No pile-up.** A nudge HQ does not act on doubles the wait for the next, up to 2 h. A nudge that cannot go is
+  dropped, never queued. Each nudge is a line in the event log, and the row shows the last and next one.
+- It runs on the HUD's existing 20-second check, with no timer of its own. The settings are kept with your other
+  settings and survive restarts. Secrets are not touched.
+
+## [0.11.2] - 2026-10-27
+
+### Fixed
+
+- **Clicking an option in a question no longer slides the list away from it.** Picking an option built the whole
+  question list again and then put the focus back on that question's text box, and the browser scrolled the list
+  to the box. Now an option changes its card in place. When the list is built again (a new question arriving), it
+  keeps its place. Focus only goes back to a box you were typing in, without scrolling anything.
+- The same in MESSAGES: the reply box gets its focus back without moving the list.
+- In a conference room, the TO dropdown is no longer rewritten while it is open. It used to close or jump when a
+  lane came or went; it now catches up when it closes.
+
+## [0.11.1] - 2026-10-27
+
+### Fixed
+
+- **`hud room brief SLUG` no longer wipes the brief.** With no `--body` and nothing piped in, it read an empty brief
+  and saved it, clearing the room's brief. Now it prints the current brief and never writes. An empty `--body` is
+  refused, and clearing a brief takes `--clear`. The server refuses an empty brief from any client that does not ask
+  to clear it.
+
+## [0.11.0] - 2026-10-27
+
+### Added
+
+- **Every room has its own folder.** A room is now a real folder on the HUD's machine, `rooms/SLUG/` in its data
+  folder, holding `files/` (everything shared in the room), `shelf.json` (the shelf) and `brief.md` (the brief).
+  `hud room path SLUG` prints it, `hud room create` prints it too, and every message you send a lane from a room
+  tells it where the folder is.
+- **Lanes can drop files straight in.** A file a lane saves into an open room's `files/` appears on the shelf once it
+  is fully written, marked as added by "folder"; a file deleted from `files/` drops off the shelf. Nothing polls: the
+  HUD only looks when the folder changes.
+- **Add to the shelf from the page.** The shelf has **+ ADD**: pick files, or paste a link with a title. You can also
+  drop files anywhere on a room, or paste an image into it. It works on a phone in the SHELF tab.
+
+- **Ranks you can see in ARENA.** Every worker wears a mask whose shape is its rank: ★ star (the top level, ours
+  above the show's three), ■ square, ▲ triangle, ● circle; deeper than that, a numbered player. The shape is on the
+  mask from the front and on the back of the hood, and the same symbol sits in front of the name label, so a rank
+  reads even from behind at a desk. A lane straight under HQ is the top level from the start, so a flat team is a
+  team of PMs, not of players. HQ keeps its crown and you stay the game master.
+- **A lane's level, set by hand.** `hud lane NAME --level L` gives a lane one of your level names over the one the
+  tree gives (`--level auto` gives it back); the card and `hud tree` show it. A level list in SETTINGS that starts
+  with HQ now names HQ's own level, so "HQ, PM, Senior Engineer, Engineer" works as typed.
+
+### Changed
+
+- Files on the shelf keep their own names (`report.html`, not a timestamped name); a second file with the same name
+  becomes `report-2.html`.
+- Images you attach to a message in a room are saved in that room's folder and appear on its shelf. Remove one from
+  the send box before sending and it comes off the shelf again.
+- Shelf files are served from `/rooms/SLUG/files/NAME`, always sandboxed: images show inline, text files as plain
+  text, and HTML, SVG and other files download instead of opening in the HUD.
+- Existing shelf files move into their room's folder the first time the HUD starts with this version. Links to the
+  old `/room-files/...` addresses in earlier messages still work.
+
+### Fixed
+
+- **Updating from 0.10.0 keeps your secrets too.** A server from before the handover cannot export its secrets, so
+  the restart that installs this version reads each one the way `hud secret get` does, over loopback into memory,
+  and gives it to the new server with its original deadline. From here on every planned restart keeps them.
+- **HQ keeps its name.** herdr can drop HQ's agent name while HQ is still running in its pane (for example when a
+  background job started from HQ's pane compacts its context). The HUD now remembers HQ's pane and gives the name back
+  on its own, within a second if a message finds it gone, so notes and answers arrive without anyone noticing. It
+  only does this while the same agent has stayed in that pane; if the pane emptied or another agent took it, the red
+  strip and its NAME button ask you instead. `HUD_HQ_RENAME=0` turns it off.
+- A test run that hangs stops itself: every child process a test waits on has a timeout, and a whole `bun test` run
+  stops after 15 minutes (`HUD_TEST_LIMIT_MIN`), with what it started.
+
+## [0.10.1] - 2026-10-26
+
+### Fixed
+
+- **Secrets survive a plugin update.** Restarting HQ Office (the reload or install service action, which every plugin
+  update needs) used to clear every secret silently, even ones set for a week. Now the plugin hands them from the old
+  server to the new one, memory to memory, with their original deadlines. Values are still never written to disk.
+- **A secret lost in a crash is never lost quietly.** If the server stops without a handover (a crash, a kill), the
+  SECRETS tab lists each lost name in red with when it was lost, `hud secret list` marks it LOST, `hud secret get`
+  says it was lost and to ask you to set it again instead of "not found", and HQ gets a one-line note. Set the secret
+  again, or dismiss the name.
+- **Expiry times say the day.** "expires 1:45:01 PM" read like now even when it was tomorrow. Every expiry (the
+  SECRETS tab, `hud secret set` and `list`, answers to secret questions, notes to HQ) now reads like
+  "expires in 6d 23h (Mon 2 Nov, 13:45)" or "expires in 23h (tomorrow 13:45)".
+
+## [0.10.0] - 2026-10-26
+
+### Changed
+
+- **A conference room is its own view.** Opening a room (from the ROOMS list, the strip of rooms, or a link to
+  `#room/SLUG`) swaps the office on the right for the room itself, full height. BACK TO OFFICE, Esc or the browser's
+  back button take you back, a reload keeps you in the room, and the strip at its top moves straight to another open
+  room, with its new messages marked. Your questions stay where they are: a room never covers or shrinks the
+  question column, and Tell HQ stays under it.
+- **The conversation comes first.** The thread fills the room with the send box (TO, attach, SEND) always in view at
+  its foot. The lanes, linked work, brief and shelf sit in a rail beside it that you can fold; this browser remembers
+  your choice. The thread, the rail and the ROOMS list each scroll on their own.
+- **A small conference room at the top of each room:** its lanes at the table in their office sprites, you at the
+  head, a lit laptop for each lane that is working and the office's bubbles for the rest. It is drawn only when
+  something in it changes.
+- **On a phone, a room fills the screen** with CHAT, BRIEF and SHELF tabs and a back button that says how many
+  questions are waiting. The send box stays above the keyboard.
+- The office draws as it did before 0.9: no glass room in the bottom-left corner and no lanes gathering there, and
+  the fourth row of desks is back (28 desks). The office stops drawing while a room covers it.
+
+### Fixed
+
+- Line breaks in a room's messages show: a new line breaks the line, a blank line starts a paragraph, and lists and
+  code boxes render as in the brief.
+
+## [0.9.1] - 2026-10-26
+
+### Fixed
+
+- **The page says at once when HQ isn't receiving.** Every sync (every 20 seconds) checks that an agent with HQ's
+  name is in herdr and can take input. When it isn't (herdr dropped the name after a restart or resume, HQ is stopped
+  at a permission prompt, or herdr does not answer), a red **HQ ISN'T RECEIVING** strip at the top says why and since
+  when, before you write into the void. The tab title says it too, and Tell HQ's box tells you that what you send is kept.
+- **Nothing for HQ is lost.** Notes, answers and other messages for HQ that cannot be typed in are held and marked
+  **HELD** in red, not "not picked up yet". They are listed under the strip, and sent in the order you wrote them the
+  moment HQ can take them, each marked with when it was written. Anything HQ already read with `hud inbox` is not
+  sent again.
+- **One click to fix it.** When herdr dropped the name but HQ's last pane still holds an agent, **NAME** gives that
+  pane HQ's name back (`herdr agent rename`) and sends what was held. **CHECK NOW** checks again without waiting for
+  the next sync.
+
+## [0.9.0] - 2026-10-26
+
+### Added
+
+- **Conference rooms: talk straight to the lane that owns a piece of work.** HQ opens a room for a piece of work
+  with `hud room create SLUG --title T --owner LANE` (members at any level, issues and PRs too). The owning lane
+  keeps a pinned brief in markdown (`hud room brief`) and a shelf of artifacts (`hud room artifact`: Claude
+  artifacts, links, images and files) current, so the room is the work's project folder: open it for the concrete
+  context of that problem.
+- **A ROOMS tab** next to WORK, counting rooms with new messages. The list shows each room's owner and level, the
+  state of its work on the board and its last activity. An open room shows its lanes with their level and status,
+  its issues and PRs with their board state, the brief, the shelf as cards, and the thread. Write to the owning
+  lane or pick another lane in the room with TO, attach images as anywhere else, and REPLY to a lane's message.
+  Works on a phone: the thread opens at its newest message, scrolls inside itself and keeps your place when
+  something new lands.
+- **Your message reaches the lane itself.** It is typed into that lane's terminal through herdr, with how to
+  answer (`hud room say`) and a reminder to keep the brief and artifacts current. A message for a lane that is away
+  stays in the thread as AWAY · KEPT and is typed in once, when the lane is back. Lanes read your messages with
+  `hud room read SLUG [--since ID] [--wait]`.
+- **A conference room in the office.** Glass walls, a table and six chairs in the bottom-left corner. While a room
+  is talking (five minutes after its last message), its lanes that are not busy elsewhere walk over and sit at the
+  table.
+- The HQ guide tells HQ that work with an owning lane can get a room, kept current by that lane.
+
+### Changed
+
+- The question column's tabs tighten to fit four on a narrow column or a phone, and scroll sideways rather than ever
+  widening the page.
+- With 22 or more lanes, the fourth row of desks starts beside the conference room (from x 9), so the office holds
+  24 desks instead of 28.
+
+## [0.8.3] - 2026-10-26
+
+### Fixed
+
+- **A lane stuck at a prompt in herdr is no longer invisible.** When a lane's agent stops at a permission prompt
+  (Claude's "Do you want to proceed?") or a question (Codex's question picker), herdr reports it as blocked, and the
+  lane now reads **BLOCKED ON A PROMPT** everywhere: a red bubble over its worker at its desk, a red BLOCKED count in
+  the top bar (only while there is one; click it to open that lane), the worker card with what the agent asks (the
+  question and its options) and the machine and pane to go and answer it in, the work item at the very top of the
+  WORK board with the prompt as its reason, and first in `hud board`, which also lists blocked lanes with no
+  tracked work. A blocked lane is blocked before anything else, even with a question of yours open on it.
+- **HQ is told when a lane gets stuck at a prompt**, once per prompt: "Lane L is blocked on a prompt in herdr
+  (machine, pane): ...". It clears when the lane moves on. `HUD_HQ_BLOCKED=0` turns the message off.
+
+## [0.8.2] - 2026-10-25
+
+### Fixed
+
+- **A question no longer makes a working lane look stuck.** A lane can hold a question for you and keep working at
+  the same time. A lane whose agent is working (or still has shells, a monitor or subagents running) now reads as
+  working even with a question open: its worker stays at its desk with a still "!" over its head, and only a lane
+  that has stopped queues at the counter. WAITING ON YOU in the top bar still counts every open question, and the
+  worker card lists the lane's questions.
+- **On the work board, a question holds only the work it is about.** A piece of work waits on you when a question
+  names its issue key or one of its PRs. A question on a lane that names no tracked work holds that lane's work only
+  while the lane is not working. A question that names one issue no longer marks the lane's other issues as waiting
+  on you. Each item still says which question holds it.
+
+### Added
+
+- **`hud update ID --lane L` moves a question to another lane**, and `--lane hq` (or `--lane ""`) takes it off every
+  lane.
 
 ### Added
 

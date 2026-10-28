@@ -120,4 +120,23 @@ export const ACCESSORIES = [
     side: { x: -2, y: -8, rows: [".........kk.........", "........kyyk........", "........kywk........", "..s..kkkyyyykkk..s..", ".sws.kyyyyyyyYk.sws.", "..s...kyyyyyYk...s..", "......kyyYyyYk......", ".....kyyk..kyYk.....", "....kSSkkkkkkSSk....", "...kSk........kSk...", "..kSk..........kSk..", "..kSk..........kSk.."] } },
   { id: "sparkler", slot: "hand", seasons: ["newyear"], pal: { w: "#ffffff", y: "#ffd84a", o: "#ff9a3a", g: "#8a8a96" },
     hand: { y: 3, rows: ["..............y.", "...........y..o.", "............ywy.o", "..........oywwwy", "............ywy.", "...........o.gy.", ".............g..", ".............g..", ".............g..", ".............g.."] } },
+  // Everyday gadgets, any season: a worker's habit (room/gadgets.js picks it from the name), on its desk while it works
+  // and in its hand elsewhere. Slot "gadget", so they never change who wears which seasonal hand item. `hand` is the
+  // held pose (also the art that stands on the desk), right of column 10 so a player's chest number stays clear (a
+  // handle may reach past the sprite's edge), and above row 16 even side-on, where it sits a row lower, so the name
+  // label stays clear; `sip` the sip or bite, raised beside the face and right of column 11 in the head rows, so a
+  // mask's mark and the eyes stay clear. Unlettered colours are the wearer's: the mug and the bottle's cap and band in
+  // the worker's own accent (a, A).
+  { id: "mug", slot: "gadget", seasons: "any", pal: { q: "#5a3a24", w: "#f8f8f8" },
+    hand: { y: 8, rows: ["...........kkkk..", "...........kqqk..", "...........kwAkkk", "...........kaAk.k", "...........kaAkkk", "...........kkkk.."] },
+    sip: { y: 5, rows: ["............kkkk..", "............kqqk..", "............kwAkkk", "............kaAk.k", "............kaAkkk", "............kkkk.."] } },
+  { id: "bottle", slot: "gadget", seasons: "any", pal: { u: "#9ad4f8", U: "#5aa0d8", w: "#e8f8ff" },
+    hand: { y: 5, rows: ["............kkk.", "............kak.", "...........kkkkk", "...........kwuuk", "...........kwuUk", "...........kAAAk", "...........kuuUk", "...........kuuUk", "...........kkkkk"] },
+    sip: { y: 2, rows: [".............kkk.", ".............kak.", "............kkkkk", "............kwuuk", "............kwuUk", "............kAAAk", "............kuuUk", "............kuuUk", "............kkkkk"] } },
+  { id: "donut", slot: "gadget", seasons: "any", pal: { i: "#ff9ac4", I: "#d8608e", d: "#d89850", D: "#a86a30", y: "#ffe060", g: "#7fd06a", r: "#7fb8ff" },
+    hand: { y: 8, rows: ["............kkkk.", "...........kiyiIk", "...........kgkkIk", "...........kikkrk", "...........kdiIDk", "............kkkk."] },
+    sip: { y: 5, rows: ["..............kkk.", ".............kkiIk", "............kgkkIk", "............kikkrk", "............kdiIDk", ".............kkkk."] } },
+  { id: "tumbler", slot: "gadget", seasons: "any", pal: { t: "#7cc4b8", T: "#4a9488", w: "#d8f4ee", v: "#eceaf0", V: "#b8b4c4", z: "#ff7aa8" },
+    hand: { y: 3, rows: ["..............kk.", "..............kzk", ".............kzk.", "...........kkkzk.", "...........kvvVk.", "...........kkkkkkk", "...........kwtTk.k", "...........kwtTk.k", "...........kttTkkk", "...........kttTk..", "............kTk...", "............kkk..."] },
+    sip: { y: 4, rows: ["............kk....", "............kzk...", ".............kzk..", "...........kkkzk..", "...........kvvVk..", "...........kkkkkkk", "...........kwtTk.k", "...........kwtTk.k", "...........kttTkkk", "...........kttTk..", "............kTk...", "............kkk..."] } },
 ];

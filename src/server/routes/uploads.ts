@@ -1,25 +1,34 @@
-// Routes for uploads. The router loads every file in this folder; see src/server/router.ts.
-import { IMAGE_EXT, MAX_UPLOAD, UPLOADS } from "../config.ts";
+// Routes for uploads: what the owner attaches to a message outside a room (images and files, see attachments.ts).
+// The router loads every file in this folder; see src/server/router.ts.
+import { IMAGE_EXT, UPLOADS } from "../config.ts";
+import { IMAGE_EXTS, extOf, fileResponse, namedFile, notFound, refusal, safeName, writeFree } from "../attachments.ts";
 import { json } from "../json.ts";
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
-  { method: "GET", prefix: "/uploads/", handle: async ({ path }) => {
-    const name = decodeURIComponent(path.slice("/uploads/".length));
-    if (!/^[\w.-]+$/.test(name)) return json({ error: "not found" }, 404);
-    const file = Bun.file(`${UPLOADS}/${name}`);
-    return (await file.exists()) ? new Response(file) : json({ error: "not found" }, 404);
+  { method: "GET", prefix: "/uploads/", handle: ({ path }) => {
+    const f = namedFile(UPLOADS, path.slice("/uploads/".length));
+    return f ? fileResponse(f.path, f.name) : notFound();
   } },
-  // Images travel as raw bytes, so this route reads the body itself before the JSON parse below.
+  // Bytes travel raw, so this route reads the body itself. An image (by its content type, re-encoded by the page)
+  // keeps its name with the extension of its type; any other file keeps its own name when its extension is allowed.
   { method: "POST", path: "/api/uploads", raw: true, handle: async ({ req, url }) => {
-    const ext = IMAGE_EXT[req.headers.get("content-type") ?? ""];
-    if (!ext) throw new Error("only png, jpeg, gif or webp images");
+    const given = safeName(url.searchParams.get("name") ?? "file");
+    const imageExt = IMAGE_EXT[req.headers.get("content-type") ?? ""];
+    const name = imageExt ? `${given.replace(/\.[^.]*$/, "") || "image"}.${imageExt}` : given;
+    const early = refusal(name, Number(req.headers.get("content-length") ?? 0));
+    // Refused by its declared size or kind: the body is read and dropped as it streams (never held), so the
+    // connection stays clean for the next request.
+    if (early) {
+      for await (const _ of req.body ?? []) {}
+      return json({ error: early }, early.includes("over") ? 413 : 415);
+    }
     const bytes = await req.arrayBuffer();
-    if (bytes.byteLength > MAX_UPLOAD) throw new Error("image is over 10 MB");
-    const stem = (url.searchParams.get("name") ?? "image").replace(/\.[^.]*$/, "").replace(/[^\w-]+/g, "-").slice(0, 40) || "image";
-    const name = `${Date.now()}-${stem}.${ext}`;
-    await Bun.write(`${UPLOADS}/${name}`, bytes);
-    return json({ path: `${UPLOADS}/${name}`, url: `/uploads/${name}` });
+    if (!bytes.byteLength) return json({ error: "the file is empty" }, 400);
+    const why = refusal(name, bytes.byteLength);
+    if (why) return json({ error: why }, why.includes("over") ? 413 : 415);
+    const saved = writeFree(UPLOADS, name, bytes);
+    return json({ path: `${UPLOADS}/${saved}`, url: `/uploads/${encodeURIComponent(saved)}`, name: saved, kind: IMAGE_EXTS.has(extOf(saved)) ? "image" : "file" });
   } },
 ];
 export default routes;

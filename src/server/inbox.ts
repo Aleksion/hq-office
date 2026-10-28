@@ -1,23 +1,26 @@
-// HQ's inbox: answers and notes it has not acked, and the long poll that waits for them.
+// HQ's inbox: answers and notes it has not acked, and the long poll that waits for them. One floor's (the caller's),
+// or every floor's with floor null.
 import { db } from "./db.ts";
 import type { Ask } from "./types.ts";
 import { listeners } from "./push.ts";
 
-export function inbox() {
+export function inbox(floor: string | null = null) {
+  const on = floor ? " AND floor = ?" : "";
+  const args = floor ? [floor] : [];
   return {
-    answers: (db.query("SELECT * FROM asks WHERE status = 'answered' AND acked_at IS NULL ORDER BY answered_at").all() as Ask[]).map((a) => ({
+    answers: (db.query(`SELECT * FROM asks WHERE status = 'answered' AND acked_at IS NULL${on} ORDER BY answered_at`).all(...args) as Ask[]).map((a) => ({
       ...a,
       options: a.options ? JSON.parse(a.options) : [],
       secrets: a.secrets ? JSON.parse(a.secrets) : [],
     })),
-    notes: db.query("SELECT * FROM notes WHERE acked_at IS NULL ORDER BY at").all(),
+    notes: db.query(`SELECT * FROM notes WHERE acked_at IS NULL${on} ORDER BY at`).all(...args),
   };
 }
 
-export async function waitForInbox(timeoutMs: number) {
+export async function waitForInbox(timeoutMs: number, floor: string | null = null) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const box = inbox();
+    const box = inbox(floor);
     if (box.answers.length || box.notes.length) return box;
     await new Promise<void>((resolve) => {
       const done = () => {
@@ -29,5 +32,5 @@ export async function waitForInbox(timeoutMs: number) {
       listeners.add(done);
     });
   }
-  return inbox();
+  return inbox(floor);
 }

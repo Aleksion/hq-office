@@ -27,7 +27,7 @@ herdr plugin install NicolaiHerforth/hq-office
    herdr plugin action invoke hq-office.reload
    ```
 
-The database and uploaded images live in the plugin's state directory, so they survive reinstalls.
+The database and uploaded images and files live in the plugin's state directory, so they survive reinstalls.
 
 To keep HQ Office running across crashes and restarts, install it as a service (below). To give HQ the `hud` command, run `herdr plugin action invoke hq-office.install-hud`.
 
@@ -103,10 +103,23 @@ hud secret get NAME | <command>          # the raw value, to a pipe only; refuse
 hud secret get NAME --once | <command>   # and delete it on read
 <command> | hud secret set NAME --minutes 30   # the value comes from stdin, never an argument
 hud secret rm NAME
-hud secret list                          # names, who set them, when they expire
+hud secret list                          # names, who set them, when they expire, and any LOST ones
 ```
 
-Values live in the server's memory only: never in the database, the log, `/api/state` or any listing, and a restart clears them all. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
+Every expiry is said both ways, in local time: `expires in 6d 23h (Mon 2 Nov, 13:45)`, or `expires in 23h (tomorrow 13:45)`.
+
+Values live in the server's memory only: never in the database, the log, `/api/state` or any listing. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
+
+One exception, for you: **COPY** on a secret in the SECRETS tab puts its value on your clipboard. It is the only way a value reaches a browser, and the server gives it only to the HUD's own page:
+- the page's own origin, or one you listed in `HUD_TRUSTED_ORIGINS` (such as your tailnet address);
+- a same-origin request (`Sec-Fetch-Site`) with the page's header;
+- only when you click.
+
+The value goes straight to the clipboard and is never written into the page, its storage, `/api/state`, the log or the database. Each copy adds an event line, "copied NAME". Anything that can read your clipboard, a clipboard manager for instance, can read a copied value.
+
+**Restarts.** A planned restart (the plugin's reload or install service action, which a plugin update needs) hands the secrets over: the plugin takes them from the running server over loopback, holds them in its own memory while the new server starts, and gives them back with their original deadlines. Nothing is written to disk on the way. The handover routes also need a token that each server start writes to `secret-handover.token` in the data folder (readable by you only; it is not a secret value), and the new server takes a handover only while it holds no secrets, within 2 minutes of its start.
+
+A crash, a kill or a stop and start loses the values. The server keeps each secret's name, setter and deadline (never its value) in the database, so after such a restart it knows what it lost: the SECRETS tab lists those names as LOST in red, `hud secret list` marks them, `hud secret get NAME` fails with `NAME was lost when the server restarted at 13:45; ask the owner to set it again`, and HQ gets a one-line note. Setting the secret again clears it, and DISMISS (or `hud secret rm NAME`) removes the name.
 
 ## Lanes in levels
 
@@ -127,11 +140,54 @@ In Arena nothing seasonal is drawn over a mask (guards, the hero, HQ; so HERO HA
 leave off seasonal hats and coats but keep what they hold. Office with no tree looks as it always did. The art is
 our own, not any show's.
 
+## Floors
+
+A floor is one HQ agent and everything it runs. When one HQ has too many lanes, run several: one HQ per domain
+(frontend, backend, marketing, legal), each with its own questions, messages, work board, rooms, lane tree and sweep
+nudge. Secrets, settings and machines are shared. Everything you have starts as the first floor (`HUD_FLOOR_NAME`
+names it, `HQ` by default), and one floor works exactly as HQ Office always has.
+
+```
+hud floor add backend --hq hq-backend --name Backend --color #4a90d9   # hq-backend is that HQ's name in herdr
+hud floor list                                                            # HQ, receiving, lanes, waiting on you
+hud floor set backend --name "Back end"
+hud floor rm backend                                                      # only an empty floor
+hud lane api-auth --floor backend                                         # moves it, with every lane under it
+hud floor tell legal "can you review the terms change?"                  # from one HQ to another floor's HQ
+```
+
+`hud` sends its herdr pane with every call, so an HQ's work lands on its own floor without any setup, and a lane's on
+its lane's floor. Your answers and notes reach the HQ of their floor only. `hud inbox`, `wait`, `ack`, `board`, `tree`
+and `room list` show the caller's floor; `--all` shows every floor, and `--floor ID` picks one by hand. The details
+and the state the page reads are in [docs/floors.md](docs/floors.md).
+
 ## The work board
 
 The WORK tab lists every piece of work in flight: an issue key, its pull requests and the lane that owns it. HQ adds one with `hud track ISSUE --lane L --pr N`, and `hud lane NAME --issue X --pr N` links a lane's work too. Each item's state is worked out from facts, in this order: done (all PRs merged or closed, or `hud done ISSUE`), waiting on you (an open question names its lane, issue or PR), waiting on CI (a check is running), paused (`hud pause ISSUE REASON`, undone with `hud resume ISSUE`), moving (the lane is working, or something changed in the last 45 minutes), and otherwise stalled. Stalled work shows red at the top of the question column and at the top of `hud board` (`--json` for JSON).
 
 PR facts come from the `gh` CLI. The server caches them and refreshes them every 10 minutes while anything is open, and when HQ runs `hud board` if the cache is over a minute old. Page loads never call GitHub.
+
+## Conference rooms
+
+A piece of work with an owner can get a conference room: one place where you talk straight to the lane that owns it (usually a manager or a lead) or to any lane in it, and where that lane keeps the concrete context of the problem. Think of it as the work's project folder. HQ opens one, and the owning lane keeps it current:
+
+```sh
+hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   # again: change or reopen it
+hud room path SLUG                    # the room's folder (see below)
+hud room brief SLUG --body B          # the pinned brief, in markdown, replaced as a whole (or piped on stdin)
+hud room artifact SLUG --title T --url U            # a Claude artifact link (recognised by its address) or any link
+hud room artifact SLUG --title T --file PATH        # an image or any file, copied into the room's files/ (25 MB at most)
+hud room say SLUG TEXT [--as LANE] [--reply ID]     # write in the thread (as the owning lane unless --as)
+hud room read SLUG [--since ID] [--wait] [--json]   # your messages; --wait blocks until a new one, like hud wait
+hud room list [--all] [--json]
+hud room archive SLUG
+```
+
+The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. A room is a place you go to: open one and it takes the place of the office on the right, full height, at its own address (`#room/SLUG`), so a link, a reload and the browser's back button work. BACK TO OFFICE or Esc return to the office, and the strip at the top of a room moves straight to the other open rooms, marking those with new messages. The question column never moves. In the room, the thread fills the main column with the send box always at its foot: write there, with images as anywhere else, and messages keep their line breaks and render as markdown. TO picks the lane (the owner by default, or any lane in the room); REPLY on a lane's message answers it and addresses that lane. A rail beside the thread holds the room's lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief and the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files); fold it to give the thread the width. Above them a small pixel conference room seats the room's lanes at a table with you at its head. On a phone a room fills the screen with CHAT, BRIEF and SHELF tabs.
+
+Each room is a folder on the HUD's machine, `rooms/SLUG/` in its data folder (`hud room path SLUG` prints it, and so does `hud room create`). Its `files/` holds everything shared in the room: files added with `hud room artifact --file`, files you add on the page, and images attached to the room's messages, each under its own name (`name-2.ext` when the name is taken). A lane can also save straight into `files/`: the file joins the shelf (by "folder") once it is written, and a file deleted from `files/` drops off the shelf. Beside it, `shelf.json` and `brief.md` mirror the shelf and the brief, so a lane can read the whole room from disk; the database stays the source of truth and the mirrors are rewritten whenever the shelf or the brief changes. An open room's `files/` is watched (no polling); an archived room keeps its folder. On the page, the shelf's **+ ADD** takes files from a picker and a link with a title, and dropping files anywhere on the room or pasting an image into it does the same. Files are served from `/rooms/SLUG/files/NAME` sandboxed: images show inline, text as plain text, and HTML, SVG and anything else download instead of opening on the HUD's address.
+
+What you write is typed into that lane's terminal through herdr, naming the room and telling it to answer with `hud room say` and to keep the brief and artifacts current. Each message shows DELIVERED, or AWAY · KEPT when the lane is not there: a kept message stays in the thread and is typed into the lane once, when herdr sees it again (RETRY appears if herdr refused one). Uploaded files are served sandboxed, so a file a lane uploads can show but never run a script.
 
 ## Changing a question in place
 
@@ -151,13 +207,17 @@ Your typed answer stays on the card through an edit; a picked option the edit re
 
 SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND next to it turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
 
-## Images
+## Images and files
 
-Every send box (Tell HQ, each question's answer, a reply in MESSAGES) is one composer: attached images on top, the text field, then the photo button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone it opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker, and dropping or pasting an image into a text box works too.
+Every send box (Tell HQ, each question's answer, a reply in MESSAGES, a room's send box) is one composer: attachments on top, the text field, then the attach button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone the attach button opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker. Dropping images or files on a box, or anywhere on its panel or card (the TELL HQ panel, a question's card, the reply under a message, the TO row of a room's send box), attaches them to that box, which lights up while they are over it; pasting into a box works too. A drop anywhere else on the page does nothing (in a room, a drop outside the send box goes on the shelf).
 
-Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the data directory (10 MB at most).
+Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. 10 MB at most.
 
-Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. The text you type stays clean. An image is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and an image that is too big or that the browser cannot read says why in one line. When you send, each image's path is added to the end of your text as `[image: /path]`, which is how HQ opens it. Images are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never the pictures), and are cleared once the message is sent.
+Other files go as they are, 25 MB at most each, and only these kinds: pdf, txt, md, csv, tsv, json, log, yaml, yml, xml, zip, gz, tar, docx, xlsx, pptx, mp4, mov, webm, mp3, wav, m4a. The kind is checked by the extension and the browser's file type on the page, and by the extension on the server; anything else (html, svg, scripts, programs, installers) is refused. A message carries 10 attachments at most.
+
+Attached images show as thumbnails in the box and files as chips with their name and size, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen, a file chip to open the file. The text you type stays clean. An attachment is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and one that is refused says why in one line. When you send, each one's full path on the HUD's machine is added to the end of your text, `[image: /path]` for an image and `[file: /path]` for any other file, which is how HQ or a lane opens it; sent messages show a thumbnail or a link named after the file. Attachments are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never their bytes), and are cleared once the message is sent.
+
+Everything stays on this machine. Outside a room it is saved in the data directory's `uploads/`; in a room, in the room's `files/`, so it shows on the shelf. Each file keeps its own name (`name-2.ext` when the name is taken). Files are served sandboxed and never sniffed: images and video show in the browser, everything else downloads.
 
 ## Configuration
 
@@ -165,8 +225,10 @@ Set these in `config.env`. An empty value means the default.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `HUD_HQ_AGENT` | `hq` | herdr agent name of your HQ lane. Answers and notes are typed into it. |
+| `HUD_HQ_AGENT` | `hq` | herdr agent name of your HQ lane. Answers and notes are typed into it. With floors, it is the first floor's HQ. |
+| `HUD_FLOOR_NAME` | `HQ` | Name of the first floor, read once, when the first floor is made (its id is the name as a slug). |
 | `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
+| `HUD_HQ_BLOCKED` | on | `0` stops telling HQ when a lane's agent becomes blocked on a prompt in herdr (the page still shows it). |
 | `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |
 | `HUD_OWNER` | empty | Your name: on the desk sign, on the default hero, and in the notes and answers HQ is sent. Empty means "the owner" (and "YOU" on the hero). |
 | `HUD_PORT` | `4747` | Port the server listens on. |
