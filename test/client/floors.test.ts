@@ -289,8 +289,11 @@ test.skipIf(!chromeFound)("the scope chip reads on one line inside its column an
     for (const [width, height] of [[1440, 900], [1151, 900]] as [number, number][]) {
       await open(general.base, width, height);
       await until(`document.querySelectorAll(".building .tile").length === 3`);
+      await ev(`(() => { const h = document.getElementById("hud"); h.style.height = "200px"; h.scrollTop = 120; })()`); // a list read part way down
       await click(`.tile[data-floor="sales"] .tlabel`);
       await until(`document.querySelector(".scopechip")?.textContent === "SALES FLOOR ✕"`);
+      expect(await ev(`document.getElementById("hud").scrollTop`)).toBe(0); // the line is on screen, not scrolled past
+      await ev(`document.getElementById("hud").style.height = ""`);
       await choose("sales-outb");
       await until(`document.querySelector(".scopechip")?.textContent === "SALES FLOOR › sales-outb ✕"`);
       // the "+N ON OTHER FLOORS" line is a light card with dark text, first in the list, as the frame draws it

@@ -13,6 +13,8 @@ import { linksHTML, openLinkHTML } from "./links.js";
 import { setQTab } from "../messages/messages.js";
 import { scope, toggleAll, view } from "../core/scope.js";
 
+let shownScope = null;
+
 // A question below the fold gets a red pill at the bottom of the list. Click it to go to the next one.
 export function renderBelow() {
   const list = $("hud"), pill = $("below");
@@ -79,8 +81,11 @@ export function renderHud() {
   for (const key of imageKeys()) if (/^\d+$/.test(key) && !S.open.some((a) => String(a.id) === key)) clearImages(key);
   // The page scrolls on a phone, the list itself on a desktop: whichever moves, what you look at stays put.
   const place = pageScrolls() ? keepPlace(hud, "data-ask") : keepScroll(hud, "data-ask");
+  const newScope = JSON.stringify(scope()) !== shownScope;
+  shownScope = JSON.stringify(scope());
   if (!setHTML(hud, html)) return;
   place();
+  if (newScope && !pageScrolls()) hud.scrollTop = 0; // a new scope's list is read from its first line, not from where the old one was
   for (const inp of hud.querySelectorAll("[data-secret]")) {
     const v = secretDrafts.get(Number(inp.closest("[data-ask]").dataset.ask))?.[inp.dataset.secret];
     if (v) inp.value = v;
