@@ -3,6 +3,19 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.16.1] - 2026-10-28
+
+### Fixed
+
+- **Your answers and notes reach HQ, confirmed.** Five answers were typed into HQ's pane while it was busy, which
+  herdr accepts, and were then lost in HQ's session. Now:
+  - when HQ is idle, the HUD waits until HQ starts working on what it typed in;
+  - if HQ does not start, the message is held, the red strip says so, and it is tried again;
+  - anything typed in while HQ was mid-turn is sent once more as soon as HQ is free, unless HQ acked it in the
+    meantime, marked "sent again" with the command to ack it.
+- **SENT & ANSWERED shows where each one stands:** typed in while HQ was busy, delivered to HQ, HQ has it / HQ acted
+  (acked), or HELD.
+
 ## [0.16.0] - 2026-10-28
 
 ### Added

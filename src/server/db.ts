@@ -19,3 +19,7 @@ if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c)
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "prompt")) db.exec("ALTER TABLE lanes ADD COLUMN prompt TEXT");
 // A level set by hand (`hud lane NAME --level L`), over the one the tree gives; empty: the tree decides.
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "level")) db.exec("ALTER TABLE lanes ADD COLUMN level TEXT");
+// Delivery to HQ, confirmed (HQ started working on it) or typed in mid-turn and sent once more (hq-link.ts).
+for (const [col, type] of [["confirmed_at", "INTEGER"], ["resend", "INTEGER NOT NULL DEFAULT 0"]]) {
+  if (!(db.query("PRAGMA table_info(hq_outbox)").all() as { name: string }[]).some((c) => c.name === col)) db.exec(`ALTER TABLE hq_outbox ADD COLUMN ${col} ${type}`);
+}

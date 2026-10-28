@@ -69,5 +69,5 @@ export function notYet(id: number, note: unknown) {
   const n = String(note ?? "").trim();
   commentAsk(id, `${OWNER}: not yet${n ? `. ${n}` : ""}`);
   event(OWNER, `not yet on "${ask.title}"${n ? `: ${n}` : ""}`, ask.lane);
-  notifyHq(`HUD not yet #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}"${n ? ` -> ${n}` : ""}`);
+  notifyHq(`HUD not yet #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}"${n ? ` -> ${n}` : ""}`, `notyet:${id}`);
 }
