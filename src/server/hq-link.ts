@@ -8,7 +8,7 @@ import { bump } from "./push.ts";
 import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { withHint } from "../hq-guide.ts";
-import { HQ_AGENT, promptAgent } from "./herdr.ts";
+import { HQ_AGENT, promptAgent, syncHerdr } from "./herdr.ts";
 
 type Held = { id: number; at: number; text: string; ref: string | null; error: string | null; tries: number };
 // seen: what the last sync found (null: fine, or not checked yet). sent: why the last delivery failed (null once one
@@ -43,17 +43,51 @@ function setReason(next: { seen?: string | null; sent?: string | null }) {
   bump();
 }
 
+// HQ by pane. herdr drops an agent's name when a session report for its pane carries another session id: a Claude
+// Code background job started from HQ's pane inherits HERDR_PANE_ID, so its compaction re-binds HQ's pane to the
+// job's session, and HQ's own next compaction then clears the name. HQ's process is still there, so the server gives
+// the name back, quietly: only to the pane HQ was last named in, and only while that pane has held an agent of the
+// same kind at every sync since (the same occupant). Memory only, so never across a server restart (the NAME button
+// is there for that). HUD_HQ_RENAME=0 leaves it to the owner.
+let tracked: { pane: string; agent: string } | null = null;
+const AUTO_RENAME = process.env.HUD_HQ_RENAME !== "0";
+
+async function rename(pane: string): Promise<string | null> {
+  try {
+    const proc = Bun.spawn([HERDR, "agent", "rename", pane, HQ_AGENT], { stdout: "ignore", stderr: "pipe" });
+    const timer = setTimeout(() => proc.kill(), 10_000);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    return code === 0 ? null : reasonOf((await new Response(proc.stderr).text()).trim() || `exit ${code}`);
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
 // After each sync: `agents` is this machine's `herdr agent list`, or null with `error` when herdr did not answer.
-export function checkHq(agents: any[] | null, error?: string) {
+export async function checkHq(agents: any[] | null, error?: string) {
   checked = true;
   if (!agents) {
     candidate = null;
     setReason({ seen: `herdr did not answer on this machine${error ? `: ${error}` : ""}`.slice(0, 300) });
     return;
   }
-  const hq = agents.find((a) => a.name === HQ_AGENT);
+  let hq = agents.find((a) => a.name === HQ_AGENT);
+  if (!hq && tracked) {
+    const there = agents.find((a) => a.pane_id === tracked!.pane);
+    if (!there || there.agent !== tracked.agent || there.name) tracked = null; // gone, replaced, or named on purpose
+    else if (AUTO_RENAME) {
+      const failed = await rename(there.pane_id);
+      if (failed) event("hud", `herdr dropped HQ's name; could not give it back to pane ${there.pane_id}: ${failed}`);
+      else {
+        event("hud", `herdr dropped HQ's name; gave it back to pane ${there.pane_id}`);
+        hq = { ...there, name: HQ_AGENT };
+      }
+    }
+  }
   if (hq) {
     candidate = null;
+    tracked = { pane: hq.pane_id, agent: hq.agent };
     db.query("INSERT INTO hq_link (id, pane, seen_at) VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET pane = excluded.pane, seen_at = excluded.seen_at").run(hq.pane_id, Date.now());
     if (hq.agent_status === "blocked") setReason({ seen: "HQ is stopped at a prompt (a permission or a question) in its pane" });
     else if (hq.interactive_ready === false) setReason({ seen: "HQ's agent is starting and cannot take input yet" });
@@ -101,6 +135,13 @@ function flush(): Promise<void> {
           db.query("UPDATE hq_outbox SET sent_at = ?, error = NULL, tries = tries + 1 WHERE id = ?").run(Date.now(), row.id);
           setReason({ sent: null });
           if (row.ref || late) bump();
+        } else if (r.error.includes("agent_not_found") && tracked && AUTO_RENAME) {
+          // HQ's name went between syncs and the server knows its pane: heal it now, quietly. The row stays held
+          // without an error, so the page shows nothing; the sync after the rename sends it.
+          db.query("UPDATE hq_outbox SET tries = tries + 1 WHERE id = ?").run(row.id);
+          recheckSoon();
+          again = false;
+          break;
         } else {
           db.query("UPDATE hq_outbox SET error = ?, tries = tries + 1 WHERE id = ?").run(r.error.slice(0, 500), row.id);
           setReason({ sent: reasonOf(r.error) });
@@ -124,13 +165,22 @@ function alreadyRead(ref: string | null) {
   return false;
 }
 
+// A delivery found HQ's name gone between syncs: sync now (which gives the name back, see checkHq) instead of in
+// up to 20 s. At most once every 5 s, so a name that cannot be healed does not turn into a loop.
+let lastRecheck = 0;
+function recheckSoon() {
+  if (Date.now() - lastRecheck < 5_000) return;
+  lastRecheck = Date.now();
+  setTimeout(() => void syncHerdr(), 0);
+}
+
 const clock = (t: number) => new Date(t).toTimeString().slice(0, 5);
 
 // Gives HQ's last pane its name back (`herdr agent rename`). Only the pane the server offered, never one the page names.
 export async function nameHq(): Promise<void> {
   if (!candidate) throw new Error(`no pane to name: start HQ in herdr with the name ${HQ_AGENT}`);
-  const proc = Bun.spawn([HERDR, "agent", "rename", candidate.pane, HQ_AGENT], { stdout: "ignore", stderr: "pipe" });
-  if ((await proc.exited) !== 0) throw new Error(reasonOf((await new Response(proc.stderr).text()).trim()));
+  const failed = await rename(candidate.pane);
+  if (failed) throw new Error(failed);
   event("hud", `named pane ${candidate.pane} ${HQ_AGENT}`);
 }
 

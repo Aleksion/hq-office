@@ -13,6 +13,7 @@
 //   hud item ID add TEXT         add an item to an open question
 //   hud lane NAME [--title T] [--machine M] [--pane P] [--issue OPE-1] [--pr 123] [--phase running|waiting|parked|done] [--note N]
 //           [--parent OTHER]      the lane it reports to; --parent hq (or "") puts it straight under HQ
+//           [--level NAME|auto]   its level (one of the owner's level names) over the one the tree gives; auto: the tree's
 //   hud rm-lane NAME     its reports move up to the lane it reported to (or HQ)
 //   hud tree [--json]    the lanes under HQ, each with its level name and status
 //   hud withdraw ID [--reason R]
@@ -49,7 +50,7 @@
 //   hud board [--json]                            blocked on a prompt, then stalled, first; refreshes GitHub if the cache is over a minute old
 //   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
 // conference rooms: one per piece of work, where the owner talks straight to the lane that owns it (see roomCmd below)
-//   hud room create|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
+//   hud room create|path|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";
 import { atText, expiresText } from "./src/client/secrets/expiry.js";
@@ -181,6 +182,7 @@ switch (cmd) {
       issue: one("issue"),
       pr: flags.pr?.join(","),
       phase: one("phase"),
+      level: one("level"),
       note: one("note"),
       parent: one("parent"),
     });
@@ -406,7 +408,9 @@ async function secret(args: string[]) {
 function roomUsage() {
   return `usage:
   hud room create SLUG --title T --owner LANE [--member L ...] [--issue X ...] [--pr N ...]   (again: change or reopen it)
+  hud room path SLUG                                 the room's folder: files/ is shared, and what is saved there shows on the shelf
   hud room brief SLUG --body B [--as LANE]           the pinned brief, replaced as a whole (or from stdin)
+  hud room brief SLUG                                 prints the brief (nothing given: never writes); --clear clears it
   hud room artifact SLUG --title T (--url U | --file PATH) [--kind claude-artifact|link|image|file] [--as LANE]
   hud room say SLUG TEXT [--as LANE] [--reply ID]    write in the thread (as the owning lane unless --as)
   hud room read SLUG [--since ID] [--wait] [--json]  the owner's messages; --wait blocks until a new one
@@ -426,7 +430,7 @@ function ago(t: number) {
 }
 
 async function roomCmd(args: string[]) {
-  const bools = new Set(args.filter((a) => ["--json", "--wait", "--all"].includes(a)));
+  const bools = new Set(args.filter((a) => ["--json", "--wait", "--all", "--clear"].includes(a)));
   const { flags: f, rest: r, one: o } = parse(args.filter((a) => !bools.has(a)));
   const [verb, slugRaw, ...words] = r;
   const slug = (slugRaw ?? "").toLowerCase();
@@ -440,12 +444,32 @@ async function roomCmd(args: string[]) {
     case "create": {
       const out = await call("POST", "/api/rooms", { slug, title: o("title"), owner: o("owner"), members: f.member ?? [], issues: f.issue ?? [], prs: f.pr ?? [] });
       console.log(`room ${out.slug} ${out.created ? "created" : "updated"}`);
+      console.log(`folder ${out.folder} (files/ is shared; anything saved there shows on the shelf)`);
       break;
     }
+    case "path":
+      console.log((await call("GET", path)).folder);
+      break;
     case "brief": {
+      // Writes only what it is given: --body, or text piped in. Nothing given (no --body, nothing on stdin) prints
+      // the brief; an empty brief is never a way to clear one by accident, only --clear clears it.
+      if (bools.has("--clear")) {
+        await call("POST", `${path}/brief`, { body: "", clear: true, as: o("as") });
+        console.log(`brief of ${slug} cleared`);
+        break;
+      }
       const body = await textArg(o("body"));
+      if (!body.trim()) {
+        if (o("body") !== undefined) {
+          console.error(`an empty --body would clear the brief of ${slug}; to clear it, use: hud room brief ${slug} --clear`);
+          process.exit(2);
+        }
+        const v = await call("GET", path);
+        console.log(v.brief ?? `(${slug} has no brief yet: hud room brief ${slug} --body B, or pipe it in)`);
+        break;
+      }
       await call("POST", `${path}/brief`, { body, as: o("as") });
-      console.log(body.trim() ? `brief of ${slug} set` : `brief of ${slug} cleared`);
+      console.log(`brief of ${slug} set`);
       break;
     }
     case "artifact": {
@@ -466,6 +490,7 @@ async function roomCmd(args: string[]) {
           process.exit(1);
         }
         console.log(`artifact #${out.id} (${out.kind}) on ${slug}: ${BASE}${out.url}`);
+        console.log(`file ${out.path}`);
       } else {
         const out = await call("POST", `${path}/artifacts`, { title: o("title"), url: o("url"), kind: o("kind"), as: o("as") });
         console.log(`artifact #${out.id} on ${slug}`);

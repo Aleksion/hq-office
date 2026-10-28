@@ -3,7 +3,7 @@ import { STALE_MS } from "./config.ts";
 import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { event } from "./events.ts";
-import { laneTree, levelName, levelNames, underHq } from "../lane-tree.ts";
+import { laneTree, levelName, levelNames, rankOf, underHq } from "../lane-tree.ts";
 
 // An agent at work: herdr says working, or an idle agent still has shells, a monitor or subagents running (bg).
 export const laneWorking = (lane: Lane | null | undefined) => !!lane && (lane.herdr === "working" || !!lane.bg);
@@ -42,6 +42,16 @@ export function upsertLane(body: any) {
       event("hq", `reports to ${parent ?? "HQ"}`, body.name);
     }
   }
+  if (body.level !== undefined) {
+    // "" or "auto": the tree decides again. Otherwise one of the owner's level names, stored as the owner spelled it.
+    const auto = ["", "auto"].includes(String(body.level ?? "").trim().toLowerCase());
+    const names = currentLevelNames();
+    const rank = auto ? null : rankOf(body.level, names);
+    if (!auto && !rank) throw new Error(`level must be one of: ${names.join(", ")} (or auto)`);
+    const level = rank ? names[rank - 1] : null;
+    db.query("UPDATE lanes SET level = ?, updated_at = ? WHERE name = ?").run(level, now, body.name);
+    event("hq", level ? `level ${level}` : "level from the tree", body.name);
+  }
   if (body.note || body.phase) event("hq", [body.phase && `phase ${body.phase}`, body.note].filter(Boolean).join(": "), body.name);
 }
 
@@ -70,13 +80,21 @@ export function removeLane(name: string) {
   })();
 }
 
-// Each lane with its place in the tree: depth (HQ is 0), path (its ancestors from the top) and level name.
-export function withTree<T extends Lane>(lanes: T[]) {
+function currentLevelNames() {
   const row = db.query("SELECT value FROM settings WHERE key = 'levels'").get() as { value: string } | null;
-  const names = levelNames(row ? JSON.parse(row.value) : null);
+  return levelNames(row ? JSON.parse(row.value) : null);
+}
+
+// Each lane with its place in the tree: depth (HQ is 0) and path (its ancestors from the top), and its rank (1 = the
+// top level) with that level's name: the level set by hand (levelSet) if it is still one of the owner's names, else
+// the one its depth gives (a lane straight under HQ is the top level).
+export function withTree<T extends Lane>(lanes: T[]) {
+  const names = currentLevelNames();
   const tree = laneTree(lanes);
   return lanes.map((l) => {
     const t = tree.get(l.name)!;
-    return { ...l, parent: t.path.at(-1) ?? null, depth: t.depth, path: t.path, level: levelName(t.depth, names) };
+    const set = rankOf(l.level, names);
+    const rank = set ?? Math.max(1, t.depth);
+    return { ...l, parent: t.path.at(-1) ?? null, depth: t.depth, path: t.path, rank, level: levelName(rank, names), levelSet: !!set };
   });
 }

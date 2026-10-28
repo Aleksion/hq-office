@@ -168,8 +168,17 @@ export function drawBubble(x, y, glyph, color, bounce, fill = "#ffffff") {
 
 // Label widths are measured once per text, weight and font load, not every frame.
 const labelWidths = new Map();
-// mark (a worker in a lane tree): { color, pips } from room/themes.js, drawn as pips before the name.
+// mark (a worker with a rank): { color, pips } or { color, symbol } from room/themes.js, drawn before the name.
 const PIP = Math.round(2.4 * SC), PIP_GAP = SC;
+// The rank symbols, 5x5, the same shapes as the masks.
+const SYMBOLS = {
+  star: ["..x..", "xxxxx", ".xxx.", ".x.x.", "x...x"],
+  square: ["xxxxx", "x...x", "x...x", "x...x", "xxxxx"],
+  triangle: ["..x..", "..x..", ".xxx.", ".xxx.", "xxxxx"],
+  circle: [".xxx.", "x...x", "x...x", "x...x", ".xxx."],
+};
+const CELL = Math.max(1, Math.round(0.8 * SC));
+const markWidth = (mark) => (mark.symbol ? 5 * CELL + PIP_GAP : mark.pips * (PIP + PIP_GAP));
 export function drawLabel(text, cx, y, strong, mark = null) {
   ctx.font = `${strong ? 700 : 600} ${4.2 * SC}px Nunito, system-ui, sans-serif`;
   ctx.textAlign = "center";
@@ -177,14 +186,20 @@ export function drawLabel(text, cx, y, strong, mark = null) {
   const wk = `${strong}|${fontsLoaded}|${text}`;
   let w = labelWidths.get(wk);
   if (w === undefined) { if (labelWidths.size > 500) labelWidths.clear(); labelWidths.set(wk, (w = ctx.measureText(text).width + 8)); }
-  const mw = mark ? mark.pips * (PIP + PIP_GAP) : 0;
+  const mw = mark ? markWidth(mark) : 0;
   ctx.fillStyle = strong ? "rgba(35,35,58,.92)" : "rgba(35,35,58,.62)";
   ctx.fillRect(cx * SC - (w + mw) / 2, y * SC, w + mw, 5.6 * SC);
   ctx.fillStyle = "#fff";
   ctx.fillText(text, cx * SC + mw / 2, y * SC + 0.8 * SC);
   if (!mark) return;
   ctx.fillStyle = mark.color;
-  const x0 = Math.round(cx * SC - (w + mw) / 2 + 4), py = Math.round(y * SC + (5.6 * SC - PIP) / 2);
+  const x0 = Math.round(cx * SC - (w + mw) / 2 + 4);
+  if (mark.symbol) {
+    const sy = Math.round(y * SC + (5.6 * SC - 5 * CELL) / 2);
+    SYMBOLS[mark.symbol].forEach((row, r) => { for (let c = 0; c < 5; c++) if (row[c] === "x") ctx.fillRect(x0 + c * CELL, sy + r * CELL, CELL, CELL); });
+    return;
+  }
+  const py = Math.round(y * SC + (5.6 * SC - PIP) / 2);
   for (let i = 0; i < mark.pips; i++) ctx.fillRect(x0 + i * (PIP + PIP_GAP), py, PIP, PIP);
 }
 

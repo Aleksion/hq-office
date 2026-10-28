@@ -137,7 +137,7 @@ export async function syncHerdr() {
   lastSync = { at: now, errors };
   // HQ is typed into on this machine: check it there even when this machine's lanes are not tracked.
   if (!MACHINES.includes(LOCAL)) local = await herdrList(LOCAL).catch((e) => (errors.push(`${LOCAL}: ${(e as Error).message}`), null));
-  checkHq(local, errors.find((e) => e.startsWith(`${LOCAL}:`))?.slice(LOCAL.length + 2));
+  await checkHq(local, errors.find((e) => e.startsWith(`${LOCAL}:`))?.slice(LOCAL.length + 2));
   for (const lane of nowBlocked) tellBlocked(lane);
   if (changed) bump();
 }
