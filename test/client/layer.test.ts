@@ -17,9 +17,11 @@ const until = async (expr: string, ms = 10_000) => {
   throw new Error(`timed out waiting for ${expr}`);
 };
 const ev = (expr: string) => page.evaluate(expr);
-const click = (sel: string) => ev(`document.querySelector(${JSON.stringify(sel)}).click()`);
+const click = (sel: string) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) throw new Error("nothing matches " + ${JSON.stringify(sel)}); e.click(); })()`);
 const press = (key: string) => ev(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, bubbles: true }))`);
-const scopeOf = () => ev(`JSON.parse(sessionStorage.getItem("hq-scope") ?? "null")`);
+// The tab keeps a scope only once one was set, so no key is nothing scoped.
+const scopeOf = () => ev(`JSON.parse(sessionStorage.getItem("hq-scope") ?? '{"floor":null,"agent":null,"all":false}')`);
+const choose = (lane: string) => ev(`(() => { const b = document.createElement("button"); b.dataset.select = ${JSON.stringify(lane)}; document.body.append(b); b.click(); b.remove(); })()`);
 const shown = (sel: string) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return !!e && !e.hidden && getComputedStyle(e).display !== "none"; })()`);
 const SIZES: [number, number][] = [[1440, 900], [390, 844]];
 // The layer of a floor: the frames hung and the agents marked, as the page says it drew them.
@@ -122,7 +124,7 @@ for (const [width, height] of SIZES) {
     await click(`.needhelp .lrow[data-select="${FACTS.stalled}"]`);
     await until(`document.querySelector(".scopechip")?.textContent === "FIN FLOOR › ${FACTS.stalled} ✕"`);
     // an agent that needs nothing: 0 NEED HELP, disabled, and pressing it moves nothing
-    await click(`#hud .ask[data-lane="fin-audit"] .tag.lane`);
+    await choose("fin-audit");
     await until(`document.querySelector(".scopechip")?.textContent === "FIN FLOOR › fin-audit ✕"`);
     await until(`document.querySelector(".needhelp .helpzero")?.textContent === "0 NEED HELP"`);
     expect(await ev(`document.querySelector(".needhelp .helpzero").disabled`)).toBe(true);

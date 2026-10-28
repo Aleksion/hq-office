@@ -36,6 +36,8 @@ const frames = () => ev(`Object.fromEntries(Object.entries(window.__texts).map((
 const press = (key: string) => ev(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, bubbles: true }))`);
 const click = (sel: string) => ev(`document.querySelector(${JSON.stringify(sel)}).click()`);
 const choose = (lane: string) => ev(`(() => { const b = document.createElement("button"); b.dataset.select = ${JSON.stringify(lane)}; document.body.append(b); b.click(); b.remove(); })()`);
+// A floor grows from its tile for a moment; its size is the settled one.
+const settled = () => ev(`Promise.all(document.getAnimations().map((a) => a.finished)).then(() => true)`);
 const stageOf = () => ev(`document.querySelector(".room").dataset.stage ?? null`);
 const scopeOf = () => ev(`JSON.parse(sessionStorage.getItem("hq-scope") ?? "null")`);
 const chip = () => ev(`(() => { const c = document.querySelector(".scopechip"); return c && !c.hidden ? c.textContent : ""; })()`);
@@ -92,7 +94,7 @@ for (const [width, height] of SIZES) {
       { id: "sales", tag: "SALES", color: COLORS.sales, waiting: String(FACTS.waiting.sales), dots: 1 },
     ]);
     // every tile is a room with a size, in a row of two (one on a phone), and on a laptop the page does not scroll
-    const rects = await ev(`[...document.querySelectorAll(".tile canvas")].map((c) => { const r = c.getBoundingClientRect(); return { id: c.id, w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left), y: Math.round(r.top) }; })`);
+    const rects = await ev(`[...document.querySelectorAll(".tile .scene > canvas")].map((c) => { const r = c.getBoundingClientRect(); return { id: c.id, w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left), y: Math.round(r.top) }; })`);
     expect(rects.map((r: any) => r.id)).toEqual(Object.values(CANVAS));
     for (const r of rects) expect(r.w).toBeGreaterThan(80);
     expect(Math.abs(rects[0].w / rects[0].h - 1.5)).toBeLessThan(0.03);
@@ -138,6 +140,7 @@ for (const [width, height] of SIZES) {
     expect(await ev(`[...document.querySelectorAll(".tile")].filter((t) => getComputedStyle(t).display !== "none").map((t) => t.dataset.floor)`)).toEqual(["fin"]);
     expect(await shown(".stagebar [data-zoomout]")).toBe(true);
     expect(await shown(".room .legend")).toBe(true);
+    await settled();
     const r = await ev(`(() => { const c = document.getElementById("room-fin").getBoundingClientRect(), room = document.querySelector(".room").getBoundingClientRect(); return { w: c.width, h: c.height, roomW: room.width, roomBottom: room.bottom, bottom: c.bottom }; })()`);
     expect(Math.abs(r.w / r.h - 1.5)).toBeLessThan(0.03);
     expect(r.w).toBeGreaterThan(width > 600 ? 500 : 300);
