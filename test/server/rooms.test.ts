@@ -229,6 +229,22 @@ describe("hud room", () => {
     expect((await room("side")).archivedAt).toBeNull();
   });
 
+  test("the owner closes a room from the page: archived, an event in the owner's name, and HQ hears it", async () => {
+    await hud(["room", "create", "closing", "--title", "To close", "--owner", "lead"]);
+    await post("/api/rooms/closing/archive", { by: "owner" });
+    expect((await room("closing")).archivedAt).toBeGreaterThan(0);
+    const ev = (await get("/api/state")).events.find((e: any) => e.text === "closed room closing");
+    expect(ev?.who).toBe("Sam");
+    const note = "HUD: Sam closed room closing (To close); reopen it with hud room create closing";
+    for (let i = 0; i < 80 && !readFileSync(LOG, "utf8").includes(note); i++) await Bun.sleep(25); // typed in after the request returns
+    expect(readFileSync(LOG, "utf8")).toContain(note);
+    // closing again changes nothing, and create reopens it as before
+    await post("/api/rooms/closing/archive", { by: "owner" });
+    expect((await get("/api/state")).events.filter((e: any) => e.text === "closed room closing")).toHaveLength(1);
+    await hud(["room", "create", "closing"]);
+    expect((await room("closing")).archivedAt).toBeNull();
+  });
+
   test("hud room alone prints the usage", async () => {
     const r = await hud(["room"]);
     expect(r.code).toBe(2);

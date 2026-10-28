@@ -9,6 +9,7 @@ import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { parsePr } from "./board.ts";
 import { HQ_AGENT, promptAgent } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
 import { ensureFolder, reconcileRoom, removeItem, roomDir, saveFile, startFolders, unwatchRoom, watchRoom, writeBrief, writeShelf } from "./room-folder.ts";
 
 export const MAX_ROOM_FILE = 25 * 1024 * 1024;
@@ -199,13 +200,17 @@ export function seen(slugRaw: unknown) {
   if (res.changes) touch(r.slug);
 }
 
-export function archive(slugRaw: unknown) {
+// Archives a room: `hud room archive` (HQ), or CLOSE ROOM on the page (by: "owner"), which HQ hears about.
+export function archive(slugRaw: unknown, by?: unknown) {
   const r = mustRoom(slugRaw);
   if (r.archived_at) return;
   db.query("UPDATE rooms SET archived_at = ? WHERE slug = ?").run(Date.now(), r.slug);
   touch(r.slug);
   unwatchRoom(r.slug); // the folder stays; it is only no longer watched
-  event("hq", `archived room ${r.slug}`, isHq(r.owner) ? null : r.owner);
+  const lane = isHq(r.owner) ? null : r.owner;
+  if (by !== "owner") return event("hq", `archived room ${r.slug}`, lane);
+  event(OWNER, `closed room ${r.slug}`, lane);
+  notifyHq(`HUD: ${OWNER} closed room ${r.slug} (${r.title}); reopen it with hud room create ${r.slug}`);
 }
 
 // ---- delivery: an owner's message typed into its lane through herdr (promptAgent, the same helper as notifyHq) ----

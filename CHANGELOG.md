@@ -3,6 +3,15 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] - 2026-10-28
+
+### Added
+
+- **CLOSE ROOM.** You can close a room yourself from its view. CLOSE ROOM asks first, in the page: CLOSE IT
+  archives the room, and KEEP IT OPEN backs out. A closed room shows ARCHIVED, stops taking messages and moves under
+  ARCHIVED in ROOMS. Its folder and thread stay, and `hud room create SLUG` reopens it as before. The event log says
+  you closed it, and HQ hears it at once.
+
 ## [0.15.0] - 2026-10-28
 
 ### Changed

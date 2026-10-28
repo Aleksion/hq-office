@@ -174,9 +174,13 @@ function renderBar(r) {
   w.hidden = !n;
   w.textContent = `${n} WAITING`;
 }
+// CLOSE ROOM: the owner archives the room, after a confirm in the page (never a browser dialog). closeAsk is the room
+// whose confirm is showing.
+let closeAsk = null;
 function renderHead(r, d) {
   const shelf = d?.artifactList.length ?? r.artifacts ?? 0;
-  setHTML(part("rvhead"), `<h2>${mdInline(r.title)}</h2>${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}<span class="who">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}</span><button class="btn-s railbtn" type="button" data-rail-toggle aria-expanded="${!railFolded}" aria-controls="roomRail">${railFolded ? "◀ BRIEF · SHELF" : "FOLD ▶"}${railFolded && shelf ? ` (${shelf})` : ""}</button>`);
+  setHTML(part("rvhead"), `<h2>${mdInline(r.title)}</h2>${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}<span class="who">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}</span><button class="btn-s railbtn" type="button" data-rail-toggle aria-expanded="${!railFolded}" aria-controls="roomRail">${railFolded ? "◀ BRIEF · SHELF" : "FOLD ▶"}${railFolded && shelf ? ` (${shelf})` : ""}</button>${r.archivedAt ? "" : `<button class="btn-s rclose" type="button" data-room-close>CLOSE ROOM</button>`}`
+    + (closeAsk === r.slug && !r.archivedAt ? `<div class="rconfirm" data-close-confirm><span>Close ${mdInline(r.title)}? It moves to ARCHIVED and stops taking messages; HQ can reopen it with <code>hud room create ${esc(r.slug)}</code>.</span><button class="btn-s" type="button" data-close-keep>KEEP IT OPEN</button><button class="btn-s danger" type="button" data-close-yes>CLOSE IT</button></div>` : ""));
   view.classList.toggle("folded", railFolded);
 }
 
@@ -538,6 +542,17 @@ view.addEventListener("click", (e) => {
     railFolded = !railFolded;
     store("hq-room-rail", railFolded ? "folded" : null);
     renderHead(roomOf(openSlug), detail);
+    return;
+  }
+  if (t.closest("[data-room-close]")) { closeAsk = openSlug; renderHead(roomOf(openSlug), detail); return; }
+  if (t.closest("[data-close-keep]")) { closeAsk = null; renderHead(roomOf(openSlug), detail); return; }
+  const yes = t.closest("[data-close-yes]");
+  if (yes) {
+    yes.disabled = true;
+    const slug = openSlug;
+    post(`/api/rooms/${encodeURIComponent(slug)}/archive`, { by: "owner" })
+      .then(() => { closeAsk = null; toast("ROOM CLOSED. IT IS UNDER ARCHIVED IN ROOMS."); })
+      .catch((err) => { yes.disabled = false; toast(err.message); });
     return;
   }
   if (t.closest("[data-shelf-add]")) {
