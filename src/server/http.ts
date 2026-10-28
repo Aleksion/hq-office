@@ -6,6 +6,7 @@ import { json } from "./json.ts";
 import { bump, secrets } from "./push.ts";
 import { notifyHq } from "./hq-link.ts";
 import { event } from "./events.ts";
+import { redactEverywhere } from "./redact.ts";
 import { answerWithSecrets } from "./asks.ts";
 import { isSecretPath, originAllowed, secretGuard, secretRoute } from "./secrets.ts";
 import { handover, lostBook } from "./secret-ledger.ts";
@@ -24,6 +25,12 @@ Bun.serve({
       return secretRoute(req, path, ip, secrets, {
         host: HOST,
         trusted: TRUSTED_ORIGINS,
+        onRedact: (name, value) => {
+          const out = redactEverywhere(value, name);
+          event("hud", `redacted ${name} from ${out.rows} stored ${out.rows === 1 ? "row" : "rows"}`);
+          bump();
+          return out;
+        },
         onCopy: (name) => {
           event(OWNER, `copied ${name}`);
           bump();

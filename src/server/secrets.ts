@@ -254,7 +254,7 @@ export async function secretRoute(
   path: string,
   ip: string | undefined | null,
   store: SecretStore,
-  opts: { host: string; onSet?: (m: SecretMeta) => void; lost?: LostBook; handover?: Handover; trusted?: string[]; onCopy?: (name: string) => void },
+  opts: { host: string; onSet?: (m: SecretMeta) => void; lost?: LostBook; handover?: Handover; trusted?: string[]; onCopy?: (name: string) => void; onRedact?: (name: string, value: string) => unknown },
 ): Promise<Response> {
   if (path === "/api/secrets/copy") return copyRoute(req, ip, store, opts);
   const refused = secretGuard(req, ip, opts.host);
@@ -274,6 +274,14 @@ export async function secretRoute(
       const removed = store.remove(name);
       const dismissed = opts.lost?.clear(name) ?? false;
       return json({ removed: removed || dismissed });
+    }
+    // POST /api/secrets/redact {name}: this machine, never a browser (as get). The value stays in the server.
+    if (path === "/api/secrets/redact") {
+      if (browser || !opts.onRedact) return FORBIDDEN();
+      const name = checkName(body.name);
+      const value = store.get(name, false);
+      if (value === null) return json({ error: `no secret ${name} (expired, removed or never set)` }, 404);
+      return json(opts.onRedact(name, value));
     }
     if (path === "/api/secrets/get") {
       if (browser) return FORBIDDEN();

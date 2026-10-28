@@ -3,6 +3,24 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.16.2] - 2026-10-28
+
+### Fixed
+
+- **No more backlog replays.** 0.16.1 treated every message typed into HQ before the upgrade as unconfirmed, and
+  sent the whole backlog again. Now:
+  - messages from before confirmed delivery count as delivered;
+  - only a message typed in while HQ was busy in the last 3 hours is sent again;
+  - at most 3 go again each time HQ is free.
+
+### Added
+
+- **`hud secret redact NAME`.** For a secret's value that was typed somewhere it should not be, such as an answer, a
+  note or an update. The server replaces it wherever it is stored with `[secret NAME]`, using the value it holds,
+  which never passes through the command. Overwritten data is zeroed and the database journal truncated, so the
+  value is gone from the files. It works from this machine only, never from a browser, and the event log says how
+  many rows were redacted.
+
 ## [0.16.1] - 2026-10-28
 
 ### Fixed

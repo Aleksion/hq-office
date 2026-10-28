@@ -113,12 +113,19 @@ export async function checkHq(agents: any[] | null, error?: string) {
 
 // HQ is idle: what was typed in while it was mid-turn could not be confirmed, and a queued message can be lost. Each
 // of the owner's notes and answers among them goes once more, unless HQ acked it meanwhile; anything else counts as
-// delivered.
+// delivered. Only recent ones (RESEND_WINDOW, 3 h) and at most MAX_RESEND per check: an old backlog is never replayed.
+const RESEND_WINDOW = Number(process.env.HUD_RESEND_WINDOW_MS) || 3 * 3600_000;
+const MAX_RESEND = 3;
 function reconfirm() {
   const now = Date.now();
-  for (const row of db.query("SELECT * FROM hq_outbox WHERE sent_at IS NOT NULL AND confirmed_at IS NULL").all() as Held[]) {
-    if (!row.ref || row.resend || alreadyRead(row.ref)) db.query("UPDATE hq_outbox SET confirmed_at = ? WHERE id = ?").run(now, row.id);
-    else db.query("UPDATE hq_outbox SET sent_at = NULL, resend = 1 WHERE id = ?").run(row.id);
+  let resent = 0;
+  for (const row of db.query("SELECT * FROM hq_outbox WHERE sent_at IS NOT NULL AND confirmed_at IS NULL ORDER BY id").all() as Held[]) {
+    const old = now - (row.sent_at ?? 0) > RESEND_WINDOW;
+    if (!row.ref || row.resend || old || alreadyRead(row.ref)) db.query("UPDATE hq_outbox SET confirmed_at = ? WHERE id = ?").run(now, row.id);
+    else if (resent < MAX_RESEND) {
+      db.query("UPDATE hq_outbox SET sent_at = NULL, resend = 1 WHERE id = ?").run(row.id);
+      resent += 1;
+    }
   }
 }
 

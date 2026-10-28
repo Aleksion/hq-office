@@ -27,6 +27,7 @@
 //   hud secret set NAME --minutes N [--by WHO]   the value comes from stdin, never from an argument
 //   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal; says if it was lost
 //   hud secret rm NAME
+//   hud secret redact NAME  replace the value wherever it was typed and stored (answers, notes, updates) with [secret NAME]
 //   hud secret list      names, who set them and when they expire, and LOST ones (lost in a restart); never values
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
@@ -235,7 +236,7 @@ async function secret(args: string[]) {
   const { rest, one } = parse(args.filter((a) => a !== "--once"));
   const [verb, name, ...extra] = rest;
   const usage = () => {
-    console.error("usage: hud secret set NAME --minutes N  (value on stdin) | get NAME [--once] | rm NAME | list");
+    console.error("usage: hud secret set NAME --minutes N  (value on stdin) | get NAME [--once] | rm NAME | redact NAME | list");
     process.exit(2);
   };
   if (verb !== "list" && !name) usage();
@@ -260,6 +261,12 @@ async function secret(args: string[]) {
       }
       const { value } = await call("POST", "/api/secrets/get", { name, once });
       process.stdout.write(value);
+      break;
+    }
+    case "redact": {
+      // The server replaces the value wherever it is stored with [secret NAME]; the value never comes through here.
+      const { rows, tables } = await call("POST", "/api/secrets/redact", { name });
+      console.log(rows ? `redacted ${name} from ${rows} stored ${rows === 1 ? "row" : "rows"}: ${Object.entries(tables).map(([k, n]) => `${k} ${n}`).join(", ")}` : `${name} is not stored anywhere`);
       break;
     }
     case "rm": {

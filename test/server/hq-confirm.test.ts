@@ -33,7 +33,7 @@ writeFileSync(status, "idle");
 
 let server: Awaited<ReturnType<typeof spawnServer>>;
 beforeAll(async () => {
-  server = await spawnServer({ cwd: ROOT, env: { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", HUD_HQ_HINT: "0", HUD_HQ_RENAME: "0" } });
+  server = await spawnServer({ cwd: ROOT, env: { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", HUD_HQ_HINT: "0", HUD_HQ_RENAME: "0", HUD_RESEND_WINDOW_MS: "1500" } });
 });
 afterAll(async () => {
   await server?.stop();
@@ -102,4 +102,30 @@ test("HQ idle but deaf (the prompt never starts it): held, said on the page, and
   await post("/api/hq/check");
   await until(async () => (await delivery(`note:${id}`)) === "delivered");
   expect((await state()).hq.ok).toBe(true);
+});
+
+test("only recent ones go again: one typed in mid-turn longer ago than the window is never sent again", async () => {
+  writeFileSync(status, "working");
+  await post("/api/sync");
+  await post("/api/notes", { text: "too old to replay" });
+  await until(() => queued("too old to replay").length === 1);
+  await Bun.sleep(1700); // past the window (1.5 s here, 3 h for real)
+  writeFileSync(status, "idle");
+  await post("/api/hq/check");
+  await Bun.sleep(300);
+  expect(took("too old to replay")).toHaveLength(0);
+  expect(await delivery(`note:${await noteId("too old to replay")}`)).toBe("delivered");
+});
+
+test("at most 3 go again per idle check; the rest on the next", async () => {
+  writeFileSync(status, "working");
+  await post("/api/sync");
+  for (let i = 1; i <= 5; i++) await post("/api/notes", { text: `batch note ${i}` });
+  await until(() => queued("batch note").length === 5);
+  writeFileSync(status, "idle");
+  await post("/api/hq/check");
+  await Bun.sleep(300);
+  expect(took("batch note")).toHaveLength(3);
+  await post("/api/hq/check");
+  await until(() => took("batch note").length === 5);
 });
