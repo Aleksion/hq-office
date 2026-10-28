@@ -79,6 +79,7 @@ function apply() {
     paintLabels(S, ids);
     const at = sc.floor, from = zoomed !== undefined && at !== zoomed ? canvasRect(at ?? zoomed) : null;
     paintMode(at);
+    if (from) room().parentElement.scrollTop = 0; // the floor chosen, or the building, is seen from its top
     const box = boxes(ids, at);
     for (const [id, f] of floors) if (box[id]) f.fitTo(box[id]);
     if (from) flip(at ?? zoomed, from);

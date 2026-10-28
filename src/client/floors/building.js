@@ -8,7 +8,9 @@ import { HELP_COLORS, canvasId, floorLabel } from "../core/floors.js";
 
 const GAP = 10; // between tiles
 const PAD = 16; // the room's padding, both sides
-const LABEL = 30; // a tile's label row and the gap under it
+const TILE_FRAME = 12; // a zoomed-out tile's border and padding, both sides (floors.css)
+const BUILDING_CHROME = 260; // what the screen keeps from the building's width on a laptop: the signed frame's 100dvh - 260
+const ZOOM_CHROME = 330; // and from a zoomed floor's height: 100dvh - 330, at 3:2
 const DESKTOP = "(min-width: 1151px)";
 const ONE_COLUMN = "(max-width: 600px)";
 
@@ -122,25 +124,24 @@ export function paintBar(state) {
   b.setAttribute("aria-current", String(!!state?.building));
 }
 
-// The box each floor's canvas fits, and the building's width. Zoomed in on a laptop the floor is as big as the room
-// allows (3:2 and the legend under it); zoomed out every tile is sized so all the rows fit the room's height. Where the
-// page scrolls, only the width limits it. A box with an infinite height is limited by its width alone.
+// The box each floor's canvas fits, and the building's width, as the signed frame sizes them. Zoomed out a tile is as
+// wide as the room allows two to a row, and the building no wider than the screen is tall less its chrome; zoomed in
+// the floor is as wide as the room, and no taller than the screen leaves it. On a laptop the stage scrolls for the rest
+// (floors.css), so no size depends on the room's own height. A box with an infinite height is limited by its width alone.
 export function boxes(ids, zoomed) {
   const { room: roomEl, grid } = parts;
   const desktop = matchMedia(DESKTOP).matches;
   const width = roomEl.clientWidth - PAD;
   if (zoomed) {
     grid.style.width = "";
-    const legend = roomEl.querySelector(".legend");
-    return { [zoomed]: { width, height: desktop ? roomEl.clientHeight - PAD - (legend?.offsetHeight ?? 0) : Infinity } };
+    return { [zoomed]: { width: desktop ? Math.min(width, (innerHeight - ZOOM_CHROME) * 1.5) : width, height: Infinity } };
   }
   const cols = matchMedia(ONE_COLUMN).matches || ids.length < 2 ? 1 : 2;
-  const rows = Math.ceil(ids.length / cols);
   let w = (width - (cols - 1) * GAP) / cols;
-  if (desktop) w = Math.min(w, (((roomEl.clientHeight - PAD - (rows - 1) * GAP) / rows - LABEL) * 3) / 2);
+  if (desktop) w = Math.min(w, (innerHeight - BUILDING_CHROME - (cols - 1) * GAP) / cols);
   w = Math.max(80, Math.floor(w));
   grid.style.width = `${w * cols + (cols - 1) * GAP}px`;
-  return Object.fromEntries(ids.map((id) => [id, { width: w, height: Infinity }]));
+  return Object.fromEntries(ids.map((id) => [id, { width: w - TILE_FRAME, height: Infinity }]));
 }
 
 // A floor's canvas, and where it is on screen (null before it has one).
