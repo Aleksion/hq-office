@@ -32,3 +32,5 @@ if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).s
 // or failed) and why it failed.
 if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "delivery")) db.exec("ALTER TABLE ask_comments ADD COLUMN delivery TEXT");
 if (!(db.query("PRAGMA table_info(ask_comments)").all() as { name: string }[]).some((c) => c.name === "error")) db.exec("ALTER TABLE ask_comments ADD COLUMN error TEXT");
+// A level set by hand (`hud lane NAME --level L`), over the one the tree gives; empty: the tree decides.
+if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "level")) db.exec("ALTER TABLE lanes ADD COLUMN level TEXT");

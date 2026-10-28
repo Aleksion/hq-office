@@ -179,9 +179,17 @@ function labelWidth(text, strong) {
   }
   return w;
 }
-// mark (a worker in a lane tree): { color, pips } from room/themes.js, drawn as pips before the name.
+// mark (a worker with a rank): { color, pips } or { color, symbol } from room/themes.js, drawn before the name.
 const PIP = Math.round(2.4 * SC), PIP_GAP = SC;
-const markWidth = (mark) => (mark ? mark.pips * (PIP + PIP_GAP) : 0);
+// The rank symbols, 5x5, the same shapes as the masks.
+const SYMBOLS = {
+  star: ["..x..", "xxxxx", ".xxx.", ".x.x.", "x...x"],
+  square: ["xxxxx", "x...x", "x...x", "x...x", "xxxxx"],
+  triangle: ["..x..", "..x..", ".xxx.", ".xxx.", "xxxxx"],
+  circle: [".xxx.", "x...x", "x...x", "x...x", ".xxx."],
+};
+const CELL = Math.max(1, Math.round(0.8 * SC));
+const markWidth = (mark) => (!mark ? 0 : mark.symbol ? 5 * CELL + PIP_GAP : mark.pips * (PIP + PIP_GAP));
 export function drawLabel(text, cx, y, strong, mark = null) {
   ctx.font = labelFont(strong);
   ctx.textAlign = "center";
@@ -194,7 +202,13 @@ export function drawLabel(text, cx, y, strong, mark = null) {
   ctx.fillText(text, cx * SC + mw / 2, y * SC + 0.8 * SC);
   if (!mark) return;
   ctx.fillStyle = mark.color;
-  const x0 = Math.round(cx * SC - (w + mw) / 2 + 4), py = Math.round(y * SC + (5.6 * SC - PIP) / 2);
+  const x0 = Math.round(cx * SC - (w + mw) / 2 + 4);
+  if (mark.symbol) {
+    const sy = Math.round(y * SC + (5.6 * SC - 5 * CELL) / 2);
+    SYMBOLS[mark.symbol].forEach((row, r) => { for (let c = 0; c < 5; c++) if (row[c] === "x") ctx.fillRect(x0 + c * CELL, sy + r * CELL, CELL, CELL); });
+    return;
+  }
+  const py = Math.round(y * SC + (5.6 * SC - PIP) / 2);
   for (let i = 0; i < mark.pips; i++) ctx.fillRect(x0 + i * (PIP + PIP_GAP), py, PIP, PIP);
 }
 // The box drawLabel paints for the same arguments, in the scene's units (the room is 384 by 256), so the layer over the

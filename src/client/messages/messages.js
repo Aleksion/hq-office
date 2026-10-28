@@ -144,7 +144,7 @@ export function renderMsgs() {
     if (setHTML(box, html) || msgStick) box.scrollTop = atBottom ? box.scrollHeight : top;
   }
   msgStick = false;
-  if (caret != null) { const ta = box.querySelector("[data-rbox] textarea"); if (ta) { ta.focus(); ta.setSelectionRange(caret, caret); } }
+  if (caret != null) { const ta = box.querySelector("[data-rbox] textarea"); if (ta) { ta.focus({ preventScroll: true }); ta.setSelectionRange(caret, caret); } }
 }
 const lastMsg = (box) => { const all = box.querySelectorAll("[data-msg]"); return all[all.length - 1]; };
 // The newest message is on screen, or its bottom is just under the edge.

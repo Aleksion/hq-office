@@ -26,7 +26,15 @@ $("main").addEventListener("click", async (e) => {
   const id = Number(card.dataset.ask);
   const d = drafts.get(id) || {};
   const opt = e.target.closest(".opt");
-  if (opt) { d.opt = d.opt === opt.dataset.opt ? undefined : opt.dataset.opt; drafts.set(id, d); renderHud(); return; }
+  if (opt) {
+    // Changed in place, not by building the list again: the option stays exactly where it was clicked.
+    d.opt = d.opt === opt.dataset.opt ? undefined : opt.dataset.opt;
+    drafts.set(id, d);
+    for (const b of card.querySelectorAll(".opt")) b.classList.toggle("sel", b.dataset.opt === d.opt);
+    const send = card.querySelector(".send"), ask = S.open.find((a) => a.id === id);
+    if (send && ask) send.disabled = !canSend(ask, d);
+    return;
+  }
   if (e.target.closest(".send")) {
     const ask = S.open.find((a) => a.id === id);
     const wait = notReady(id);

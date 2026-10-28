@@ -6,6 +6,15 @@
 import { esc } from "../core/format.js";
 import { CONFIG } from "../core/state.js";
 
+// An attached image's address on this HUD: from a room's folder (rooms/SLUG/files/NAME, where a room's send box puts
+// it), an old shelf file (room-files/), or the general uploads/.
+const unesc = (t) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+function imageUrl(escaped) {
+  const p = unesc(escaped), f = p.split("/").pop();
+  const room = p.match(/\/rooms\/([a-z0-9][a-z0-9-]{0,47})\/files\/([^/]+)$/);
+  if (room) return `/rooms/${room[1]}/files/${encodeURIComponent(room[2])}`;
+  return `/${/\/room-files\/[^/]+$/.test(p) ? "room-files" : "uploads"}/${encodeURIComponent(f)}`;
+}
 // A link's target: http(s), or a path on this HUD (never a protocol-relative //host).
 const LINK = /\[([^\]\n]+)\]\(((?:https?:\/\/|\/(?!\/))[^\s)]*)\)/g;
 function inline(raw, chat) {
@@ -13,7 +22,7 @@ function inline(raw, chat) {
   const keep = (html) => `\u0000${codes.push(html) - 1}\u0000`;
   let t = esc(raw).replace(/`([^`\n]+)`/g, (m, c) => keep(`<code>${c}</code>`));
   if (chat) {
-    t = t.replace(/\[image: ([^\]\s]+)\]/g, (m, p) => { const f = p.split("/").pop(); return keep(`<a href="/uploads/${f}" target="_blank" rel="noopener"><img class="thumb" src="/uploads/${f}" alt=""></a>`); });
+    t = t.replace(/\[image: ([^\]\n]+?)\]/g, (m, p) => { const u = esc(imageUrl(p)); return keep(`<a href="${u}" target="_blank" rel="noopener"><img class="thumb" src="${u}" alt=""></a>`); });
     if (CONFIG.githubRepo) t = t.replace(/(^|[\s(])#(\d{4,5})\b/g, (m, p, n) => `${p}${keep(`<a href="https://github.com/${esc(CONFIG.githubRepo)}/pull/${n}" target="_blank" rel="noopener">#${n}</a>`)}`);
   }
   t = t.replace(LINK, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>`);

@@ -4,9 +4,17 @@
 // The owner names the levels in SETTINGS; these stand until then. Deeper than the list uses the last name.
 export const DEFAULT_LEVELS = ["Manager", "Lead", "Engineer"];
 
+// A list that starts with HQ names HQ's own level (depth 0, always "HQ"): the lanes' levels are the rest.
 export function levelNames(setting?: unknown): string[] {
   const names = typeof setting === "string" ? setting.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  if (names[0]?.toLowerCase() === "hq") names.shift();
   return names.length ? names : DEFAULT_LEVELS;
+}
+
+// The rank (1 = the top level) of a level name, any case; null for a name not in the list.
+export function rankOf(level: unknown, names: string[]): number | null {
+  const i = names.findIndex((n) => n.toLowerCase() === String(level ?? "").trim().toLowerCase());
+  return i < 0 ? null : i + 1;
 }
 
 // HQ is depth 0, a lane straight under HQ depth 1, its lanes depth 2, and so on.

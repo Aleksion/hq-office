@@ -268,6 +268,13 @@ describe("the plugin's reload and install-service hand the secrets over", () => 
     await expectHandedOver(before, token, plugin("reload"));
   });
 
+  test("reload of a server from before the handover (no token, no export): read one by one, then handed over", async () => {
+    const before = await listing(base);
+    const token = tokenOf(t.state);
+    rmSync(join(t.state, "secret-handover.token")); // what a server from before the handover looks like to the plugin
+    await expectHandedOver(before, token, plugin("reload"));
+  });
+
   test("no value in the plugin's output, the log, the database or the token file", () => {
     for (const out of outputs) for (const v of Object.values(VALUES)) expect(out).not.toContain(v);
     const files = filesUnder(t.state);

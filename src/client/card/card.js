@@ -6,7 +6,8 @@ import { scope } from "../core/scope.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { dur, esc, setHTML } from "../core/format.js";
 import { linkify } from "../core/text.js";
-import { hasTree } from "../room/looks.js";
+import { ranked, themeOf } from "../room/looks.js";
+import { settings } from "../settings/prefs.js";
 import { issueLink, prLink } from "../core/floors.js";
 
 const words = (v) => String(v ?? "").split(/[ ,]+/).filter(Boolean);
@@ -26,8 +27,8 @@ export function renderCard() {
     ...words(lane.pr).map((p) => { const l = prLink(CONFIG, p); return linkTag(l.href, `#${l.num}`); }),
     lane.machine ? `<span class="tag">${esc(lane.machine)} ${esc(lane.pane || "")}</span>` : "",
   ].join("");
-  // Where it sits in the tree, once there is one: its level and the chain up to HQ (each step selects that lane).
-  const tree = hasTree(S.lanes) ? `<div class="path"><span class="tag level">${esc(String(lane.level || "").toUpperCase())}</span><span class="chain">HQ${(lane.path || []).map((p) => ` &gt; <button class="up" data-select="${esc(p)}">${esc(p)}</button>`).join("")} &gt; <b>${esc(lane.name)}</b></span></div>` : "";
+  // Where it sits, once the room shows ranks: its level and the chain up to HQ (each step selects that lane).
+  const tree = ranked(S.lanes, themeOf(settings.theme)) ? `<div class="path"><span class="tag level">${esc(String(lane.level || "").toUpperCase())}</span><span class="chain">HQ${(lane.path || []).map((p) => ` &gt; <button class="up" data-select="${esc(p)}">${esc(p)}</button>`).join("")} &gt; <b>${esc(lane.name)}</b></span></div>` : "";
   setHTML(card, `<h3>${esc(lane.name)}</h3>
     <div class="sub">${esc(lane.title || "")}</div>${tree}
     <div class="row"><span class="status" style="background:${color}">${esc(label.toUpperCase())}</span>${lane.herdr_since ? `<span class="tag">FOR <span data-since="${lane.herdr_since}">${dur(Date.now() - lane.herdr_since)}</span></span>` : ""}${links}</div>

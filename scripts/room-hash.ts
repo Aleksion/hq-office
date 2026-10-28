@@ -389,7 +389,7 @@ export async function newSession(cdp: Cdp, errors: string[]) {
 
 export async function treeOf(ref: string, repo: string) {
   const dir = mkdtempSync(join(tmpdir(), "hq-office-ref-"));
-  const archive = Bun.spawnSync(["git", "-C", repo, "archive", ref], { stdout: "pipe" });
+  const archive = Bun.spawnSync(["git", "-C", repo, "archive", ref], { stdout: "pipe", timeout: 60_000 });
   if (archive.exitCode !== 0) throw new Error(`git archive ${ref} failed`);
   Bun.spawnSync(["tar", "-x", "-C", dir], { stdin: archive.stdout });
   return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };
