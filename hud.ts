@@ -48,6 +48,9 @@
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
 //   hud pause ISSUE REASON...  /  hud resume ISSUE deliberately on hold, so it is not called stalled
 //   hud board [--json]                            blocked on a prompt, then stalled, first; refreshes GitHub if the cache is over a minute old
+// recruit: start an Orchestrator on a floor of its own (a start takes up to 3 minutes; --wait prints each step)
+//   hud recruit NAME --floor "FLOOR NAME" --machine M [--account A] [--model sonnet|opus] (--brief TEXT | --brief-file PATH) [--wait]
+//   hud recruit stop NAME   stop an up recruit, or withdraw a held one
 //   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
 // conference rooms: one per piece of work, where the owner talks straight to the lane that owns it (see roomCmd below)
 //   hud room create|path|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
@@ -131,6 +134,36 @@ function showRequest(r: any, full: boolean) {
   if (r.last_error) lines.push(`last delivery failed: ${r.last_error}`);
   lines.push(`answer with: hud req answer ${r.id} "<text>"`);
   return lines.join("\n");
+}
+
+// hud recruit: starts the recruit, and with --wait prints each step as it lands until the recruit is up or has ended.
+async function recruitCmd() {
+  if (rest[0] === "stop") {
+    await call("POST", "/api/recruit/stop", { name: rest[1], asked_by: "hq" });
+    console.log(`stopped ${rest[1]}`);
+    return;
+  }
+  const file = one("brief-file");
+  const { id, state } = await call("POST", "/api/recruit", {
+    name: rest[0], floor: one("floor"), machine: one("machine"), account: one("account") || undefined, model: one("model") || undefined,
+    brief: file ? await Bun.file(file).text() : one("brief"), asked_by: "hq",
+  });
+  console.log(`recruit ${rest[0]} (#${id}): ${state}`);
+  if (!("wait" in flags)) return;
+  const poll = Number(process.env.HUD_RECRUIT_POLL_MS ?? 1000);
+  let shown = 0;
+  for (;;) {
+    const r = (await call("GET", "/api/state")).recruits.find((x: any) => x.id === id);
+    if (!r) break;
+    for (const s of r.steps.slice(shown)) console.log(`  ${s.ok ? "ok    " : "FAILED"} ${s.step}${s.note ? `: ${s.note}` : ""}`);
+    shown = r.steps.length;
+    if (r.state === "up") return void console.log(`${r.name} is up on floor "${r.floor}"`);
+    if (!["held", "starting"].includes(r.state)) {
+      console.error(`${r.name} ${r.state}${r.error ? `: ${r.error}` : ""}`);
+      process.exit(1);
+    }
+    await Bun.sleep(poll);
+  }
 }
 
 const [cmd, ...argv] = process.argv.slice(2);
@@ -295,6 +328,9 @@ switch (cmd) {
     process.stdout.write(await res.text());
     break;
   }
+  case "recruit":
+    await recruitCmd();
+    break;
   case "guide":
     console.log(GUIDE);
     break;

@@ -163,15 +163,27 @@ function tellBlocked(lane: Lane) {
 // Types text into an agent's session through herdr (on another machine with `machine`). The one way the server
 // prompts an agent: HQ (notifyHq) and a lane in a conference room (rooms.ts). It never throws: what it says is saved
 // first, and a herdr that cannot even start must not turn that into an error for the page. Resolves once herdr is done.
-export function promptAgent(name: string, text: string, machine?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+// With confirm (for an idle agent), herdr waits until the agent starts working on it, and fails with
+// agent_prompt_stalled if it does not: proof that the agent took the text. A herdr still running after
+// timeoutMs (30 s unless given) is killed, so a late prompt never lands after the caller recorded a failure.
+export function promptAgent(name: string, text: string, machine?: string | null, opts: { confirm?: boolean; timeoutMs?: number } = {}): Promise<{ ok: true } | { ok: false; error: string }> {
   const on = machine && machine !== LOCAL ? ["--machine", machine] : [];
+  const wait = opts.confirm ? ["--wait", "--until", "working", "--timeout", "15000"] : [];
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn([HERDR, ...on, "agent", "prompt", name, text], { stdout: "ignore", stderr: "pipe" });
+    proc = Bun.spawn([HERDR, ...on, "agent", "prompt", name, text, ...wait], { stdout: "ignore", stderr: "pipe" });
   } catch (e) {
     return Promise.resolve({ ok: false, error: (e as Error).message });
   }
-  return proc.exited.then(async (code) => (code === 0 ? { ok: true as const } : { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` }));
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; proc.kill(); }, opts.timeoutMs ?? 30_000);
+  return proc.exited.then(async (code) => {
+    clearTimeout(timer);
+    // Exit 0 first: a herdr that finished just as the timer fired did type, and a killed one never exits 0.
+    if (code === 0) return { ok: true as const };
+    if (timedOut) return { ok: false as const, error: "herdr did not answer in time" };
+    return { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` };
+  });
 }
 
 // The agent the owner's answers and notes are typed into, with a one-line reminder to reply through the HUD (the
