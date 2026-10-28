@@ -1,4 +1,4 @@
-// Where the scope shows: the chip at the right end of the tab row, and a border round the screen in the floor's
+// Where the scope shows: the chip in a row under the tabs, and a border round the screen in the floor's
 // colour (a second ring inside it at the agent level). Made the first time a scope is set, as blocked/ makes its
 // box, so a page with no scope is exactly the page without this feature.
 import { on } from "../core/bus.js";
@@ -14,7 +14,7 @@ function make() {
   chip.type = "button";
   chip.className = "scopechip";
   chip.addEventListener("click", outOne);
-  document.getElementById("qtabs")?.append(chip);
+  document.getElementById("qtabs")?.after(chip);
   border = document.createElement("div");
   border.className = "scopeborder";
   ring = document.createElement("div");
@@ -35,6 +35,7 @@ function render() {
   ring.style.borderColor = color;
   ring.hidden = !v.agent;
   chip.style.borderColor = color;
+  chip.style.background = color;
   setText(chip, chipText(S, scope()));
 }
 on("scope", render);

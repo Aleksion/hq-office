@@ -273,6 +273,41 @@ test.skipIf(!chromeFound)("five floors at 1440: a label stays inside its tile, a
   }
 }, 90_000);
 
+// The scope chip is what tells the owner the page is scoped, so it must read whole and take a click on its ✕: on one
+// line, inside the question column, at the widest and the narrowest two-column width.
+test.skipIf(!chromeFound)("the scope chip reads on one line inside its column and its ✕ takes a click, at 1440 and 1151", async () => {
+  const geometry = () => ev(`(() => {
+    const c = document.querySelector(".scopechip"), r = c.getBoundingClientRect(), col = document.querySelector(".qwrap").getBoundingClientRect();
+    const x = r.right - 12, y = r.top + r.height / 2;
+    const rg = document.createRange(); rg.selectNodeContents(c);
+    return { lines: new Set([...rg.getClientRects()].map((q) => Math.round(q.top))).size, left: r.left - col.left, right: col.right - r.right, clipped: c.scrollWidth > c.clientWidth, opacity: getComputedStyle(c).opacity, hit: document.elementFromPoint(x, y) === c || c.contains(document.elementFromPoint(x, y)), x, y };
+  })()`) as Promise<{ lines: number; left: number; right: number; clipped: boolean; opacity: string; hit: boolean; x: number; y: number }>;
+  const clickAt = async (x: number, y: number) => {
+    for (const type of ["mousePressed", "mouseReleased"]) await page.s("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+  };
+  try {
+    for (const [width, height] of [[1440, 900], [1151, 900]] as [number, number][]) {
+      await open(general.base, width, height);
+      await until(`document.querySelectorAll(".building .tile").length === 3`);
+      await click(`.tile[data-floor="sales"] .tlabel`);
+      await until(`document.querySelector(".scopechip")?.textContent === "SALES FLOOR ✕"`);
+      await choose("sales-outb");
+      await until(`document.querySelector(".scopechip")?.textContent === "SALES FLOOR › sales-outb ✕"`);
+      for (const text of ["SALES FLOOR › sales-outb ✕", "SALES FLOOR ✕"]) {
+        await until(`document.querySelector(".scopechip")?.textContent === ${JSON.stringify(text)}`);
+        await settled();
+        const g = await geometry();
+        expect({ width, text, lines: g.lines, inside: g.left >= 0 && g.right >= 0, clipped: g.clipped, opacity: g.opacity, hit: g.hit }).toEqual({ width, text, lines: 1, inside: true, clipped: false, opacity: "1", hit: true });
+        await clickAt(g.x, g.y); // on its ✕
+      }
+      await until(`document.querySelector(".room").dataset.stage === "out"`);
+      expect(await scopeOf()).toEqual({ floor: null, agent: null, all: false });
+    }
+  } finally {
+    await page.s("Page.navigate", { url: "about:blank" });
+  }
+}, 60_000);
+
 test.skipIf(!chromeFound)("one floor: today's page under a stage bar that holds RUNDOWN alone: no building, no way back, no floor tags and no floor border", async () => {
   for (const [width, height] of SIZES) {
     await open(single.base, width, height);
