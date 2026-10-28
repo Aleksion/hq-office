@@ -8,6 +8,7 @@ import { heroPal, hqPal } from "./looks.js";
 import { hero } from "../settings/prefs.js";
 import { chosenSeason, setSeason } from "./seasons.js";
 import { drawAccessories, wornBy } from "./accessories.js";
+import { drawDeskGadget, drawGadget, heldBy } from "./gadgets.js";
 import { drawEventCounter } from "./events.js";
 import { workers } from "./workers.js";
 import { deskCount } from "./collision.js";
@@ -15,6 +16,8 @@ import { GLYPH, drawBubble, drawLabel, drawRoom, stillOpaque, stillPicture } fro
 import { danceMove, drawNotes, drawShadow, drawSleep, drawSparkles, isNight, slideChange, sliding } from "./hero.js";
 import { drawProp, drawWatchCheck, idleBrain, idleLift } from "./breakroom.js";
 import { changeAt, danceClock, nextChange, steadyClock, walkMs, mode } from "./beat.js";
+import { cut, floorById } from "../core/floors.js";
+import { inBuilding, officeFloor } from "../core/scope.js";
 
 // At most one frame is ever waiting: either its timer or the display frame the timer asked for.
 let last = performance.now();
@@ -22,7 +25,10 @@ let frameTimer = null;
 let frameQueued = 0;
 let frameNext = 0;
 let walked = false;
-const roomVisible = () => document.visibilityState === "visible";
+// The office rests while something covers it: a conference room opened on the stage (rooms/) says so on the bus.
+let covered = false;
+// With floors, it rests while the building shows instead (docs/floors.md).
+const roomVisible = () => document.visibilityState === "visible" && !covered && !inBuilding();
 function scheduleFrame() {
   if (!roomVisible()) {
     clearTimeout(frameTimer);
@@ -58,6 +64,8 @@ function wake() {
   scheduleFrame();
 }
 on("state", wake);
+on("scope", wake);
+on("stage", (shown) => { covered = shown !== "office"; wake(); });
 on("settings", wake); // PERFORMANCE switches at once
 window.addEventListener("focus", wake);
 window.addEventListener("blur", wake);
@@ -97,7 +105,9 @@ function drawScene(now, dt) {
     drawEventCounter(now);
     drawLabel("YOU", 20 * TS, 3 * TS + 10, true);
     drawSprite(hqPal(), 16 * TS, 5 * TS - 6, "up", 0);
-    drawLabel("HQ", 16 * TS + 8, 5 * TS + 10, true);
+    // Inside a floor, HQ at the terminal is that floor's HQ, by its name.
+    const floor = floorById(S, officeFloor());
+    drawLabel(floor ? cut(floor.hq) : "HQ", 16 * TS + 8, 5 * TS + 10, true);
 
     const list = [...workers.values()];
     for (const w of list) if (w.brain) idleBrain(w, now, list);
@@ -117,7 +127,17 @@ function drawScene(now, dt) {
       }
     }
     list.sort((a, b) => a.y - b.y);
+    // What each worker holds, and the gadgets standing on desks: part of the desk, so under every worker.
+    const held = new Map();
     for (const w of list) {
+      const busyHand = !!(w.brain?.acting && (w.brain.act.kind === "coffee" || w.brain.act.kind === "snack"));
+      const items = wornBy(w.lane.name, false, w.pal.look?.hides);
+      const h = heldBy(w, items, now, w.path.length > 0, busyHand);
+      held.set(w, { items, busyHand, h });
+      if (h?.pose === "desk") drawDeskGadget(w.pal, h.g, w.seat, w.lane.status === "gone" ? 0.4 : 1);
+    }
+    for (const w of list) {
+      const { items, busyHand, h } = held.get(w);
       const moving = w.path.length > 0;
       const step = moving ? 1 + (Math.floor(w.t * 8) % 2) : 0;
       const st = w.lane.status;
@@ -125,7 +145,7 @@ function drawScene(now, dt) {
       const ghost = st === "gone";
       const float = ghost ? Math.sin(steadyClock(now) / 400 + w.bob) * 1.5 : 0;
       const sway = w.brain && moving ? Math.round(Math.sin(now / 110 + w.bob)) : 0;
-      const sx = w.x * TS + sway, sy = w.y * TS - 6 - idleBob + float - idleLift(w, moving, now);
+      const sx = w.x * TS + sway, sy = w.y * TS - 6 - idleBob + float - idleLift(w, moving, now) - (h?.pose === "sip" ? 1 : 0);
       if (selected === w.lane.name) {
         const r = 7 + Math.sin(steadyClock(now) / 200);
         ctx.strokeStyle = "#d63c3c";
@@ -135,16 +155,19 @@ function drawScene(now, dt) {
         ctx.stroke();
       }
       drawSprite(w.pal, sx, sy, w.dir, step, ghost ? 0.4 : 1);
-      const busyHand = !!(w.brain?.acting && (w.brain.act.kind === "coffee" || w.brain.act.kind === "snack"));
-      drawAccessories(w.pal, wornBy(w.lane.name, false, w.pal.look?.hides), sx, sy, w.dir, step, ghost ? 0.4 : 1, busyHand);
+      drawAccessories(w.pal, items, sx, sy, w.dir, step, ghost ? 0.4 : 1, busyHand);
+      if (h && h.pose !== "desk") drawGadget(w.pal, h, sx, sy, w.dir, step, ghost ? 0.4 : 1);
       if (!moving && GLYPH[st]) {
-        const bounce = st === "needs_you" ? Math.abs(Math.sin(steadyClock(now) / 220)) * 2.5 : 0;
-        drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce);
+        const bounce = st === "needs_you" || st === "blocked" ? Math.abs(Math.sin(steadyClock(now) / 220)) * 2.5 : 0;
+        drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce, GLYPH[st][2]);
+      } else if (!moving && w.lane.asks) {
+        // Working with a question open: it stays at its desk, and a still "!" says the question is waiting.
+        drawBubble(sx, sy, GLYPH.needs_you[0], GLYPH.needs_you[1], 0);
       }
       drawProp(w, sx, sy);
       if (st === "waiting" && !moving) drawWatchCheck(w, sx, sy, now);
       const name = w.lane.name.length > 14 ? w.lane.name.slice(0, 13) + "…" : w.lane.name;
-      drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you", w.mark);
+      drawLabel(name, sx + 8, w.y * TS + 10, selected === w.lane.name || hovered === w.lane.name || st === "needs_you" || st === "blocked", w.mark);
     }
   }
   drawnHover = hovered;

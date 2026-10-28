@@ -4,9 +4,17 @@
 // The owner names the levels in SETTINGS; these stand until then. Deeper than the list uses the last name.
 export const DEFAULT_LEVELS = ["Manager", "Lead", "Engineer"];
 
+// A list that starts with HQ names HQ's own level (depth 0, always "HQ"): the lanes' levels are the rest.
 export function levelNames(setting?: unknown): string[] {
   const names = typeof setting === "string" ? setting.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  if (names[0]?.toLowerCase() === "hq") names.shift();
   return names.length ? names : DEFAULT_LEVELS;
+}
+
+// The rank (1 = the top level) of a level name, any case; null for a name not in the list.
+export function rankOf(level: unknown, names: string[]): number | null {
+  const i = names.findIndex((n) => n.toLowerCase() === String(level ?? "").trim().toLowerCase());
+  return i < 0 ? null : i + 1;
 }
 
 // HQ is depth 0, a lane straight under HQ depth 1, its lanes depth 2, and so on.
@@ -35,6 +43,7 @@ export function laneTree(lanes: { name: string; parent?: string | null }[]) {
 }
 
 const STATUS_WORDS: Record<string, string> = {
+  blocked: "blocked on a prompt",
   needs_you: "waiting on the owner",
   hq_turn: "waiting on HQ",
   stale: "waiting on HQ 15+ min",
@@ -47,10 +56,10 @@ const STATUS_WORDS: Record<string, string> = {
 
 type TreeLane = { name: string; parent?: string | null; level?: string; status?: string };
 
-// The tree as `hud tree` prints it: HQ at the top, each lane under the lane it reports to, with its level name and
-// status. Siblings in name order.
-export function treeText(lanes: TreeLane[]) {
-  if (!lanes.length) return "HQ\n  (no lanes yet: hud lane NAME [--parent OTHER])";
+// The tree as `hud tree` prints it: HQ at the top (`head`, which names the floor when there are several), each lane
+// under the lane it reports to, with its level name and status. Siblings in name order.
+export function treeText(lanes: TreeLane[], head = "HQ") {
+  if (!lanes.length) return `${head}\n  (no lanes yet: hud lane NAME [--parent OTHER])`;
   const names = new Set(lanes.map((l) => l.name));
   const kids = new Map<string | null, TreeLane[]>();
   for (const l of lanes) {
@@ -58,7 +67,7 @@ export function treeText(lanes: TreeLane[]) {
     (kids.get(p) ?? kids.set(p, []).get(p)!).push(l);
   }
   for (const list of kids.values()) list.sort((a, b) => a.name.localeCompare(b.name));
-  const out = ["HQ"];
+  const out = [head];
   const seen = new Set<string>();
   const walk = (parent: string | null, prefix: string) => {
     const list = kids.get(parent) ?? [];

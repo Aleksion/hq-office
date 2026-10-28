@@ -2,15 +2,17 @@
 import { $, toast } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
-import { copyCode } from "../core/text.js";
+import { copyCode } from "../core/markdown.js";
 import { post } from "../core/net.js";
 import { canSend, renderHud } from "./questions.js";
 import { clearImages, notReady, withImages } from "../images/images.js";
+import { listFloor } from "../core/scope.js";
 
 $("main").addEventListener("click", async (e) => {
   const copyBtn = e.target.closest(".copy");
   if (copyBtn) { copyCode(copyBtn); return; }
-  if (e.target.closest("[data-readall]")) { await post("/api/updates/read-all", {}).catch(() => {}); return; }
+  // Inside a floor, that floor's only (docs/floors.md).
+  if (e.target.closest("[data-readall]")) { const floor = listFloor(); await post("/api/updates/read-all", floor ? { floor } : {}).catch(() => {}); return; }
   const rmBtn = e.target.closest("[data-secret-rm]");
   if (rmBtn) {
     rmBtn.disabled = true;
@@ -24,7 +26,29 @@ $("main").addEventListener("click", async (e) => {
   const id = Number(card.dataset.ask);
   const d = drafts.get(id) || {};
   const opt = e.target.closest(".opt");
-  if (opt) { d.opt = d.opt === opt.dataset.opt ? undefined : opt.dataset.opt; drafts.set(id, d); renderHud(); return; }
+  if (opt) {
+    // Changed in place, not by building the list again: the option stays exactly where it was clicked.
+    d.opt = d.opt === opt.dataset.opt ? undefined : opt.dataset.opt;
+    drafts.set(id, d);
+    for (const b of card.querySelectorAll(".opt")) b.classList.toggle("sel", b.dataset.opt === d.opt);
+    const send = card.querySelector(".send"), ask = S.open.find((a) => a.id === id);
+    if (send && ask) send.disabled = !canSend(ask, d);
+    return;
+  }
+  // NOT YET on a TO DO: it stays (still waiting on the owner); HQ hears it, with what is in the box as the note.
+  if (e.target.closest(".notyet")) {
+    e.target.disabled = true;
+    try {
+      await post(`/api/asks/${id}/notyet`, { note: withImages(id, (d.text || "").trim()) });
+      drafts.set(id, { ...d, text: "" });
+      clearImages(id);
+      const ta = card.querySelector("textarea");
+      if (ta) ta.value = "";
+      toast("HQ KNOWS: NOT YET.");
+    } catch (err) { toast(err.message); }
+    e.target.disabled = false;
+    return;
+  }
   if (e.target.closest(".send")) {
     const ask = S.open.find((a) => a.id === id);
     const wait = notReady(id);

@@ -1,5 +1,5 @@
-// A theme dresses every sprite in the room: in ARENA a flat team (no lane reports to another) is all numbered players,
-// with no seasonal hat over the costume, the hero is the game master standing, dancing and asleep, and HQ is the
+// A theme dresses every sprite in the room: in ARENA a flat team (every lane straight under HQ) is all PMs in the
+// top rank's star mask, with no seasonal hat or item over the costume, the hero is the game master standing, dancing and asleep, and HQ is the
 // senior guard. Compared pixel by pixel with each costume painted alone. Changing the theme repaints without a
 // reload, and the theme survives a server restart. Needs Chrome (CHROME_BIN); skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -95,20 +95,20 @@ const HELPERS = `
   const DIRS = [["down", 0], ["down", 1], ["up", 0], ["left", 1], ["right", 0]];
 `;
 
-test.skipIf(!chromeFound)("ARENA with a flat team: every worker is drawn in the player costume, nothing seasonal over it", async () => {
+test.skipIf(!chromeFound)("ARENA with a flat team: every lane straight under HQ is a PM in the star mask, nothing seasonal over it", async () => {
   await until(`import("/src/client/room/workers.js").then(({ workers }) => workers.size === ${TEAM.length})`);
-  expect(await looks()).toEqual(TEAM.map(() => "player"));
+  expect(await looks()).toEqual(TEAM.map(() => "guard-star"));
   const out = await page.evaluate(`(async () => {${HELPERS}
     const seats = [...workers.keys()].sort();
     const rows = [];
     for (const [name, w] of workers) {
-      const costume = looksMod.dressed(name, THEMES.arena.flat, seats.indexOf(name) + 1);
+      const costume = looksMod.dressed(name, THEMES.arena.depths[0], seats.indexOf(name) + 1);
       const everyday = palette(name);
       // what the room draws for this worker (room/loop.js): its palette, then the accessories its look leaves
       const items = wornBy(name, false, w.pal.look?.hides);
       const seasonal = wornBy(name, false);
       for (const [dir, step] of DIRS) {
-        const hands = seasonal.filter((a) => a.slot === "hand");
+        const hands = seasonal.filter((a) => a.slot === "hand" && !costume.look.hides.includes("hand"));
         rows.push({ name, dir, drawn: paint(w.pal, dir, step, items) === paint(costume, dir, step, hands), costume: paint(costume, dir, step) !== paint(everyday, dir, step) });
       }
     }
@@ -119,10 +119,10 @@ test.skipIf(!chromeFound)("ARENA with a flat team: every worker is drawn in the 
   expect(out.hatted).toBeGreaterThan(0);
   expect(out.rows.filter((r) => !r.drawn).map((r) => `${r.name} ${r.dir}`)).toEqual([]);
   expect(out.rows.filter((r) => !r.costume).map((r) => `${r.name} ${r.dir}`)).toEqual([]);
-  // and in the room itself: the tracksuit's colour is on the canvas
+  // and in the room itself: the guard suit's colour is on the canvas
   expect(await page.evaluate(`(async () => {${HELPERS}
     const c = document.getElementById("room"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
-    let n = 0; for (let i = 0; i < d.length; i += 4) if (hex(d, i) === "#17806f") n++;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (hex(d, i) === "#e0287a") n++;
     return n;
   })()`)).toBeGreaterThan(TEAM.length * 20);
   expect(errors).toEqual([]);
@@ -155,9 +155,9 @@ test.skipIf(!chromeFound)("ARENA: the hero is the game master standing, dancing 
 }, 30_000);
 
 test.skipIf(!chromeFound)("changing the theme repaints the room without a reload", async () => {
-  const tracksuit = `(async () => {${HELPERS}
+  const suit = `(async () => {${HELPERS}
     const c = document.getElementById("room"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
-    let n = 0; for (let i = 0; i < d.length; i += 4) if (hex(d, i) === "#17806f") n++;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (hex(d, i) === "#e0287a") n++;
     return n;
   })()`;
   await page.evaluate(`window.__sameDocument = true`);
@@ -165,14 +165,14 @@ test.skipIf(!chromeFound)("changing the theme repaints the room without a reload
   await until(`!!document.querySelector('[data-set="theme"][data-val="office"]')`);
   await page.evaluate(`document.querySelector('[data-set="theme"][data-val="office"]').click()`);
   await until(`import("/src/client/room/workers.js").then(({ workers }) => [...workers.values()].every((w) => !w.pal.look))`);
-  await until(`${tracksuit}.then((n) => n === 0)`);
+  await until(`${suit}.then((n) => n === 0)`);
   // the page's own change has reached the server before the next one is made elsewhere
   for (let i = 0; i < 100 && (await (await fetch(`${BASE}/api/settings`)).json()).settings.theme !== "office"; i++) await Bun.sleep(50);
   await Bun.sleep(300);
   // from another page or HQ: the server's change arrives on the stream
   await post("/api/settings", { settings: { theme: "arena" } });
-  await until(`${tracksuit}.then((n) => n > 0)`);
-  expect(await looks()).toEqual(TEAM.map(() => "player"));
+  await until(`${suit}.then((n) => n > 0)`);
+  expect(await looks()).toEqual(TEAM.map(() => "guard-star"));
   expect(await page.evaluate(`window.__sameDocument === true`)).toBe(true);
 }, 30_000);
 
@@ -181,6 +181,6 @@ test.skipIf(!chromeFound)("the theme survives a server restart, and the reloaded
   await start();
   expect((await (await fetch(`${BASE}/api/settings`)).json()).settings.theme).toBe("arena");
   await open();
-  await until(`import("/src/client/room/workers.js").then(({ workers }) => workers.size === ${TEAM.length} && [...workers.values()].every((w) => w.pal.look?.id === "player"))`);
+  await until(`import("/src/client/room/workers.js").then(({ workers }) => workers.size === ${TEAM.length} && [...workers.values()].every((w) => w.pal.look?.id === "guard-star"))`);
   expect(errors.filter((e) => !/EventSource|stream|Failed to load resource/i.test(e))).toEqual([]);
 }, 30_000);

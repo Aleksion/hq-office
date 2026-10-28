@@ -6,12 +6,14 @@
 // without a preflight, which this server never grants). A raw POST reads the body itself; any other POST gets the
 // parsed JSON body, and its return value is the JSON reply ({ ok: true } when it returns nothing). Every write is
 // followed by bump(), so open pages refetch. A thrown error is a 400 with its message.
+// caller() says who is calling and on which floor (floors.ts), worked out the first time a handler asks.
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { json } from "./json.ts";
 import { bump } from "./push.ts";
+import { callerOf, type Caller } from "./floors.ts";
 
-export type Ctx = { req: Request; url: URL; path: string; body: any; m: RegExpMatchArray };
+export type Ctx = { req: Request; url: URL; path: string; body: any; m: RegExpMatchArray; caller: () => Caller };
 export type Route = {
   method: "GET" | "POST";
   path?: string;
@@ -40,18 +42,21 @@ function find(method: string, path: string, raw: boolean): { route: Route; m: Re
 export async function handle(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
+  let body: any;
+  let who: Caller | undefined;
+  const caller = () => (who ??= callerOf(req, body, url));
   try {
     if (req.method === "GET") {
       const hit = find("GET", path, false);
-      return hit ? ((await hit.route.handle({ req, url, path, body: undefined, m: hit.m })) as Response) : json({ error: "not found" }, 404);
+      return hit ? ((await hit.route.handle({ req, url, path, body: undefined, m: hit.m, caller })) as Response) : json({ error: "not found" }, 404);
     }
     if (req.method !== "POST" || req.headers.get("x-hud") !== "1") return json({ error: "forbidden" }, 403);
     const raw = find("POST", path, true);
-    if (raw) return (await raw.route.handle({ req, url, path, body: undefined, m: raw.m })) as Response;
-    const body = await req.json().catch(() => ({}));
+    if (raw) return (await raw.route.handle({ req, url, path, body: undefined, m: raw.m, caller })) as Response;
+    body = await req.json().catch(() => ({}));
     const hit = find("POST", path, false);
     if (!hit) return json({ error: "not found" }, 404);
-    const result = await hit.route.handle({ req, url, path, body, m: hit.m });
+    const result = await hit.route.handle({ req, url, path, body, m: hit.m, caller });
     bump();
     return json(result === undefined ? { ok: true } : result);
   } catch (e) {

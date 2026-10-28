@@ -1,5 +1,6 @@
 // Lane status labels and colours. A contract shared by the card and anything else that names a status.
 export const STATUS_TEXT = {
+  blocked: ["Blocked on a prompt", "#b01e1e"], // blocked-prompts: its agent waits at a prompt in its herdr pane
   needs_you: ["Waiting on you", "#d63c3c"],
   hq_turn: ["Waiting on HQ", "#e0901e"],
   stale: ["Waiting on HQ 15+ min", "#c0501e"],

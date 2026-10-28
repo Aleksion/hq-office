@@ -23,7 +23,7 @@ export function state() {
   return {
     now,
     version,
-    lanes: withTree(lanes).map((l) => ({ ...l, status: laneStatus(l, openByLane, now) })),
+    lanes: withTree(lanes).map((l) => ({ ...l, status: laneStatus(l, openByLane, now), asks: openByLane.get(l.name) ?? 0 })),
     open: open.map(parse),
     answered: answered.map(parse),
     notes: db.query("SELECT * FROM notes ORDER BY at DESC LIMIT 20").all(),

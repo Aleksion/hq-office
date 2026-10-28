@@ -65,21 +65,22 @@ afterAll(async () => {
 describe.skipIf(!chromeFound)("attach", () => {
   // Each composer, in order: its children, the photo button's input, and its height.
   const COMPOSERS = `[...document.querySelectorAll(".reply")].map((r) => { const i = r.querySelector(".acts > label.attach:first-child input[type=file]");
-    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!i.closest("label").nextElementSibling?.matches(".send") }, height: r.getBoundingClientRect().height }; })`;
+    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!(i.closest("label").nextElementSibling?.matches(".send") || i.closest("label").nextElementSibling?.matches(".notyet") && i.closest("label").nextElementSibling.nextElementSibling?.matches(".send")) }, height: r.getBoundingClientRect().height }; })`;
+  // A TO DO has NOT YET between the photo button and DONE.
   test("every send box is one composer: the tray, the field, then the photo button and SEND; compact on a desktop", async () => {
     const boxes = await page.evaluate(COMPOSERS);
     expect(boxes.map((b: any) => b.key)).toContain("note");
     expect(boxes.filter((b: any) => /^\d+$/.test(b.key))).toHaveLength(2);
     for (const b of boxes) {
       expect(b.parts).toEqual(["chips", "field", "acts"]);
-      expect(b.input).toEqual({ key: b.key, accept: "image/*", multiple: true, beforeSend: true });
+      expect(b.input).toEqual({ key: b.key, accept: expect.stringMatching(/^image\/\*,\.pdf,/), multiple: true, beforeSend: true });
       // 0.8.0's row was 42 to 61 px; the composer stays under 64 at 1440x900 (the empty tray takes no space).
       expect(b.height).toBeLessThanOrEqual(64);
     }
     await page.evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
     await until(`!!document.querySelector("#msgs [data-reply]")`);
     await page.evaluate(`document.querySelector("#msgs [data-reply]").click()`);
-    await until(`!!document.querySelector('[data-rbox] .reply[data-composer="reply"] label.attach input[data-attach="reply"][accept="image/*"][multiple]')`);
+    await until(`!!document.querySelector('[data-rbox] .reply[data-composer="reply"] label.attach input[data-attach="reply"][accept^="image/*,"][multiple]')`);
     expect((await page.evaluate(COMPOSERS)).find((b: any) => b.key === "reply").parts).toEqual(["chips", "field", "acts"]);
     await page.evaluate(`document.querySelector("#msgs [data-reply]").click(); document.querySelector('[data-qtab="questions"]').click()`);
   });

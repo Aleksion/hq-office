@@ -11,4 +11,22 @@
 .sfoot { display: flex; justify-content: flex-end; }
 .srow .levels { flex: 1 1 180px; min-width: 0; border: 3px solid var(--edge-2); border-radius: 6px; padding: 4px 8px; font: 16px/1.3 var(--text); background: #fff; color: var(--ink); }
 .srow .levels:focus { outline: none; border-color: var(--edge); }
+/* HQ SWEEP: the hours, from-to (8-24) */
+.srow .hours { flex: 0 0 72px; min-width: 0; border: 3px solid var(--edge-2); border-radius: 6px; padding: 4px 8px; font: 16px/1.3 var(--text); background: #fff; color: var(--ink); text-align: center; }
+.srow .hours:focus { outline: none; border-color: var(--edge); }
 .srow .hint { color: var(--muted); font-size: 12px; }
+/* FLOORS: a row per floor, and the form that adds or changes one */
+.flist { display: grid; gap: 4px; }
+.frow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; }
+.frow b { font: 8px/1.4 var(--pixel); }
+.frow .fh { color: var(--muted); overflow-wrap: anywhere; }
+.frow .btn-s { margin-left: auto; font-size: 7px; padding: 5px 6px; }
+.fsw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.fform { display: grid; gap: 6px; padding: 8px; border: 2px solid var(--edge-2); border-radius: 8px; background: #fff; }
+.fform .frow2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fform .sk { font: 7px/1 var(--pixel); color: var(--muted); min-width: 52px; }
+.fform select.levels { flex: 1 1 180px; min-width: 0; }
+.fcolor { width: 24px; height: 24px; padding: 0; border: 2px solid var(--edge-2); border-radius: 6px; }
+.fcolor.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--box), 0 0 0 4px var(--ink); }
+.fconfirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; padding: 6px 8px; border-radius: 6px; background: #fff0f0; }
+.fconfirm .danger { background: var(--red); color: #fff; border-color: #8a2020; }

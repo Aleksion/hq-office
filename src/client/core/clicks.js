@@ -2,7 +2,7 @@
 import { $ } from "./dom.js";
 import { renderFeed, renderLog, setFeedTab } from "../feed/feed.js";
 import { select } from "../room/input.js";
-import { expanded } from "./text.js";
+import { expanded } from "./markdown.js";
 import { renderHud } from "../questions/questions.js";
 import { renderMsgs } from "../messages/messages.js";
 

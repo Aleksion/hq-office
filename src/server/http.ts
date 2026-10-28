@@ -4,9 +4,13 @@ import { HOST, LEGACY_OWNER_WHO, OWNER, PORT, TRUSTED_ORIGINS } from "./config.t
 import { handle } from "./router.ts";
 import { json } from "./json.ts";
 import { bump, secrets } from "./push.ts";
-import { notifyHq } from "./herdr.ts";
+import { notifyAllHqs } from "./hq-link.ts";
+import { event } from "./events.ts";
+import { redactEverywhere } from "./redact.ts";
 import { answerWithSecrets } from "./asks.ts";
 import { isSecretPath, originAllowed, secretGuard, secretRoute } from "./secrets.ts";
+import { handover, lostBook } from "./secret-ledger.ts";
+import { expiresText } from "../client/secrets/expiry.js";
 
 Bun.serve({
   port: PORT,
@@ -20,8 +24,22 @@ Bun.serve({
     if (isSecretPath(path)) {
       return secretRoute(req, path, ip, secrets, {
         host: HOST,
+        trusted: TRUSTED_ORIGINS,
+        onRedact: (name, value) => {
+          const out = redactEverywhere(value, name);
+          event("hud", `redacted ${name} from ${out.rows} stored ${out.rows === 1 ? "row" : "rows"}`);
+          bump();
+          return out;
+        },
+        onCopy: (name) => {
+          event(OWNER, `copied ${name}`);
+          bump();
+        },
+        lost: lostBook,
+        handover,
+        // Secrets are shared by every floor: every floor's HQ hears of one the owner sets.
         onSet: (m) => {
-          if (m.by === "owner" || m.by === LEGACY_OWNER_WHO) notifyHq(`HUD secret from ${OWNER}: ${m.name}, readable for ${Math.round((m.expiresAt - m.setAt) / 60_000)} min with: hud secret get ${m.name} | <command>`);
+          if (m.by === "owner" || m.by === LEGACY_OWNER_WHO) notifyAllHqs(`HUD secret from ${OWNER}: ${m.name}, ${expiresText(m.expiresAt)}; read it with: hud secret get ${m.name} | <command>`);
         },
       });
     }
