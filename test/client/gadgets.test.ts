@@ -73,7 +73,7 @@ beforeAll(async () => {
   stander = await page.evaluate(`import("/src/client/room/gadgets.js").then((G) => ${JSON.stringify(STAND)}.find((n) => G.gadgetFor(n)))`);
   writeHerdr(stander);
   for (const name of [...DESK, stander, ASKER]) await server.post("/api/lanes", { name, phase: "running", title: name, machine: "local" });
-  await server.post("/api/asks", { lane: ASKER, kind: "decision", title: "Ship it?", options: ["Yes", "No"] });
+  await server.post("/api/asks", { lane: ASKER, kind: "decision", title: "Ship it?", options: ["Yes", "No"], recommended: "Yes" });
   await server.post("/api/settings", { settings: { performance: "balanced", theme: "office" } });
   await server.post("/api/sync", {});
   await open();
