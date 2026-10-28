@@ -5,8 +5,6 @@ import { S } from "../core/state.js";
 import { post } from "../core/net.js";
 import { attachButton, chipsHTML, clearImages, hasImages, notReady, withImages } from "../images/images.js";
 import { setHTML } from "../core/format.js";
-import { S } from "../core/state.js";
-import { on } from "../core/bus.js";
 import { tellRecipient } from "../core/floors.js";
 import { view } from "../core/scope.js";
 
