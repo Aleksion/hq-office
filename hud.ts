@@ -28,6 +28,7 @@
 //   hud secret set NAME --minutes N [--by WHO]   the value comes from stdin, never from an argument
 //   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal; says if it was lost
 //   hud secret rm NAME
+//   hud secret redact NAME  replace the value wherever it was typed and stored (answers, notes, updates) with [secret NAME]
 //   hud secret list      names, who set them and when they expire, and LOST ones (lost in a restart); never values
 // the queue: what a lane sends HQ. It waits until HQ reads it; only --urgent also types a line into HQ's pane.
 //   hud request --lane NAME [--kind READY|BLOCK|QUESTION|DONE|NOTE] [--urgent] [--lead NAME] [--pr N]
@@ -354,7 +355,7 @@ async function secret(args: string[]) {
   const { rest, one } = parse(args.filter((a) => a !== "--once"));
   const [verb, name, ...extra] = rest;
   const usage = () => {
-    console.error("usage: hud secret set NAME --minutes N  (value on stdin) | get NAME [--once] | rm NAME | list");
+    console.error("usage: hud secret set NAME --minutes N  (value on stdin) | get NAME [--once] | rm NAME | redact NAME | list");
     process.exit(2);
   };
   if (verb !== "list" && !name) usage();
@@ -379,6 +380,12 @@ async function secret(args: string[]) {
       }
       const { value } = await call("POST", "/api/secrets/get", { name, once });
       process.stdout.write(value);
+      break;
+    }
+    case "redact": {
+      // The server replaces the value wherever it is stored with [secret NAME]; the value never comes through here.
+      const { rows, tables } = await call("POST", "/api/secrets/redact", { name });
+      console.log(rows ? `redacted ${name} from ${rows} stored ${rows === 1 ? "row" : "rows"}: ${Object.entries(tables).map(([k, n]) => `${k} ${n}`).join(", ")}` : `${name} is not stored anywhere`);
       break;
     }
     case "rm": {
@@ -419,9 +426,20 @@ function roomUsage() {
 }
 
 // Text from an argument, else from stdin when it is piped.
+// Text from --body, else piped in. A stdin that is open but says nothing (a shell or an agent's tool that never closes
+// it) would wait forever: with no first bytes within a second it counts as nothing given.
 async function textArg(given: string | undefined) {
   if (given !== undefined) return given;
-  return process.stdin.isTTY ? "" : (await Bun.stdin.text()).replace(/\r?\n$/, "");
+  if (process.stdin.isTTY) return "";
+  const reader = Bun.stdin.stream().getReader();
+  const first = await Promise.race([reader.read(), Bun.sleep(1000).then(() => null)]);
+  if (!first || first.done) {
+    reader.releaseLock();
+    return "";
+  }
+  const chunks = [first.value];
+  for (let r = await reader.read(); !r.done; r = await reader.read()) chunks.push(r.value);
+  return new TextDecoder().decode(Buffer.concat(chunks)).replace(/\r?\n$/, "");
 }
 
 function ago(t: number) {

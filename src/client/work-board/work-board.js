@@ -2,6 +2,7 @@
 import { $ } from "../core/dom.js";
 import { CONFIG, S } from "../core/state.js";
 import { esc } from "../core/format.js";
+import { mdInline } from "../core/markdown.js";
 import { qTab } from "../messages/messages.js";
 
 // Read-only. Every item's state comes from the server (GitHub, the lane, open asks); this only draws it.
@@ -26,11 +27,11 @@ function workPr(p) {
 }
 function workRow(i) {
   const now = Date.now();
-  const what = i.state === "paused" || i.state === "owner" || i.state === "blocked" ? i.why : i.last ? `last: ${i.last.what}` : "nothing has happened yet";
+  const what = i.state === "paused" || i.state === "owner" || i.state === "blocked" ? i.why : i.last ? "last: " + i.last.what : "nothing has happened yet";
   const age = i.state === "paused" && i.pausedAt ? now - i.pausedAt : i.last ? now - i.last.at : now - i.createdAt;
   return `<article class="wi ${i.state}">
       <div class="meta"><span class="tag ws ${i.state}">${WORK_STATE[i.state]}</span>${workIssue(i)}${i.lane ? `<button class="tag lane" data-select="${esc(i.lane)}">${esc(i.lane)}</button>` : ""}${i.prs.map(workPr).join("")}<span class="age">${workAge(age)}</span></div>
-      <div class="what">${esc(what)}</div>
+      <div class="what">${mdInline(what)}</div>
     </article>`;
 }
 export function renderWork() {
@@ -43,7 +44,7 @@ export function renderWork() {
   const strip = $("stall");
   strip.hidden = !stalled.length || qTab === "work";
   if (!strip.hidden) {
-    const rows = stalled.slice(0, 2).map((i) => `<div class="row"><b>${esc(i.issue)}</b>${esc(i.lane || "no lane")} · ${esc(i.last ? i.last.what : "nothing yet")} · ${workAge(Date.now() - (i.last?.at ?? i.createdAt))}</div>`).join("");
+    const rows = stalled.slice(0, 2).map((i) => `<div class="row"><b>${esc(i.issue)}</b>${esc(i.lane || "no lane")} · ${mdInline(i.last ? i.last.what : "nothing yet", { links: false })} · ${workAge(Date.now() - (i.last?.at ?? i.createdAt))}</div>`).join("");
     strip.innerHTML = `<span class="k">${stalled.length} STALLED ${stalled.length === 1 ? "ITEM" : "ITEMS"}${stalled.length > 2 ? ` (+${stalled.length - 2} MORE)` : ""} · OPEN WORK</span>${rows}`;
   }
   if (qTab !== "work") return;

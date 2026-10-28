@@ -168,6 +168,7 @@ test("a reply from the MESSAGES tab reaches the queue and stays in the page's no
 test("an old note in the notes table and a queued Tell share the page's list with distinct ids", async () => {
   const dir = mkdtempSync(join(tmpdir(), "hq-office-notes-"));
   const script = `
+    await import("./src/server/herdr.ts");
     const { db } = await import("./src/server/db.ts");
     const { tellHq } = await import("./src/server/queue.ts");
     const { state } = await import("./src/server/state.ts");
@@ -212,6 +213,7 @@ test("HQ closes an owner's note that needs no reply: no update, no delivery erro
 test("an old request number still works: the id falls back to the request it was copied from", async () => {
   const dir = mkdtempSync(join(tmpdir(), "hq-office-oldid-"));
   const script = `
+    await import("./src/server/herdr.ts");
     const { db } = await import("./src/server/db.ts");
     const { answerRequest, openRequests } = await import("./src/server/queue.ts");
     db.query("INSERT INTO asks (lane, kind, title, created_at, recipient, request_id) VALUES (NULL, 'NOTE', 'old one', 1, 'HQ', 52)").run();
@@ -263,6 +265,7 @@ test("a queued item is not closed as gone before the first sync: a live lane's r
 test("tellHq takes either path from the one constant: the queue by default, the pane when it is off", async () => {
   const dir = mkdtempSync(join(tmpdir(), "hq-office-tell-"));
   const script = `
+    await import("./src/server/herdr.ts");
     const { tellHq, TELL_GOES_TO_QUEUE } = await import("./src/server/queue.ts");
     console.log(JSON.stringify([TELL_GOES_TO_QUEUE, tellHq("plain", false), tellHq("plain", false, false), tellHq("urgent", true, false).queued, tellHq("plain", false, true).queued]));
     process.exit(0);`;

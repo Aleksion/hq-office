@@ -1,10 +1,11 @@
-// The question panel: the open asks, their timers, and the pill for asks out of view.
+// NEEDS YOU: everything the owner is the blocker on (the open asks), their timers, and the pill for asks out of view.
+// Each card says what it waits for: a QUESTION to decide, a TO DO only the owner can do (DONE or NOT YET), or FYI.
 import { emit, on } from "../core/bus.js";
 import { $, keepPlace, keepScroll, pageScrolls } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
 import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
-import { clipText, linkify, renderBody } from "../core/text.js";
+import { mdClip, mdInline } from "../core/markdown.js";
 import { renderSecretTimes } from "../secrets/secrets.js";
 import { clearImages, composer, hasImages, imageKeys } from "../images/images.js";
 
@@ -14,7 +15,7 @@ export function renderBelow() {
   const edge = list.getBoundingClientRect().bottom;
   const hidden = [...list.querySelectorAll(".ask")].filter((el) => el.getBoundingClientRect().bottom > edge + 1);
   pill.hidden = !hidden.length || list.scrollHeight <= list.clientHeight;
-  pill.textContent = `+${hidden.length} ${hidden.length === 1 ? "QUESTION" : "QUESTIONS"} OUT OF VIEW`;
+  pill.textContent = `+${hidden.length} MORE OUT OF VIEW`;
   pill.onclick = () => hidden[0]?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 $("hud").addEventListener("scroll", renderBelow, { passive: true });
@@ -32,6 +33,8 @@ on("attach", (key) => {
   if (a && btn) btn.disabled = !canSend(a, drafts.get(a.id) || {});
 });
 
+const KIND_LABEL = { decision: "QUESTION", action: "TO DO", info: "FYI" };
+
 export function renderHud() {
   const hud = $("hud");
   // Focus goes back only to a field being typed in (not a clicked button), and never scrolls anything to it.
@@ -41,7 +44,7 @@ export function renderHud() {
   const focusedSecret = document.activeElement?.dataset?.secret;
   const focusedMin = document.activeElement?.dataset?.secretMin !== undefined;
   // The count lives in the top bar now; the list only needs words when it is empty.
-  const head = S.open.length ? "" : `<div class="box"><h2>NOTHING WAITS ON YOU</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Questions land here.</div></div>`;
+  const head = S.open.length ? "" : `<div class="box"><h2>NOTHING NEEDS YOU</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Decisions and things only you can do land here.</div></div>`;
   const html = head + S.open.map((a) => {
     const d = drafts.get(a.id) || {};
     const kind = a.kind;
@@ -51,19 +54,19 @@ export function renderHud() {
       <div class="meta">
         ${a.lane ? `<button class="tag lane" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : ""}
         ${a.urgent_at ? `<span class="tag urgent-tag">URGENT</span>` : ""}
-        <span class="tag ${esc(kind)}">${esc(kind.toUpperCase())}</span>
+        <span class="tag kind ${esc(kind)}">${esc(KIND_LABEL[kind] ?? kind.toUpperCase())}</span>
         ${want.length ? `<span class="tag secret">SECRETS</span>` : ""}
         ${a.link ? `<a class="tag" href="${esc(a.link)}" target="_blank" rel="noopener">OPEN LINK</a>` : ""}
         <span class="due"></span>
         <span class="timer"></span>
       </div>
-      <h3>${linkify(a.title)}</h3>
-      ${a.body ? `<div class="text">${a.body.includes("```") ? renderBody(a.body) : clipText(a.body, `q${a.id}`)}</div>` : ""}
+      <h3>${mdInline(a.title)}</h3>
+      ${a.body ? `<div class="text md">${mdClip(a.body, `q${a.id}`)}</div>` : ""}
       ${opts ? `<div class="menu">${opts}</div>` : ""}
       ${want.length ? `<div class="asksec">${want.map((n) => `<label><span class="tag secret">${esc(n)}</span><input class="sin val" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore placeholder="paste ${esc(n)}" data-secret="${esc(n)}"></label>`).join("")}
         <label><span class="sk">READABLE FOR</span><input class="sin min" type="number" min="1" max="10080" step="1" autocomplete="off" data-secret-min value="${esc(d.minutes ?? 60)}"><span class="sk">MIN</span></label></div>` : ""}
       ${composer(a.id, `<textarea rows="1" placeholder="${kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or your own answer" : "Your answer"}">${esc(d.text || "")}</textarea>`,
-        `<button class="send ${kind !== "decision" ? "go" : ""}" ${canSend(a, d) ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>`)}
+        `${kind === "action" ? `<button class="notyet" type="button">NOT YET</button>` : ""}<button class="send ${kind !== "decision" ? "go" : ""}" ${canSend(a, d) ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>`)}
     </article>`;
   }).join("");
   // Values being pasted are kept in memory only and put back as the input's value, never as markup.

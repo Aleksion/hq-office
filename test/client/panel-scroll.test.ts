@@ -25,6 +25,8 @@ beforeAll(async () => {
   server = await startServer(ROOT);
   for (let i = 1; i <= 6; i++) await server.post("/api/asks", { title: `Question ${i}`, kind: "decision", body: LONG, options: ["Yes", "No", "Later"], lane: "golf" });
   page = await newSession(chrome.cdp, errors);
+  // Web fonts arriving mid-test reflow the list: blocked, as in the other page tests, so what moves is the click.
+  await page.s("Network.setBlockedURLs", { urls: ["*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.s("Page.navigate", { url: `${server.base}/` });
   await until(`document.querySelectorAll("#hud .ask").length >= 6`);

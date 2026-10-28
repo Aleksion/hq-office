@@ -5,7 +5,7 @@ import { on } from "../core/bus.js";
 import { $ } from "../core/dom.js";
 import { CONFIG, S } from "../core/state.js";
 import { esc, setHTML, setText } from "../core/format.js";
-import { linkify } from "../core/text.js";
+import { md, mdInline } from "../core/markdown.js";
 import { drafts } from "../questions/drafts.js";
 import { renderBelow, renderHud } from "../questions/questions.js";
 
@@ -14,9 +14,9 @@ const opened = new Set(); // ask ids whose older comments are open
 const hhmm = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 function itemHtml(i) {
-  const text = linkify(i.text);
+  const text = mdInline(i.text);
   const repo = i.pr?.repo || CONFIG.githubRepo;
-  // linkify already links a #1234 in the default repo; any other PR gets its own link.
+  // The text already links a #1234 in the default repo; any other PR gets its own link.
   const pr = i.pr && repo && !text.includes("<a ") ? ` <a class="lpr" href="https://github.com/${esc(repo)}/pull/${esc(i.pr.number)}" target="_blank" rel="noopener">#${esc(i.pr.number)}</a>` : "";
   const why = i.done ? (i.by === "github" ? "merged" : "done") : "open";
   return `<li class="${i.done ? "done" : ""}"><span class="ltick" role="img" aria-label="${why}">${i.done ? "✓" : ""}</span><span class="lt">${text}${pr}</span></li>`;
@@ -27,7 +27,7 @@ function commentsHtml(id, list) {
   const all = opened.has(id);
   const shown = all || older <= 0 ? list : list.slice(-SHOWN);
   const more = older > 0 ? `<button class="lmore" type="button" data-ledger-more="${id}">${all ? "LESS" : `MORE (${older})`}</button>` : "";
-  return `<div class="lcom">${more}${shown.map((c) => `<div class="lc"><span class="lat">${hhmm(c.at)}</span>${linkify(c.text)}</div>`).join("")}</div>`;
+  return `<div class="lcom">${more}${shown.map((c) => `<div class="lc"><span class="lat">${hhmm(c.at)}</span><div class="md inl">${md(c.text)}</div></div>`).join("")}</div>`;
 }
 
 function decorate() {

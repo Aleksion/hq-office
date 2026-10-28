@@ -16,6 +16,126 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 - Lanes hand back with `hud request`, not by typing into a pane (`hud guide`).
 
+## [0.17.0] - 2026-10-28
+
+### Added
+
+- **Everyday gadgets.** Each worker in the office has a habit: a coffee mug, a water bottle, a donut or a big
+  tumbler with a handle and a straw.
+  - While a worker sits at its desk, the gadget stands on the desk beside the monitor.
+  - Standing or walking, the worker holds it.
+  - About once a minute it takes a sip or a bite. At the desk it lifts the gadget to its hand, then puts it back.
+  - Now and then it brings something else for a couple of hours, or nothing at all.
+  - A worker holding a seasonal item carries the gadget in its other hand.
+  - Gadgets work in both themes and never cover a status bubble, a name label, a mask's mark or a player's number.
+  - Your hero and HQ hold none.
+  - Sips add no frames: POWER SAVER shows none.
+
+### Fixed
+
+- `hud room brief SLUG` (and other commands that can read text piped in) no longer waits forever when stdin is left
+  open but silent, as an agent's tool or a background job may leave it. With no input within a second it counts as
+  nothing given, and the brief is printed.
+
+## [0.16.2] - 2026-10-28
+
+### Fixed
+
+- **No more backlog replays.** 0.16.1 treated every message typed into HQ before the upgrade as unconfirmed, and
+  sent the whole backlog again. Now:
+  - messages from before confirmed delivery count as delivered;
+  - only a message typed in while HQ was busy in the last 3 hours is sent again;
+  - at most 3 go again each time HQ is free.
+
+### Added
+
+- **`hud secret redact NAME`.** For a secret's value that was typed somewhere it should not be, such as an answer, a
+  note or an update. The server replaces it wherever it is stored with `[secret NAME]`, using the value it holds,
+  which never passes through the command. Overwritten data is zeroed and the database journal truncated, so the
+  value is gone from the files. It works from this machine only, never from a browser, and the event log says how
+  many rows were redacted.
+
+## [0.16.1] - 2026-10-28
+
+### Fixed
+
+- **Your answers and notes reach HQ, confirmed.** Five answers were typed into HQ's pane while it was busy, which
+  herdr accepts, and were then lost in HQ's session. Now:
+  - when HQ is idle, the HUD waits until HQ starts working on what it typed in;
+  - if HQ does not start, the message is held, the red strip says so, and it is tried again;
+  - anything typed in while HQ was mid-turn is sent once more as soon as HQ is free, unless HQ acked it in the
+    meantime, marked "sent again" with the command to ack it.
+- **SENT & ANSWERED shows where each one stands:** typed in while HQ was busy, delivered to HQ, HQ has it / HQ acted
+  (acked), or HELD.
+
+## [0.16.0] - 2026-10-28
+
+### Added
+
+- **CLOSE ROOM.** You can close a room yourself from its view. CLOSE ROOM asks first, in the page: CLOSE IT
+  archives the room, and KEEP IT OPEN backs out. A closed room shows ARCHIVED, stops taking messages and moves under
+  ARCHIVED in ROOMS. Its folder and thread stay, and `hud room create SLUG` reopens it as before. The event log says
+  you closed it, and HQ hears it at once.
+
+## [0.15.0] - 2026-10-28
+
+### Changed
+
+- **Markdown everywhere.** Every place the HUD shows text from HQ or a lane renders markdown the same way: question
+  titles and bodies, checklists and HQ's comments on a question, MESSAGES, FROM HQ, SENT & ANSWERED, your last
+  note, the worker card's title and note, the WORK board, the ROOMS list, a room's title, brief and thread, and
+  what is held while HQ isn't receiving. Bold, italic, `code`, headings, bullet, numbered and task lists (nested),
+  quotes, links and code boxes with COPY all work; line breaks show. Titles and one-line places show inline
+  markdown only. Links open in a new tab and go only to http(s), mailto or the HUD's own files; anything that
+  looks like HTML stays text.
+- **Long text and code boxes.** MORE now also folds long text that contains code, but never cuts a code box or
+  hides one: the text up to and including the last code box always shows. A long line in a code box scrolls
+  sideways inside the box, so a phone never scrolls the whole page; long words and URLs wrap.
+- **A blocked prompt** on the worker card shows in a code box with COPY, exactly as the agent printed it.
+
+## [0.14.0] - 2026-10-28
+
+### Added
+
+- **COPY on a secret.** Each secret in the SECRETS tab has a COPY button that puts its value on your clipboard, for
+  example to hand a login to someone. The server gives the value only to the HUD's own page: its own origin, or one
+  in `HUD_TRUSTED_ORIGINS`, so it works from your phone on the tailnet too. It does so only when you click, and never
+  to another site or to a client without an origin (that is `hud secret get`). The value goes straight to the
+  clipboard and is never written into the page, its storage, `/api/state`, the log or the database. Each copy adds
+  an event line ("copied NAME"). Over plain http from another device, the browser may refuse the clipboard; open
+  the HUD over https (the tailnet address) or on this machine.
+
+## [0.13.0] - 2026-10-28
+
+### Changed
+
+- **QUESTIONS is now NEEDS YOU.** It holds everything you are the blocker on, and each card says which kind it is:
+  a **QUESTION** to decide (options, SEND), a **TO DO** only you can do, like recording a video, merging a PR or
+  signing in (DONE or NOT YET), or **FYI** (OK). It is the same ask as before, so `hud ask` is still the way in, and
+  answers and comments work as they did. A TO DO is `hud ask --kind action`.
+
+### Added
+
+- **NOT YET on a TO DO.** It keeps the card open, since you are still the blocker. HQ hears it at once with whatever
+  you typed as a note, and a line on the card says when. DONE closes it as before.
+
+## [0.12.0] - 2026-10-28
+
+### Added
+
+- **HQ SWEEP: the HUD can nudge HQ to sweep.** A new row in SETTINGS, off by default. When it is on, the HUD types
+  one "HUD sweep:" line into HQ, listing what needs a look: idle or done lanes (an idle lane must be idle for a
+  reason, and only HQ can judge it), gone lanes, stalled board items, questions waiting on you, and rooms with
+  undelivered messages. It only goes when:
+  - HQ is idle or done right now, never in the middle of a turn, and is receiving;
+  - the interval (20, 30 or 60 min) has passed since the last nudge;
+  - the hour is in the window (8-24 by default, this machine's clock);
+  - something needs a look. A quiet office gets no nudge.
+- **No pile-up.** A nudge HQ does not act on doubles the wait for the next, up to 2 h. A nudge that cannot go is
+  dropped, never queued. Each nudge is a line in the event log, and the row shows the last and next one.
+- It runs on the HUD's existing 20-second check, with no timer of its own. The settings are kept with your other
+  settings and survive restarts. Secrets are not touched.
+
 ## [0.11.2] - 2026-10-27
 
 ### Fixed

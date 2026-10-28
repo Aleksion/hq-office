@@ -48,7 +48,7 @@ const routes: Route[] = [
   { method: "POST", pattern: at("/post"), handle: ({ body, m }) => ownerPost(m[1], body) },
   { method: "POST", pattern: at("/messages/(\\d+)/retry"), handle: ({ m }) => retry(m[1], Number(m[2])) },
   { method: "POST", pattern: at("/seen"), handle: ({ m }) => seen(m[1]) },
-  { method: "POST", pattern: at("/archive"), handle: ({ m }) => archive(m[1]) },
+  { method: "POST", pattern: at("/archive"), handle: ({ body, m }) => archive(m[1], body.by) },
   // A file in a room's folder: /rooms/SLUG/files/NAME.
   { method: "GET", prefix: "/rooms/", handle: ({ path }) => {
     const m = path.match(/^\/rooms\/([^/]+)\/files\/([^/]+)$/);

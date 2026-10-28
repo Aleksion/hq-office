@@ -49,3 +49,10 @@ if (db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reque
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "prompt")) db.exec("ALTER TABLE lanes ADD COLUMN prompt TEXT");
 // A level set by hand (`hud lane NAME --level L`), over the one the tree gives; empty: the tree decides.
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "level")) db.exec("ALTER TABLE lanes ADD COLUMN level TEXT");
+// Delivery to HQ, confirmed (HQ started working on it) or typed in mid-turn and sent once more (hq-link.ts).
+// Rows from before it count as confirmed: an upgrade never replays the past.
+for (const [col, type] of [["confirmed_at", "INTEGER"], ["resend", "INTEGER NOT NULL DEFAULT 0"]]) {
+  if ((db.query("PRAGMA table_info(hq_outbox)").all() as { name: string }[]).some((c) => c.name === col)) continue;
+  db.exec(`ALTER TABLE hq_outbox ADD COLUMN ${col} ${type}`);
+  if (col === "confirmed_at") db.exec("UPDATE hq_outbox SET confirmed_at = COALESCE(sent_at, at)");
+}

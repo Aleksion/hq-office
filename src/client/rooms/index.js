@@ -14,13 +14,12 @@
 import { $, keepScroll, showEdges, toast } from "../core/dom.js";
 import { CONFIG, S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
-import { expanded } from "../core/text.js";
 import { post } from "../core/net.js";
 import { emit, on } from "../core/bus.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { qTab } from "../messages/messages.js";
 import { clearImages, composer, hasImages, notReady, openPreview, uploadTarget, withImages } from "../images/images.js";
-import { markdown } from "./markdown.js";
+import { md, mdClip, mdInline } from "../core/markdown.js";
 import { ART_H, drawStrip, laneAt, stripKey } from "./pix.js";
 
 const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
@@ -141,10 +140,10 @@ function workHtml(r, full) {
 
 function rowHtml(r) {
   const state = workState(r);
-  const last = r.last ? `<b>${r.last.who === "owner" ? `YOU → ${esc(r.last.to)}` : esc(r.last.who)}</b> ${esc(r.last.text)}` : `No messages yet${r.artifacts ? ` · ${r.artifacts} on the shelf` : ""}`;
+  const last = r.last ? `<b>${r.last.who === "owner" ? `YOU → ${esc(r.last.to)}` : esc(r.last.who)}</b> ${mdInline(r.last.text, { links: false })}` : `No messages yet${r.artifacts ? ` · ${r.artifacts} on the shelf` : ""}`;
   const here = r.slug === openSlug;
   return `<article class="rrow${r.unread ? " unread" : ""}${r.archivedAt ? " archived" : ""}${here ? " here" : ""}" data-room="${esc(r.slug)}" tabindex="0" role="link" aria-label="Go to room ${esc(r.title)}"${here ? ` aria-current="page"` : ""}>
-      <div class="meta"><b class="rt">${esc(r.title)}</b>${here ? `<span class="tag in">YOU ARE HERE</span>` : ""}${r.unread ? `<span class="tag new">${r.unread} NEW</span>` : ""}${r.undelivered ? `<span class="tag kept">${r.undelivered} KEPT</span>` : ""}<span class="age">${ago(r.lastAt)}</span></div>
+      <div class="meta"><b class="rt">${mdInline(r.title, { links: false })}</b>${here ? `<span class="tag in">YOU ARE HERE</span>` : ""}${r.unread ? `<span class="tag new">${r.unread} NEW</span>` : ""}${r.undelivered ? `<span class="tag kept">${r.undelivered} KEPT</span>` : ""}<span class="age">${ago(r.lastAt)}</span></div>
       <div class="people">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}${state ? `<span class="tag ws ${state}">${WS[state]}</span>` : ""}${workHtml(r, false)}</div>
       <div class="last${r.last ? "" : " none"}">${last}</div>
     </article>`;
@@ -169,15 +168,19 @@ function renderCount() {
 // The other open rooms, one step away; a count on those with new lane messages.
 function renderBar(r) {
   const rooms = (S?.rooms ?? []).filter((x) => !x.archivedAt || x.slug === r.slug);
-  setHTML(part("rvtabs"), rooms.map((x) => `<a class="rvtab${x.slug === r.slug ? " on" : ""}${x.unread && x.slug !== r.slug ? " unread" : ""}" href="#room/${esc(x.slug)}" data-room-go="${esc(x.slug)}"${x.slug === r.slug ? ` aria-current="page"` : ""} title="${esc(x.title)}"><span>${esc(x.title)}</span>${x.unread && x.slug !== r.slug ? `<span class="tag new">${x.unread}</span>` : ""}</a>`).join(""));
+  setHTML(part("rvtabs"), rooms.map((x) => `<a class="rvtab${x.slug === r.slug ? " on" : ""}${x.unread && x.slug !== r.slug ? " unread" : ""}" href="#room/${esc(x.slug)}" data-room-go="${esc(x.slug)}"${x.slug === r.slug ? ` aria-current="page"` : ""} title="${esc(x.title)}"><span>${mdInline(x.title, { links: false })}</span>${x.unread && x.slug !== r.slug ? `<span class="tag new">${x.unread}</span>` : ""}</a>`).join(""));
   // The questions stay in their column; on a full-screen room, the way back says when some are waiting.
   const n = S?.open?.length ?? 0, w = part("waitn");
   w.hidden = !n;
   w.textContent = `${n} WAITING`;
 }
+// CLOSE ROOM: the owner archives the room, after a confirm in the page (never a browser dialog). closeAsk is the room
+// whose confirm is showing.
+let closeAsk = null;
 function renderHead(r, d) {
   const shelf = d?.artifactList.length ?? r.artifacts ?? 0;
-  setHTML(part("rvhead"), `<h2>${esc(r.title)}</h2>${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}<span class="who">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}</span><button class="btn-s railbtn" type="button" data-rail-toggle aria-expanded="${!railFolded}" aria-controls="roomRail">${railFolded ? "◀ BRIEF · SHELF" : "FOLD ▶"}${railFolded && shelf ? ` (${shelf})` : ""}</button>`);
+  setHTML(part("rvhead"), `<h2>${mdInline(r.title)}</h2>${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}<span class="who">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}</span><button class="btn-s railbtn" type="button" data-rail-toggle aria-expanded="${!railFolded}" aria-controls="roomRail">${railFolded ? "◀ BRIEF · SHELF" : "FOLD ▶"}${railFolded && shelf ? ` (${shelf})` : ""}</button>${r.archivedAt ? "" : `<button class="btn-s rclose" type="button" data-room-close>CLOSE ROOM</button>`}`
+    + (closeAsk === r.slug && !r.archivedAt ? `<div class="rconfirm" data-close-confirm><span>Close ${mdInline(r.title)}? It moves to ARCHIVED and stops taking messages; HQ can reopen it with <code>hud room create ${esc(r.slug)}</code>.</span><button class="btn-s" type="button" data-close-keep>KEEP IT OPEN</button><button class="btn-s danger" type="button" data-close-yes>CLOSE IT</button></div>` : ""));
   view.classList.toggle("folded", railFolded);
 }
 
@@ -212,7 +215,7 @@ function renderTop(r) {
 }
 function renderBrief(d) {
   const head = `<div class="k"><span>BRIEF</span>${d?.briefAt ? `<span class="by">${esc(d.briefBy || "")} · ${ago(d.briefAt)}</span>` : ""}</div>`;
-  const body = !d ? "" : d.brief ? `<div class="md">${markdown(d.brief)}</div>` : `<div class="md none">No brief yet. The owning lane pins one with hud room brief ${esc(d.slug)}.</div>`;
+  const body = !d ? "" : d.brief ? `<div class="md">${md(d.brief)}</div>` : `<div class="md none">No brief yet. The owning lane pins one with hud room brief ${esc(d.slug)}.</div>`;
   setHTML(part("rbrief"), head + body);
 }
 
@@ -229,11 +232,11 @@ const byName = (by) => (by === "owner" ? "you" : by || "");
 function cardHtml(a) {
   const meta = `<span class="am">${esc(byName(a.by))} · ${ago(a.at)}</span>`;
   if (a.kind === "image") {
-    return `<div class="art image"><button type="button" class="aimg" data-art-preview="${a.id}" aria-label="See ${esc(a.title)} full screen"><img src="${esc(a.url)}" alt="" loading="lazy"></button><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}</div></div>`;
+    return `<div class="art image"><button type="button" class="aimg" data-art-preview="${a.id}" aria-label="See ${esc(a.title)} full screen"><img src="${esc(a.url)}" alt="" loading="lazy"></button><div class="at" title="${esc(a.title)}">${mdInline(a.title)}</div><div class="af">${meta}</div></div>`;
   }
   const ext = a.kind === "file" ? (a.url.match(/\.([a-z0-9]{1,8})$/i)?.[1] ?? "").toUpperCase() : "";
   const label = a.kind === "file" ? `${ext || "FILE"} FILE` : a.kind === "link" ? host(a.url) || "LINK" : LABEL[a.kind];
-  return `<div class="art ${esc(a.kind)}"><div class="ak">${ICON[a.kind] ?? ICON.link}<span>${esc(label)}</span></div><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}<a class="btn-s open" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN</a></div></div>`;
+  return `<div class="art ${esc(a.kind)}"><div class="ak">${ICON[a.kind] ?? ICON.link}<span>${esc(label)}</span></div><div class="at" title="${esc(a.title)}">${mdInline(a.title)}</div><div class="af">${meta}<a class="btn-s open" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN</a></div></div>`;
 }
 // The shelf: its head (with ADD), the ADD form, the cards and where the folder is. The form is built once per room
 // and never redrawn, so what you type in it survives every update.
@@ -316,18 +319,12 @@ function deliveryHtml(m) {
   if (m.delivery === "failed") return `<span class="seen bad" title="${esc(m.error || "")}">NOT DELIVERED</span><button class="btn-s" type="button" data-room-retry="${m.id}">RETRY</button>`;
   return `<span class="seen">SENDING…</span>`;
 }
-// A message's text as markdown with its line breaks kept. A long one without code shows its first part and MORE.
-const LONG = 600;
-function textHtml(m) {
-  const t = m.text, k = `room${m.id}`;
-  if (t.length <= LONG || t.includes("```")) return markdown(t, true);
-  const open = expanded.has(k);
-  return `${markdown(open ? t : t.slice(0, LONG).replace(/\s+\S*$/, "") + "…", true)}<button class="more" type="button" data-more="${esc(k)}">${open ? "LESS" : "MORE"}</button>`;
-}
+// A message's text as markdown with its line breaks kept. A long one shows its first part and MORE.
+const textHtml = (m) => mdClip(m.text, `room${m.id}`, 600);
 function messageHtml(m, byId, live) {
   const lane = m.who !== "owner";
   const p = m.reply ? byId.get(m.reply) : null;
-  const quote = p ? `<div class="quote">↩ ${p.who === "owner" ? "you" : esc(p.who)} ${clock(p.at)}: ${esc(short(p.text, 80))}</div>` : m.reply ? `<div class="quote">↩ an earlier message</div>` : "";
+  const quote = p ? `<div class="quote">↩ ${p.who === "owner" ? "you" : esc(p.who)} ${clock(p.at)}: ${mdInline(short(p.text, 80), { links: false })}</div>` : m.reply ? `<div class="quote">↩ an earlier message</div>` : "";
   return `<article class="msg ${lane ? "lane" : "you"}${lane && (!m.read || fresh.has(m.id)) ? " unread" : ""}" data-rmsg="${m.id}">
       <div class="meta"><span class="who">${lane ? esc(m.who) : "YOU"}</span>${lane ? "" : `<span class="to">→ ${esc(m.to)}</span>`}<span class="tag">${clock(m.at)}</span>${lane ? "" : deliveryHtml(m)}${lane && live ? `<button class="btn-s" type="button" data-room-reply="${m.id}">REPLY</button>` : ""}</div>
       ${quote}<div class="text md">${textHtml(m)}</div>
@@ -381,7 +378,7 @@ function renderSend(r) {
   const away = laneInfo(d.to).away;
   setHTML(el.querySelector(".tostate"), away ? `<span class="aw">AWAY</span> kept until the lane is back` : `typed into ${esc(d.to)}`);
   const p = d.reply && detail?.messages.find((m) => m.id === d.reply);
-  setHTML(el.querySelector(".rquote"), p ? `<span>↩ ${esc(p.who)} ${clock(p.at)}: ${esc(short(p.text, 70))}</span><button class="btn-s" type="button" data-room-unreply aria-label="Do not reply to it">×</button>` : "");
+  setHTML(el.querySelector(".rquote"), p ? `<span>↩ ${esc(p.who)} ${clock(p.at)}: ${mdInline(short(p.text, 70), { links: false })}</span><button class="btn-s" type="button" data-room-unreply aria-label="Do not reply to it">×</button>` : "");
   sendState();
 }
 function sendState() {
@@ -545,6 +542,17 @@ view.addEventListener("click", (e) => {
     railFolded = !railFolded;
     store("hq-room-rail", railFolded ? "folded" : null);
     renderHead(roomOf(openSlug), detail);
+    return;
+  }
+  if (t.closest("[data-room-close]")) { closeAsk = openSlug; renderHead(roomOf(openSlug), detail); return; }
+  if (t.closest("[data-close-keep]")) { closeAsk = null; renderHead(roomOf(openSlug), detail); return; }
+  const yes = t.closest("[data-close-yes]");
+  if (yes) {
+    yes.disabled = true;
+    const slug = openSlug;
+    post(`/api/rooms/${encodeURIComponent(slug)}/archive`, { by: "owner" })
+      .then(() => { closeAsk = null; toast("ROOM CLOSED. IT IS UNDER ARCHIVED IN ROOMS."); })
+      .catch((err) => { yes.disabled = false; toast(err.message); });
     return;
   }
   if (t.closest("[data-shelf-add]")) {

@@ -8,6 +8,7 @@ import { heroPal, hqPal } from "./looks.js";
 import { hero } from "../settings/prefs.js";
 import { chosenSeason, setSeason } from "./seasons.js";
 import { drawAccessories, wornBy } from "./accessories.js";
+import { drawDeskGadget, drawGadget, heldBy } from "./gadgets.js";
 import { drawEventCounter } from "./events.js";
 import { workers } from "./workers.js";
 import { deskCount } from "./collision.js";
@@ -120,7 +121,17 @@ function drawScene(now, dt) {
       }
     }
     list.sort((a, b) => a.y - b.y);
+    // What each worker holds, and the gadgets standing on desks: part of the desk, so under every worker.
+    const held = new Map();
     for (const w of list) {
+      const busyHand = !!(w.brain?.acting && (w.brain.act.kind === "coffee" || w.brain.act.kind === "snack"));
+      const items = wornBy(w.lane.name, false, w.pal.look?.hides);
+      const h = heldBy(w, items, now, w.path.length > 0, busyHand);
+      held.set(w, { items, busyHand, h });
+      if (h?.pose === "desk") drawDeskGadget(w.pal, h.g, w.seat, w.lane.status === "gone" ? 0.4 : 1);
+    }
+    for (const w of list) {
+      const { items, busyHand, h } = held.get(w);
       const moving = w.path.length > 0;
       const step = moving ? 1 + (Math.floor(w.t * 8) % 2) : 0;
       const st = w.lane.status;
@@ -128,7 +139,7 @@ function drawScene(now, dt) {
       const ghost = st === "gone";
       const float = ghost ? Math.sin(steadyClock(now) / 400 + w.bob) * 1.5 : 0;
       const sway = w.brain && moving ? Math.round(Math.sin(now / 110 + w.bob)) : 0;
-      const sx = w.x * TS + sway, sy = w.y * TS - 6 - idleBob + float - idleLift(w, moving, now);
+      const sx = w.x * TS + sway, sy = w.y * TS - 6 - idleBob + float - idleLift(w, moving, now) - (h?.pose === "sip" ? 1 : 0);
       if (selected === w.lane.name) {
         const r = 7 + Math.sin(steadyClock(now) / 200);
         ctx.strokeStyle = "#d63c3c";
@@ -138,8 +149,8 @@ function drawScene(now, dt) {
         ctx.stroke();
       }
       drawSprite(w.pal, sx, sy, w.dir, step, ghost ? 0.4 : 1);
-      const busyHand = !!(w.brain?.acting && (w.brain.act.kind === "coffee" || w.brain.act.kind === "snack"));
-      drawAccessories(w.pal, wornBy(w.lane.name, false, w.pal.look?.hides), sx, sy, w.dir, step, ghost ? 0.4 : 1, busyHand);
+      drawAccessories(w.pal, items, sx, sy, w.dir, step, ghost ? 0.4 : 1, busyHand);
+      if (h && h.pose !== "desk") drawGadget(w.pal, h, sx, sy, w.dir, step, ghost ? 0.4 : 1);
       if (!moving && GLYPH[st]) {
         const bounce = st === "needs_you" || st === "blocked" ? Math.abs(Math.sin(steadyClock(now) / 220)) * 2.5 : 0;
         drawBubble(sx, sy, GLYPH[st][0], GLYPH[st][1], bounce, GLYPH[st][2]);

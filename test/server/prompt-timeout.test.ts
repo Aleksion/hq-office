@@ -23,7 +23,7 @@ const run = async (code: string, env: Record<string, string> = {}) => {
 const src = (file: string) => JSON.stringify(join(ROOT, "src/server", file));
 const prompt = (timeoutMs: string) =>
   run(`const { promptAgent } = await import(${src("herdr.ts")});
-    console.log(JSON.stringify(await promptAgent("some-lane", "the answer", null, ${timeoutMs})));`);
+    console.log(JSON.stringify(await promptAgent("some-lane", "the answer", null, { timeoutMs: ${timeoutMs} })));`);
 
 test("a herdr still running at the timeout is killed and reported, and types nothing later", async () => {
   expect(await prompt("200")).toEqual({ ok: false, error: "herdr did not answer in time" });
@@ -40,7 +40,8 @@ test("without a timeout the same herdr finishes and types", async () => {
 test("the queue's delivery to a lane stops at its timeout, and types nothing later", async () => {
   rmSync(TYPED, { force: true });
   const result = await run(
-    `const { db } = await import(${src("db.ts")});
+    `await import(${src("herdr.ts")});
+    const { db } = await import(${src("db.ts")});
     db.query("INSERT INTO agents (name, machine, pane, status, since, seen) VALUES ('some-lane', 'here', 'w1:p1', 'idle', 0, 0)").run();
     const { herdrDeliver } = await import(${src("queue.ts")});
     console.log(JSON.stringify(await herdrDeliver("some-lane", "the answer")));`,

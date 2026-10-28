@@ -151,7 +151,7 @@ export function nextRequest(lead?: string, now = Date.now()) {
 export const herdrDeliver: Deliver = async (lane, text) => {
   const a = agentWhere(lane);
   if (!a) return { ok: false, error: `no live herdr agent is named ${lane}` };
-  return promptAgent(lane, text, a.machine, DELIVER_TIMEOUT_MS);
+  return promptAgent(lane, text, a.machine, { timeoutMs: DELIVER_TIMEOUT_MS });
 };
 
 // A queue item by its ask id, or else by the number it had as a request before the copy (lanes still hold those).
