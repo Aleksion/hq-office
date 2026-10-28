@@ -5,6 +5,7 @@ import { on } from "../core/bus.js";
 import { $, toast } from "../core/dom.js";
 import { post } from "../core/net.js";
 import { clock, esc, setHTML } from "../core/format.js";
+import { mdInline } from "../core/markdown.js";
 
 const PLACEHOLDER = $("noteText")?.placeholder ?? "";
 let box = null, was = null;
@@ -35,7 +36,7 @@ on("state", (S) => {
   setHTML(box, `
     <div class="head"><b>HQ ISN'T RECEIVING</b><span class="why">${esc(hq.reason)}${hq.since ? ` · since ${clock(hq.since)}` : ""}</span><span class="acts">${fix}<button class="btn" type="button" data-hq="check">CHECK NOW</button></span></div>
     <p>What you send is kept and goes to HQ, in order, once it can take it. ${how}</p>
-    ${held.length ? `<details class="held"><summary>HELD FOR HQ (${held.length})</summary>${held.map((h) => `<div><b>${clock(h.at)}</b>${esc(h.text.replace(/^HUD note from [^:]+: /, ""))}</div>`).join("")}</details>` : ""}`);
+    ${held.length ? `<details class="held"><summary>HELD FOR HQ (${held.length})</summary>${held.map((h) => `<div><b>${clock(h.at)}</b>${mdInline(h.text.replace(/^HUD note from [^:]+: /, ""))}</div>`).join("")}</details>` : ""}`);
 });
 
 document.addEventListener("click", async (e) => {

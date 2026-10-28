@@ -2,7 +2,7 @@
 import { $, toast } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
-import { copyCode } from "../core/text.js";
+import { copyCode } from "../core/markdown.js";
 import { post } from "../core/net.js";
 import { canSend, renderHud } from "./questions.js";
 import { clearImages, notReady, withImages } from "../images/images.js";

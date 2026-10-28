@@ -3,6 +3,22 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-10-28
+
+### Changed
+
+- **Markdown everywhere.** Every place the HUD shows text from HQ or a lane renders markdown the same way: question
+  titles and bodies, checklists and HQ's comments on a question, MESSAGES, FROM HQ, SENT & ANSWERED, your last
+  note, the worker card's title and note, the WORK board, the ROOMS list, a room's title, brief and thread, and
+  what is held while HQ isn't receiving. Bold, italic, `code`, headings, bullet, numbered and task lists (nested),
+  quotes, links and code boxes with COPY all work; line breaks show. Titles and one-line places show inline
+  markdown only. Links open in a new tab and go only to http(s), mailto or the HUD's own files; anything that
+  looks like HTML stays text.
+- **Long text and code boxes.** MORE now also folds long text that contains code, but never cuts a code box or
+  hides one: the text up to and including the last code box always shows. A long line in a code box scrolls
+  sideways inside the box, so a phone never scrolls the whole page; long words and URLs wrap.
+- **A blocked prompt** on the worker card shows in a code box with COPY, exactly as the agent printed it.
+
 ## [0.14.0] - 2026-10-28
 
 ### Added

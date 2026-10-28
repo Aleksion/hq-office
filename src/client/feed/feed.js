@@ -3,7 +3,7 @@ import { $, keepScroll, phone, showEdges } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { messageChime } from "../sound/sound.js";
 import { clock, esc, setHTML } from "../core/format.js";
-import { clipText, linkify, renderBody } from "../core/text.js";
+import { mdClip, mdInline } from "../core/markdown.js";
 import { scheduleTick } from "../questions/questions.js";
 import { liveSecrets, lostSecrets, renderSecrets } from "../secrets/secrets.js";
 
@@ -15,8 +15,8 @@ export let feedTab = "updates";
 function updateRows() {
   const rows = (S.updates ?? []).map((u) => `<article class="upd ${u.read_at ? "" : "unread"}" data-upd="${u.id}">
       <div class="meta"><span class="tag">${clock(u.at)}</span>${u.lane ? `<span class="tag lane">${esc(u.lane)}</span>` : ""}${u.read_at ? "" : `<span class="tag new">NEW</span>`}</div>
-      <h3>${linkify(u.title)}</h3>
-      ${u.body ? `<div class="text">${u.body.includes("```") ? renderBody(u.body) : clipText(u.body, `u${u.id}`)}</div>` : ""}
+      <h3>${mdInline(u.title)}</h3>
+      ${u.body ? `<div class="text md">${mdClip(u.body, `u${u.id}`)}</div>` : ""}
     </article>`).join("");
   return rows || `<div class="empty">Nothing from HQ yet.</div>`;
 }
@@ -61,7 +61,7 @@ export function renderLog() {
   renderFeed();
   const n = S.notes[0];
   setHTML($("lastNote"), n
-    ? `<b>LAST ${clock(n.at)}</b>${esc(n.text)} ${noteMark(n)}`
+    ? `<b>LAST ${clock(n.at)}</b>${mdInline(n.text)} ${noteMark(n)}`
     : `<span style="color:var(--muted)">Nothing sent yet today.</span>`);
 }
 // Something HQ could not take yet (S.hq.held, see hq-link): said in red, not as "not picked up yet".
@@ -73,8 +73,8 @@ function noteMark(n) {
 }
 function logRows() {
   // One list, newest first: your notes and HQ's answers interleaved by time.
-  const notes = S.notes.slice(0, 5).map((n) => ({ at: n.at, html: `<div><b>${clock(n.at)} YOU</b>${clipText(n.text, `n${n.id}`)} ${noteMark(n)}</div>` }));
-  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${linkify(a.title)} → <strong>${clipText(a.answer, `a${a.id}`)}</strong> ${held(`ask:${a.id}`) && !a.acked_at ? HELD : `<span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span>`}</div>` }));
+  const notes = S.notes.slice(0, 5).map((n) => ({ at: n.at, html: `<div><b>${clock(n.at)} YOU</b><div class="md inl">${mdClip(n.text, `n${n.id}`)}</div> ${noteMark(n)}</div>` }));
+  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${mdInline(a.title)} → <div class="md inl ans">${mdClip(a.answer, `a${a.id}`)}</div> ${held(`ask:${a.id}`) && !a.acked_at ? HELD : `<span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span>`}</div>` }));
   const rows = [...notes, ...answered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
   return rows.map((r) => r.html).join("") || `<div style="color:var(--muted)">Nothing yet today.</div>`;
 }

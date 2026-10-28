@@ -5,7 +5,7 @@ import { $, keepPlace, keepScroll, pageScrolls } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
 import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
-import { clipText, linkify, renderBody } from "../core/text.js";
+import { mdClip, mdInline } from "../core/markdown.js";
 import { renderSecretTimes } from "../secrets/secrets.js";
 import { clearImages, composer, hasImages, imageKeys } from "../images/images.js";
 
@@ -59,8 +59,8 @@ export function renderHud() {
         <span class="due"></span>
         <span class="timer"></span>
       </div>
-      <h3>${linkify(a.title)}</h3>
-      ${a.body ? `<div class="text">${a.body.includes("```") ? renderBody(a.body) : clipText(a.body, `q${a.id}`)}</div>` : ""}
+      <h3>${mdInline(a.title)}</h3>
+      ${a.body ? `<div class="text md">${mdClip(a.body, `q${a.id}`)}</div>` : ""}
       ${opts ? `<div class="menu">${opts}</div>` : ""}
       ${want.length ? `<div class="asksec">${want.map((n) => `<label><span class="tag secret">${esc(n)}</span><input class="sin val" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore placeholder="paste ${esc(n)}" data-secret="${esc(n)}"></label>`).join("")}
         <label><span class="sk">READABLE FOR</span><input class="sin min" type="number" min="1" max="10080" step="1" autocomplete="off" data-secret-min value="${esc(d.minutes ?? 60)}"><span class="sk">MIN</span></label></div>` : ""}
