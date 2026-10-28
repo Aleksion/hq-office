@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS hq_outbox (
   ref TEXT,
   sent_at INTEGER,
   error TEXT,
-  tries INTEGER NOT NULL DEFAULT 0
+  tries INTEGER NOT NULL DEFAULT 0,
+  confirmed_at INTEGER,
+  resend INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS hq_outbox_held ON hq_outbox (sent_at) WHERE sent_at IS NULL;

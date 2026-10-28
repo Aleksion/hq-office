@@ -7,6 +7,8 @@ import type { Ask } from "./types.ts";
 import { bump, secrets } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
+import { recordUrgent } from "./urgent.ts";
+import { commentAsk } from "./ledger.ts";
 import { underHq } from "../lane-tree.ts";
 
 // The owner's rule (#242): every ask carries the agent's pick and why. A decision with options and no --rec, or a --rec
@@ -103,14 +105,19 @@ export function checkLink(v: unknown) {
   return s || null;
 }
 
+// An ask for the owner's desk, or (with body.recipient) a message in an orchestrator's queue; see queue.ts.
+// body.urgent files it at the top of its recipient's list; body.by names who is being urgent (default: its lane).
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
-  const link = checkLink(body.link);
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const from = handedBy(body.from);
   const room = roomOf(body.room);
+  const recipient = body.recipient ?? "owner";
+  // A link the owner opens from the page must be a web address; a queue item's link is the lane's PR (#3417), which only hud shows.
+  const link = recipient === "owner" ? checkLink(body.link) : String(body.link ?? "").trim() || null;
+  const created = body.created_at ?? Date.now();
   const res = db
-    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by, room) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .query("INSERT INTO asks (lane, kind, title, body, options, recommended, link, due, created_at, secrets, handed_by, room, recipient, urgent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .run(
       body.lane ?? null,
       body.kind ?? "decision",
@@ -120,19 +127,33 @@ export function createAsk(body: any) {
       String(body.recommended ?? "").trim() || null,
       link,
       body.due ?? null,
-      body.created_at ?? Date.now(),
+      created,
       wanted.length ? JSON.stringify(wanted) : null,
       from,
       room,
+      recipient,
+      body.urgent ? Date.now() : null,
     );
-  event("hq", `asked: ${body.title}`, body.lane);
-  return Number(res.lastInsertRowid);
+  const id = Number(res.lastInsertRowid);
+  if (recipient === "owner") event("hq", `asked: ${body.title}`, body.lane);
+  if (body.urgent) recordUrgent(db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask, body.by ?? body.lane ?? "hq");
+  return id;
+}
+
+// An ask on the owner's desk. The desk's routes (withdraw, update, comment, ack, secrets) refuse an item in someone's
+// queue: that one is answered with hud req, and closing it from the desk would skip its delivery.
+export function ownerAsk(id: number): Ask {
+  const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
+  if (!ask) throw new Error(`no ask ${id}`);
+  if (ask.recipient !== "owner") throw new Error(`ask ${id} is for ${ask.recipient}, not the owner: use hud req ${id}`);
+  return ask;
 }
 
 export function answerAsk(id: number, answer: string) {
   const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
   if (!ask) throw new Error(`no ask ${id}`);
   if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
+  if (ask.recipient !== "owner") throw new Error(`ask ${id} is for ${ask.recipient}, not the owner: answer it with hud req answer ${id}`);
   db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ? WHERE id = ?").run(answer, Date.now(), id);
   event(OWNER, `answered "${ask.title}": ${answer}`, ask.lane);
   notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}" -> ${answer}`, `ask:${id}`);
@@ -141,8 +162,7 @@ export function answerAsk(id: number, answer: string) {
 // An ask that requests secrets is answered with their values: each one goes to the secret store, and the
 // answer HQ gets (and the database keeps) names them only.
 export function answerWithSecrets(id: number, body: any) {
-  const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
-  if (!ask) throw new Error(`no ask ${id}`);
+  const ask = ownerAsk(id);
   if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
   const wanted: string[] = ask.secrets ? JSON.parse(ask.secrets) : [];
   if (!wanted.length) throw new Error(`ask ${id} requests no secrets`);
@@ -203,3 +223,15 @@ export function armReturn() {
   }, Math.min(next.t - Date.now() + 5, 2 ** 31 - 1));
 }
 armReturn();
+
+// NOT YET on something the owner must do: it stays open (the owner is still the one it waits on), HQ hears it at
+// once, and a line on the card says it, with the owner's note.
+export function notYet(id: number, note: unknown) {
+  const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
+  if (!ask) throw new Error(`no ask ${id}`);
+  if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
+  const n = String(note ?? "").trim();
+  commentAsk(id, `${OWNER}: not yet${n ? `. ${n}` : ""}`);
+  event(OWNER, `not yet on "${ask.title}"${n ? `: ${n}` : ""}`, ask.lane);
+  notifyHq(`HUD not yet #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}"${n ? ` -> ${n}` : ""}`, `notyet:${id}`);
+}

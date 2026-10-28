@@ -2,27 +2,15 @@
 import { bump } from "../push.ts";
 import { json } from "../json.ts";
 import { addFile, addLink, archive, createRoom, ownerPost, readOwner, removeArtifact, retry, roomView, roomsView, say, seen, setBrief } from "../rooms.ts";
-import { LEGACY_FILES, RASTER, movedTo, servedFile } from "../room-folder.ts";
+import { LEGACY_FILES, movedTo, servedFile } from "../room-folder.ts";
+import { SAFE, fileResponse as serve, notFound } from "../attachments.ts";
 import type { Route } from "../router.ts";
 
 const S = "([a-z0-9][a-z0-9-]{0,47})";
 const at = (tail: string) => new RegExp(`^/api/rooms/${S}${tail}$`);
 
-// A file from a room's folder is shown, never run. Every answer is sandboxed and never sniffed; a raster image shows
-// inline, text shows as plain text, and anything else (HTML, SVG, a PDF, an unknown type) is a download.
-const IMAGE_TYPE: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif" };
-const TEXT = /\.(txt|md|markdown|log|csv|tsv|json|jsonl|ya?ml|toml|ini|env\.example|diff|patch|sql|sh|ts|tsx|js|jsx|mjs|py|rb|go|rs|java|kt|swift|c|h|cpp|css)$/i;
-const SAFE = { "content-security-policy": "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self'", "x-content-type-options": "nosniff" };
-function fileResponse(path: string, name: string) {
-  const ext = name.split(".").pop()!.toLowerCase();
-  const quoted = encodeURIComponent(name);
-  const headers: Record<string, string> = { ...SAFE };
-  if (RASTER.test(name)) Object.assign(headers, { "content-type": IMAGE_TYPE[ext], "content-disposition": `inline; filename*=UTF-8''${quoted}` });
-  else if (TEXT.test(name)) Object.assign(headers, { "content-type": "text/plain; charset=utf-8", "content-disposition": `inline; filename*=UTF-8''${quoted}` });
-  else Object.assign(headers, { "content-type": "application/octet-stream", "content-disposition": `attachment; filename*=UTF-8''${quoted}` });
-  return new Response(Bun.file(path), { headers });
-}
-const notFound = () => new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: { "content-type": "application/json", ...SAFE } });
+// A file from a room's folder is shown, never run (attachments.ts); text shows as plain text there.
+const fileResponse = (path: string, name: string) => serve(path, name, { textInline: true });
 
 const routes: Route[] = [
   { method: "GET", path: "/api/rooms", handle: ({ url }) => json(roomsView(!!url.searchParams.get("all"))) },
@@ -48,7 +36,7 @@ const routes: Route[] = [
   { method: "POST", pattern: at("/post"), handle: ({ body, m }) => ownerPost(m[1], body) },
   { method: "POST", pattern: at("/messages/(\\d+)/retry"), handle: ({ m }) => retry(m[1], Number(m[2])) },
   { method: "POST", pattern: at("/seen"), handle: ({ m }) => seen(m[1]) },
-  { method: "POST", pattern: at("/archive"), handle: ({ m }) => archive(m[1]) },
+  { method: "POST", pattern: at("/archive"), handle: ({ body, m }) => archive(m[1], body.by) },
   // A file in a room's folder: /rooms/SLUG/files/NAME.
   { method: "GET", prefix: "/rooms/", handle: ({ path }) => {
     const m = path.match(/^\/rooms\/([^/]+)\/files\/([^/]+)$/);

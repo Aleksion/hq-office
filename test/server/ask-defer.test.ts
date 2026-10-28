@@ -165,6 +165,7 @@ describe("defer", () => {
   test("the cut and the new row are one step: a failing insert leaves the running deferral as it was", async () => {
     const data = mkdtempSync(join(tmpdir(), "hq-defer-tx-"));
     const script = `
+      await import(${JSON.stringify(join(ROOT, "src/server/herdr.ts"))}); // first, as main.ts does: state.ts and herdr.ts import each other
       const { db } = await import(${JSON.stringify(join(ROOT, "src/server/db.ts"))});
       const { deferAsk } = await import(${JSON.stringify(join(ROOT, "src/server/asks.ts"))});
       const id = Number(db.query("INSERT INTO asks (title, created_at) VALUES ('q', 1000)").run().lastInsertRowid);

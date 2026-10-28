@@ -14,8 +14,10 @@
 .btn-s:hover:not(:disabled) { background: #fff; }
 .btn-s:disabled { opacity: .4; cursor: default; }
 .tag.new { background: var(--amber); color: #fff; }
-.codebox { position: relative; margin: 6px 0; background: #e6e6ea; border: 2px solid #c4c4d0; border-radius: 6px; }
-.codebox pre { margin: 0; padding: 30px 12px 10px; font: 13px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+/* A code box keeps its lines: a long one scrolls sideways inside the box, never the page (width 0, then 100%: the
+   box never widens what holds it). */
+.codebox { position: relative; max-width: 100%; margin: 6px 0; background: #e6e6ea; border: 2px solid #c4c4d0; border-radius: 6px; }
+.codebox pre { box-sizing: border-box; width: 0; min-width: 100%; margin: 0; padding: 30px 12px 10px; overflow-x: auto; font: 13px/1.45 var(--mono); white-space: pre; overflow-wrap: normal; color: var(--ink); }
 .copy { position: absolute; top: 6px; right: 6px; font: 8px/1 var(--pixel); padding: 6px 8px; border: 2px solid var(--edge); border-radius: 6px; background: var(--box); }
 .copy:hover { background: #fff; }
 /* A send box is one rounded composer: its images on top (images/images.css), the text field, then a slim row with

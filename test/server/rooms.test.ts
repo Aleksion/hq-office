@@ -90,6 +90,14 @@ describe("hud room", () => {
     expect(v.briefBy).toBe("pm");
   });
 
+  test("brief with an open but silent stdin (a shell that never closes it) prints the brief instead of waiting", async () => {
+    const proc = Bun.spawn([process.execPath, join(ROOT, "hud.ts"), "room", "brief", "ope-12-auth"], { env: { ...process.env, HUD_URL: BASE }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    const done = await Promise.race([proc.exited.then(() => true), Bun.sleep(4000).then(() => false)]);
+    if (!done) proc.kill();
+    expect(done).toBe(true);
+    expect(await new Response(proc.stdout).text()).toContain((await room("ope-12-auth")).brief);
+  });
+
   test("brief with nothing given prints it and never writes; an empty --body is refused; --clear clears", async () => {
     const before = (await room("ope-12-auth")).brief;
     const shown = await hud(["room", "brief", "ope-12-auth"]);
@@ -227,6 +235,22 @@ describe("hud room", () => {
     expect(JSON.parse((await hud(["room", "list", "--json"])).out).find((r: any) => r.slug === "side").archivedAt).toBeGreaterThan(0);
     await hud(["room", "create", "side"]);
     expect((await room("side")).archivedAt).toBeNull();
+  });
+
+  test("the owner closes a room from the page: archived, an event in the owner's name, and HQ hears it", async () => {
+    await hud(["room", "create", "closing", "--title", "To close", "--owner", "lead"]);
+    await post("/api/rooms/closing/archive", { by: "owner" });
+    expect((await room("closing")).archivedAt).toBeGreaterThan(0);
+    const ev = (await get("/api/state")).events.find((e: any) => e.text === "closed room closing");
+    expect(ev?.who).toBe("Sam");
+    const note = "HUD: Sam closed room closing (To close); reopen it with hud room create closing";
+    for (let i = 0; i < 80 && !readFileSync(LOG, "utf8").includes(note); i++) await Bun.sleep(25); // typed in after the request returns
+    expect(readFileSync(LOG, "utf8")).toContain(note);
+    // closing again changes nothing, and create reopens it as before
+    await post("/api/rooms/closing/archive", { by: "owner" });
+    expect((await get("/api/state")).events.filter((e: any) => e.text === "closed room closing")).toHaveLength(1);
+    await hud(["room", "create", "closing"]);
+    expect((await room("closing")).archivedAt).toBeNull();
   });
 
   test("hud room alone prints the usage", async () => {

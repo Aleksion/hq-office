@@ -9,7 +9,9 @@ import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { parsePr } from "./board.ts";
 import { HQ_AGENT, promptAgent } from "./herdr.ts";
+import { notifyHq } from "./hq-link.ts";
 import { ensureFolder, reconcileRoom, removeItem, roomDir, saveFile, startFolders, unwatchRoom, watchRoom, writeBrief, writeShelf } from "./room-folder.ts";
+import { refusal, safeName } from "./attachments.ts";
 
 export const MAX_ROOM_FILE = 25 * 1024 * 1024;
 const KINDS = ["claude-artifact", "link", "image", "file"];
@@ -137,6 +139,9 @@ export async function addFile(slugRaw: unknown, req: Request, url: URL) {
   if (!bytes.byteLength) throw new Error("the file is empty");
   if (bytes.byteLength > MAX_ROOM_FILE) throw new Error("the file is over 25 MB");
   const given = str(url.searchParams.get("name")) || "file";
+  // Attached to a message in the send box (?attach=1): only the kinds and sizes any attachment may have.
+  const why = url.searchParams.get("attach") ? refusal(safeName(given), bytes.byteLength) : "";
+  if (why) throw new Error(why);
   const kind = str(url.searchParams.get("kind")) ? kindOf("", url.searchParams.get("kind")) : undefined;
   const out = await saveFile(r.slug, given, bytes, { title: str(url.searchParams.get("title")), kind, by: str(url.searchParams.get("as")) || r.owner });
   return { id: out.id, url: out.url, path: out.path, name: out.name, kind: out.kind };
@@ -200,13 +205,17 @@ export function seen(slugRaw: unknown) {
   if (res.changes) touch(r.slug);
 }
 
-export function archive(slugRaw: unknown) {
+// Archives a room: `hud room archive` (HQ), or CLOSE ROOM on the page (by: "owner"), which HQ hears about.
+export function archive(slugRaw: unknown, by?: unknown) {
   const r = mustRoom(slugRaw);
   if (r.archived_at) return;
   db.query("UPDATE rooms SET archived_at = ? WHERE slug = ?").run(Date.now(), r.slug);
   touch(r.slug);
   unwatchRoom(r.slug); // the folder stays; it is only no longer watched
-  event("hq", `archived room ${r.slug}`, isHq(r.owner) ? null : r.owner);
+  const lane = isHq(r.owner) ? null : r.owner;
+  if (by !== "owner") return event("hq", `archived room ${r.slug}`, lane);
+  event(OWNER, `closed room ${r.slug}`, lane);
+  notifyHq(`HUD: ${OWNER} closed room ${r.slug} (${r.title}); reopen it with hud room create ${r.slug}`);
 }
 
 // ---- delivery: an owner's message typed into its lane through herdr (promptAgent, the same helper as notifyHq) ----

@@ -4,9 +4,9 @@ import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { bump } from "./push.ts";
 import { event } from "./events.ts";
-import { expireDefaults } from "./requests.ts";
 import { UNREAD, promptIn } from "./prompt.ts";
 import { checkHq, notifyHq } from "./hq-link.ts";
+import { sweep } from "./hq-sweep.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
@@ -69,7 +69,7 @@ export async function syncHerdr() {
   // Only lanes that would otherwise read as HQ's turn or stale: any phase but done, parked or waiting (a phase HQ set
   // that the status does not know, such as "paused", also falls through to HQ's turn), agent not working, and no
   // open question waiting on the owner.
-  const asking = new Set((db.query("SELECT DISTINCT lane FROM asks WHERE status = 'open' AND lane IS NOT NULL").all() as { lane: string }[]).map((r) => r.lane));
+  const asking = new Set((db.query("SELECT DISTINCT lane FROM asks WHERE status = 'open' AND recipient = 'owner' AND lane IS NOT NULL").all() as { lane: string }[]).map((r) => r.lane));
   // A lane herdr reports blocked (at an approval or question UI) is read whatever its phase or asks: the read gives
   // the excerpt of what it asks. A working agent's pane is never read.
   const pane = new Map<string, { bg: string | null; prompt: string | null }>();
@@ -83,7 +83,7 @@ export async function syncHerdr() {
     }),
   );
   const nowBlocked: Lane[] = [];
-  let changed = expireDefaults(now);
+  let changed = false;
   // One transaction for the whole sync: one write to disk instead of one per lane, three times a minute.
   db.transaction(() => {
     for (const lane of lanes) {
@@ -140,9 +140,13 @@ export async function syncHerdr() {
   // HQ is typed into on this machine: check it there even when this machine's lanes are not tracked.
   if (!MACHINES.includes(LOCAL)) local = await herdrList(LOCAL).catch((e) => (errors.push(`${LOCAL}: ${(e as Error).message}`), null));
   await checkHq(local, errors.find((e) => e.startsWith(`${LOCAL}:`))?.slice(LOCAL.length + 2));
+  await sweep();
   for (const lane of nowBlocked) tellBlocked(lane);
   if (changed) bump();
 }
+
+// Where a named agent lives, from the last sync (the agents table). Undefined when no sync has seen it.
+export const agentWhere = (name: string) => db.query("SELECT machine, pane FROM agents WHERE name = ?").get(name) as { machine: string; pane: string } | null;
 
 // HQ hears of a block once, when it starts; the same block never again until it clears. HUD_HQ_BLOCKED=0: never.
 function tellBlocked(lane: Lane) {
@@ -154,15 +158,27 @@ function tellBlocked(lane: Lane) {
 // Types text into an agent's session through herdr (on another machine with `machine`). The one way the server
 // prompts an agent: HQ (notifyHq) and a lane in a conference room (rooms.ts). It never throws: what it says is saved
 // first, and a herdr that cannot even start must not turn that into an error for the page. Resolves once herdr is done.
-export function promptAgent(name: string, text: string, machine?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+// With confirm (for an idle agent), herdr waits until the agent starts working on it, and fails with
+// agent_prompt_stalled if it does not: proof that the agent took the text. A herdr still running after
+// timeoutMs (30 s unless given) is killed, so a late prompt never lands after the caller recorded a failure.
+export function promptAgent(name: string, text: string, machine?: string | null, opts: { confirm?: boolean; timeoutMs?: number } = {}): Promise<{ ok: true } | { ok: false; error: string }> {
   const on = machine && machine !== LOCAL ? ["--machine", machine] : [];
+  const wait = opts.confirm ? ["--wait", "--until", "working", "--timeout", "15000"] : [];
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn([HERDR, ...on, "agent", "prompt", name, text], { stdout: "ignore", stderr: "pipe" });
+    proc = Bun.spawn([HERDR, ...on, "agent", "prompt", name, text, ...wait], { stdout: "ignore", stderr: "pipe" });
   } catch (e) {
     return Promise.resolve({ ok: false, error: (e as Error).message });
   }
-  return proc.exited.then(async (code) => (code === 0 ? { ok: true as const } : { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` }));
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; proc.kill(); }, opts.timeoutMs ?? 30_000);
+  return proc.exited.then(async (code) => {
+    clearTimeout(timer);
+    // Exit 0 first: a herdr that finished just as the timer fired did type, and a killed one never exits 0.
+    if (code === 0) return { ok: true as const };
+    if (timedOut) return { ok: false as const, error: "herdr did not answer in time" };
+    return { ok: false as const, error: (await new Response(proc.stderr as ReadableStream).text()).trim() || `exit ${code}` };
+  });
 }
 
 // The agent the owner's answers and notes are typed into, with a one-line reminder to reply through the HUD (the

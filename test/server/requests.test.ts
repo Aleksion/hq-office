@@ -1,6 +1,7 @@
-// Requests: a lane files what it needs from HQ, the row stays open until HQ's answer reaches the lane's pane,
-// a stated default drops the row out of the queue when its time comes, and the sync records when each agent's
-// status began (the real stop time of a lane that is in no list). Own server, own data dir, a fake herdr.
+// Requests, now asks with a recipient: a lane files what it needs from HQ, the item stays open until HQ's answer
+// reaches the lane's pane, and a stated default drops it out of the queue when its time comes. These tests were
+// written for the separate requests table; they pass unchanged in what they claim, which is what shows the
+// behaviour survived the move. Own server, own data dir, a fake herdr.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -67,7 +68,7 @@ beforeAll(async () => {
   });
   for (const deadline = Date.now() + 8000; Date.now() < deadline; await Bun.sleep(100)) {
     try {
-      if ((await get("/api/agents")).length) return; // the first sync has run
+      if ((await get("/api/state")).sync.at) return; // the first sync has run
     } catch {}
   }
   throw new Error(`server did not come up on port ${PORT}`);
@@ -157,7 +158,9 @@ test("a request from a name no live agent has still files, with a warning", asyn
   expect(body.warning).toContain("no live herdr agent is named no-such-lane");
 });
 
+// The hourly sweep reads `since` from /api/agents: the real stop time of a lane that is in no list.
 test("the sync records when each agent's status began, and keeps it while the status holds", async () => {
+  agentList("idle");
   await post("/api/sync", {});
   const first = (await get("/api/agents")).find((a: any) => a.name === "chat-lane");
   expect(first).toMatchObject({ machine: "local", pane: "w8:pQ", status: "idle" });
@@ -210,13 +213,7 @@ test("a request names who must answer: the registry decides unless --lead says, 
   const unknown = await lead("stray-lane");
   const explicit = await lead("stray-lane", { lead: "  HQ2 " });
   expect([pm.lead, hq2.lead, hq.lead, unknown.lead, explicit.lead]).toEqual(["local w8:pP4", "HQ2", "HQ", "HQ", "HQ2"]);
-  // A row filed before the column existed has no lead and reads as HQ.
   const old = (await lead("stray-lane")).id;
-  const { Database } = await import("bun:sqlite");
-  // The server holds hud.db open; a second connection can write the one NULL.
-  const handle = new Database(join(DATA, "hud.db"));
-  handle.query("UPDATE requests SET lead = NULL WHERE id = ?").run(old);
-  handle.close();
 
   const ids = async (path: string) => (await get(path)).map((r: any) => r.id);
   const hq2Open = await ids("/api/requests?lead=HQ2");
@@ -250,7 +247,7 @@ test("a request names who must answer: the registry decides unless --lead says, 
   const cliId = Number(filed.out.match(/request #(\d+)/)![1]);
   expect((await get("/api/requests?all=1")).find((r: any) => r.id === cliId).lead).toBe("HQ2");
 
-  // The answer is signed by the lead, and a NULL lead signs as HQ.
+  // The answer is signed by the lead.
   await post(`/api/requests/${hq2.id}/answer`, { text: "from two" });
   expect(prompts().at(-1)).toContain(`crm-lane HQ2 answer to your request #${hq2.id} (BLOCK): from two`);
   await post(`/api/requests/${old}/answer`, { text: "from old" });

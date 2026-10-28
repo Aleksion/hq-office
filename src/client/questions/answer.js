@@ -2,7 +2,7 @@
 import { $, toast } from "../core/dom.js";
 import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
-import { copyCode } from "../core/text.js";
+import { copyCode } from "../core/markdown.js";
 import { post } from "../core/net.js";
 import { readAllBody } from "../core/floors.js";
 import { view } from "../core/scope.js";
@@ -33,6 +33,20 @@ $("main").addEventListener("click", async (e) => {
     for (const b of card.querySelectorAll(".opt")) b.classList.toggle("sel", b.dataset.opt === d.opt);
     const send = card.querySelector(".send"), ask = S.open.find((a) => a.id === id);
     if (send && ask) send.disabled = !canSend(ask, d);
+    return;
+  }
+  // NOT YET on a TO DO: it stays (still waiting on the owner); HQ hears it, with what is in the box as the note.
+  if (e.target.closest(".notyet")) {
+    e.target.disabled = true;
+    try {
+      await post(`/api/asks/${id}/notyet`, { note: withImages(id, (d.text || "").trim()) });
+      drafts.set(id, { ...d, text: "" });
+      clearImages(id);
+      const ta = card.querySelector("textarea");
+      if (ta) ta.value = "";
+      toast("HQ KNOWS: NOT YET.");
+    } catch (err) { toast(err.message); }
+    e.target.disabled = false;
     return;
   }
   if (e.target.closest(".send")) {
