@@ -6,6 +6,7 @@
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { DATA } from "./config.ts";
+import { safeName } from "./attachments.ts";
 import { db } from "./db.ts";
 import { bump } from "./push.ts";
 
@@ -35,15 +36,7 @@ export function roomDir(slug: string) {
 export const filesDir = (slug: string) => inside(roomDir(slug), "files");
 export const fileUrl = (slug: string, name: string) => `/rooms/${slug}/files/${encodeURIComponent(name)}`;
 
-// A file name as given, made safe: no folders, no control characters, no leading dot, at most 120 characters.
-export function safeName(raw: string) {
-  let name = String(raw ?? "").split(/[/\\]/).pop()!.replace(/[\u0000-\u001f\u007f[\]]/g, "-").replace(/^[\s.]+/, "").trim();
-  if (name.length > 120) {
-    const ext = name.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? "";
-    name = name.slice(0, 120 - ext.length).trim() + ext;
-  }
-  return name || "file";
-}
+export { safeName };
 // A name in files/ for a new file: the name itself, or name-2.ext, name-3.ext... when it is taken.
 function freeName(dir: string, name: string) {
   const dot = name.lastIndexOf(".");

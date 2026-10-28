@@ -1,4 +1,4 @@
-// Tell HQ: the free-text note box, with its attached images.
+// Tell HQ: the free-text note box, with its attached images and files.
 import { $, toast } from "../core/dom.js";
 import { on } from "../core/bus.js";
 import { S } from "../core/state.js";
@@ -32,6 +32,8 @@ urgent.addEventListener("click", () => urgent.setAttribute("aria-pressed", Strin
 // In the head, beside the hint: it marks the note before it is typed, and the send row stays the photo button then SEND.
 document.querySelector("#compose .head .hint").after(urgent);
 $("noteText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("compose").requestSubmit(); });
-// The photo button, the same on every send box, and the images kept from before a reload.
+// The attach button, the same on every send box, and what was attached before a reload. The whole TELL HQ panel
+// takes a drop for its box.
 document.querySelector("#compose .acts").insertAdjacentHTML("afterbegin", attachButton("note"));
 setHTML(document.querySelector('[data-chips="note"]'), chipsHTML("note"));
+$("compose").closest(".box").setAttribute("data-drop", "");

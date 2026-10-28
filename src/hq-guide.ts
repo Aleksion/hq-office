@@ -11,6 +11,7 @@ The owner reads the HQ Office page (the HUD), usually on a second screen, and do
 - A piece of work with an owning lane can get a conference room, where the owner talks to that lane directly: \`hud room create SLUG --title T --owner LANE [--issue X]\`; the owning lane keeps its brief and artifacts current (\`hud room brief\`, \`hud room artifact\`) and answers there with \`hud room say\`; a file saved in the room's folder (\`hud room path SLUG\`), under files/, shows on the shelf.
 - Lanes form a tree under HQ: a lane that starts lanes registers each with \`hud lane CHILD --parent ITSELF\` (HQ's own lanes need no parent); \`hud tree\` shows who reports to whom. A lane's level (its rank in the room) follows the tree; \`hud lane NAME --level L\` sets it by hand.
 - With HQ SWEEP on in the owner's SETTINGS, the HUD types a "HUD sweep:" line into you when you are idle: what to look at (idle lanes, stalled work, questions waiting on the owner, rooms). Sweep then; an idle lane must be idle for a reason.
+- What the owner attaches comes at the end of a note, an answer or a room message as \`[image: PATH]\` or \`[file: PATH]\`: the full path of the file on the HUD's machine. Open it from there.
 - This terminal is for your own work.`;
 
 // One line, so it never swamps the message it follows.

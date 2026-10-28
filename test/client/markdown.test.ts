@@ -93,6 +93,23 @@ test.skipIf(!chromeFound)("[image: path] is a thumbnail on this HUD, and a long 
   expect(r.links[2].text.length).toBeLessThan(62);
 });
 
+test.skipIf(!chromeFound)("[file: path] is a link named after the file, only for this HUD's own uploads/ and rooms/ files", async () => {
+  const r = await render("md", "[file: /data/uploads/Report Q3.pdf] [file: /data/rooms/abc-7/files/plan-2.zip] and [image: /data/uploads/a.png]");
+  expect(r.links.map((l: any) => [l.href, l.text])).toEqual([["/uploads/Report%20Q3.pdf", "Report Q3.pdf"], ["/rooms/abc-7/files/plan-2.zip", "plan-2.zip"], ["/uploads/a.png", ""]]);
+  expect(r.html).toContain('class="file"');
+  // Anything else stays text: a path outside, a climb out, a script, another site, a hidden file.
+  for (const p of ["/etc/passwd", "/data/uploads/../hud.db", "javascript:alert(1)", "JaVaScRiPt:alert(1)//uploads/x.pdf", "https://evil.example/uploads/x.pdf", "/data/uploads/.env", "/data/rooms/x/files/sub/a.pdf", "/data/rooms/../files/a.pdf", "data:text/html,<b>x</b>"]) {
+    const t = await render("md", `[file: ${p}]`);
+    expect([p, t.links]).toEqual([p, []]);
+    expect(t.text).toBe(`[file: ${p}]`);
+    expect(t.tags).toEqual(["p"]);
+  }
+  // Inside a button or a link it is its name, as text.
+  const plain = await render("mdInline", "[file: /data/uploads/a.pdf]", { links: false });
+  expect(plain.links).toEqual([]);
+  expect(plain.text).toBe("[file: a.pdf]");
+});
+
 test.skipIf(!chromeFound)("mdInline makes no blocks and turns line breaks into spaces", async () => {
   const r = await render("mdInline", "# Title with **bold**\n- not a list\n```\ncode\n```\n> no quote [link](https://example.com)");
   for (const t of r.tags) expect(["b", "i", "code", "a", "s"]).toContain(t);
@@ -102,6 +119,18 @@ test.skipIf(!chromeFound)("mdInline makes no blocks and turns line breaks into s
   const plain = await render("mdInline", "a [link](https://example.com) and https://example.com/x", { links: false });
   expect(plain.links).toEqual([]);
   expect(plain.text).toBe("a link and https://example.com/x");
+});
+
+test.skipIf(!chromeFound)("mdClip never hides attachments behind MORE: the tokens at the end count for nothing and always show", async () => {
+  const toks = " [file: /a/very/long/data/directory/on/this/machine/uploads/Q3 report.pdf] [image: /a/very/long/data/directory/on/this/machine/uploads/chart.png]";
+  const short = await render("mdClip", `From the phone${toks.repeat(3)}`, "att1");
+  expect(short.html).not.toContain("data-more");
+  expect(short.links.filter((l: any) => l.href.startsWith("/uploads/"))).toHaveLength(6);
+  const long = await render("mdClip", `${"word ".repeat(80)}${toks}`, "att2");
+  expect(long.html).toContain("data-more");
+  expect(long.text).toContain("…");
+  expect(long.links.map((l: any) => l.href)).toEqual(["/uploads/Q3%20report.pdf", "/uploads/chart.png"]);
+  expect(long.tags).toContain("img");
 });
 
 test.skipIf(!chromeFound)("mdClip never cuts a code fence nor hides a code box behind MORE, and keeps MORE/LESS by key", async () => {

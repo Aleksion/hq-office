@@ -73,14 +73,14 @@ describe.skipIf(!chromeFound)("attach", () => {
     expect(boxes.filter((b: any) => /^\d+$/.test(b.key))).toHaveLength(2);
     for (const b of boxes) {
       expect(b.parts).toEqual(["chips", "field", "acts"]);
-      expect(b.input).toEqual({ key: b.key, accept: "image/*", multiple: true, beforeSend: true });
+      expect(b.input).toEqual({ key: b.key, accept: expect.stringMatching(/^image\/\*,\.pdf,/), multiple: true, beforeSend: true });
       // 0.8.0's row was 42 to 61 px; the composer stays under 64 at 1440x900 (the empty tray takes no space).
       expect(b.height).toBeLessThanOrEqual(64);
     }
     await page.evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
     await until(`!!document.querySelector("#msgs [data-reply]")`);
     await page.evaluate(`document.querySelector("#msgs [data-reply]").click()`);
-    await until(`!!document.querySelector('[data-rbox] .reply[data-composer="reply"] label.attach input[data-attach="reply"][accept="image/*"][multiple]')`);
+    await until(`!!document.querySelector('[data-rbox] .reply[data-composer="reply"] label.attach input[data-attach="reply"][accept^="image/*,"][multiple]')`);
     expect((await page.evaluate(COMPOSERS)).find((b: any) => b.key === "reply").parts).toEqual(["chips", "field", "acts"]);
     await page.evaluate(`document.querySelector("#msgs [data-reply]").click(); document.querySelector('[data-qtab="questions"]').click()`);
   });

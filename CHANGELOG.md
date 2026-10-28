@@ -16,6 +16,28 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 - Lanes hand back with `hud request`, not by typing into a pane (`hud guide`).
 
+## [0.18.0] - 2026-10-28
+
+### Added
+
+- **Files as well as images, on every send box.** Tell HQ, the answer on a NEEDS YOU card, a reply in MESSAGES and
+  a room's send box now take files too.
+  - Drop them on the box or anywhere on its panel or card, paste them into the box, or pick them with the attach
+    button (on a phone it offers photos and files). The box lights up while files are over it.
+  - A drop anywhere else on the page does nothing, and never opens the file in place of the page.
+  - Each file shows in the box as a chip with its name and size and a × to remove it; images keep their thumbnail.
+  - Allowed: pdf, txt, md, csv, tsv, json, log, yaml, yml, xml, zip, gz, tar, docx, xlsx, pptx, mp4, mov, webm,
+    mp3, wav and m4a. Anything else (html, svg, js, sh, exe, dmg, pkg, app...) is refused with a one-line reason in
+    the box.
+  - Limits: 25 MB per file, 10 attachments per message. Images are as before: shrunk in the browser to at most
+    2048 px, 10 MB at most.
+  - When you send, each file is added to your text as `[file: /path]`, the full path on the HUD's machine, as images
+    are with `[image: /path]`. HQ and lanes get it in their terminal, in `hud inbox` and in `hud room read`.
+  - Sent messages show a file as a link with its name.
+  - Files stay on this machine: in the data directory's `uploads/`, or in a room's `files/` (so they show on its
+    shelf). They keep their own name, with `-2`, `-3` added when it is taken.
+  - Files open sandboxed: images and video show in the browser; everything else downloads.
+
 ## [0.17.0] - 2026-10-28
 
 ### Added

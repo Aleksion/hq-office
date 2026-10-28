@@ -11,6 +11,7 @@ import { parsePr } from "./board.ts";
 import { HQ_AGENT, promptAgent } from "./herdr.ts";
 import { notifyHq } from "./hq-link.ts";
 import { ensureFolder, reconcileRoom, removeItem, roomDir, saveFile, startFolders, unwatchRoom, watchRoom, writeBrief, writeShelf } from "./room-folder.ts";
+import { refusal, safeName } from "./attachments.ts";
 
 export const MAX_ROOM_FILE = 25 * 1024 * 1024;
 const KINDS = ["claude-artifact", "link", "image", "file"];
@@ -137,6 +138,9 @@ export async function addFile(slugRaw: unknown, req: Request, url: URL) {
   if (!bytes.byteLength) throw new Error("the file is empty");
   if (bytes.byteLength > MAX_ROOM_FILE) throw new Error("the file is over 25 MB");
   const given = str(url.searchParams.get("name")) || "file";
+  // Attached to a message in the send box (?attach=1): only the kinds and sizes any attachment may have.
+  const why = url.searchParams.get("attach") ? refusal(safeName(given), bytes.byteLength) : "";
+  if (why) throw new Error(why);
   const kind = str(url.searchParams.get("kind")) ? kindOf("", url.searchParams.get("kind")) : undefined;
   const out = await saveFile(r.slug, given, bytes, { title: str(url.searchParams.get("title")), kind, by: str(url.searchParams.get("as")) || r.owner });
   return { id: out.id, url: out.url, path: out.path, name: out.name, kind: out.kind };
