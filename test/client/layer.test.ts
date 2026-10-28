@@ -261,3 +261,27 @@ test.skipIf(!chromeFound)("one floor: a frame opens the project panel, and Escap
   }
   expect(errors).toEqual([]);
 }, 60_000);
+
+// Under the arena theme a worker's name carries a rank symbol (a star, a square, ...), not pips: the layer keeps its markers
+// clear of the label's box, so the box must have a real width with either kind of mark.
+test.skipIf(!chromeFound)("arena theme: a label's box has a finite width with a symbol mark, wider than without one", async () => {
+  await general.post("/api/settings", { settings: { theme: "arena" } });
+  try {
+    await open(general.base, 1440, 900);
+        const r = (await ev(`(async () => {
+      const { floor } = await import("/src/client/room/floor.js");
+      const { labelBox } = await import("/src/client/room/scene.js");
+      const { THEMES } = await import("/src/client/room/themes.js");
+      const mark = THEMES.arena.marks.find((m) => m.symbol);
+      return { boxes: floor.labels(), symbol: !!mark, bare: labelBox("hq-pm", 100, 50, true), marked: labelBox("hq-pm", 100, 50, true, mark) };
+    })()`)) as { boxes: { x: number; y: number; w: number; h: number }[]; symbol: boolean; bare: { w: number }; marked: { w: number } };
+    expect(r.symbol).toBe(true);
+    expect(r.boxes.length).toBeGreaterThan(0);
+    for (const b of r.boxes) for (const n of [b.x, b.y, b.w, b.h]) expect(Number.isFinite(n)).toBe(true);
+    expect(Number.isFinite(r.marked.w)).toBe(true);
+    expect(r.marked.w).toBeGreaterThan(r.bare.w);
+    expect(errors).toEqual([]);
+  } finally {
+    await general.post("/api/settings", { settings: { theme: "office" } });
+  }
+}, 60_000);
