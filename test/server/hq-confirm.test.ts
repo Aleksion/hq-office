@@ -132,3 +132,15 @@ test("at most 3 go again per idle check; the rest on the next", async () => {
   await post("/api/hq/check");
   await until(() => took("batch note").length === 5);
 });
+
+test("a lane's urgent request typed in mid-turn goes again with its queue number, not hud ack", async () => {
+  writeFileSync(status, "working");
+  await post("/api/sync");
+  const { id } = await post("/api/requests", { lane: "some-lane", kind: "BLOCK", text: "stuck on the build", urgent: true });
+  await until(() => queued("stuck on the build").length === 1);
+  writeFileSync(status, "idle");
+  await post("/api/hq/check");
+  await until(() => took("stuck on the build").length === 1);
+  expect(took("stuck on the build")[0]).toContain(`it is #${id} in your queue (hud req next)`);
+  expect(took("stuck on the build")[0]).not.toContain("hud ack");
+});
