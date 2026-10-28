@@ -3,6 +3,45 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] - 2026-10-28
+
+### Added
+
+- **Floors: one HQ per domain.** One HQ agent can only direct so many lanes. A floor is one HQ agent and everything
+  it runs, so you can run several HQs side by side: one for the frontend, one for the backend, one for legal.
+  - Everything you have today becomes the first floor, and one floor works exactly as before. Name it with
+    `HUD_FLOOR_NAME` (default `HQ`).
+  - Add a floor with `hud floor add ID --hq AGENT [--name N] [--color #hex]`, where AGENT is that HQ's name in herdr.
+    `hud floor list` shows each floor's HQ, whether it is receiving, its lanes and how many questions wait on you;
+    `hud floor set ID` changes one; `hud floor rm ID` removes an empty one.
+  - An HQ needs no setup: when it runs `hud`, the HUD recognises its herdr pane and files its questions, updates,
+    lanes, rooms and board items on its floor. A lane belongs to the floor of whoever registered it, or of its
+    parent; `hud lane NAME --floor ID` moves it, with every lane under it.
+  - Your answers, NOT YETs and notes reach the HQ of the right floor only. A lane blocked on a prompt is reported to
+    its own floor's HQ. A secret you set is shared: every floor's HQ hears of it.
+  - Each HQ reads its own floor: `hud inbox`, `hud wait`, `hud ack`, `hud board`, `hud tree` and `hud room list`
+    show that floor only, and `--all` shows every floor.
+  - Each floor has its own "HQ isn't receiving" check, its own held messages and its own sweep nudge, about its own
+    floor only.
+  - One HQ can reach another floor's HQ: `hud floor tell FLOOR TEXT`.
+- **Floors on the page.** With one floor the page is exactly as before. Add a second floor and the office becomes a
+  building:
+  - **THE BUILDING** shows one tile per floor, in its colour, with its HQ and how many questions need you, lanes are
+    blocked, lanes are working and lanes it has. A red mark says when that floor's HQ isn't receiving. Click a tile to
+    go in.
+  - **Inside a floor** the office shows that floor's lanes, with its HQ at the terminal, under ◀ BUILDING and the
+    floor's name. Esc takes you back out.
+  - NEEDS YOU, MESSAGES, WORK, ROOMS, FROM HQ and SENT & ANSWERED, and their counts, follow the floor you are in. A
+    line at the top says how many wait on other floors; click it to SHOW ALL. In the building, and with SHOW ALL, every
+    card carries its floor's name and colour. WAITING ON YOU at the top always counts every floor.
+  - Opening MESSAGES or MARK ALL READ inside a floor marks only that floor's messages read.
+  - TELL HQ goes to the HQ of the floor you are in, and says which (`Tell HQ (Backend)…`). In the building, or with
+    SHOW ALL, pick the floor beside SEND; it remembers the last one. A reply in MESSAGES goes to the HQ that wrote.
+  - The "HQ isn't receiving" strip is about the floor you are in; in the building it lists every floor whose HQ isn't.
+  - **SETTINGS · FLOORS** adds a floor (a name, its HQ from herdr's agents or typed, a colour), renames it, recolours
+    it, gives it another HQ, and removes an empty one after asking in the page.
+  - SECRETS stay shared by every floor.
+
 ## [0.18.0] - 2026-10-28
 
 ### Added

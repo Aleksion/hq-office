@@ -56,10 +56,10 @@ const STATUS_WORDS: Record<string, string> = {
 
 type TreeLane = { name: string; parent?: string | null; level?: string; status?: string };
 
-// The tree as `hud tree` prints it: HQ at the top, each lane under the lane it reports to, with its level name and
-// status. Siblings in name order.
-export function treeText(lanes: TreeLane[]) {
-  if (!lanes.length) return "HQ\n  (no lanes yet: hud lane NAME [--parent OTHER])";
+// The tree as `hud tree` prints it: HQ at the top (`head`, which names the floor when there are several), each lane
+// under the lane it reports to, with its level name and status. Siblings in name order.
+export function treeText(lanes: TreeLane[], head = "HQ") {
+  if (!lanes.length) return `${head}\n  (no lanes yet: hud lane NAME [--parent OTHER])`;
   const names = new Set(lanes.map((l) => l.name));
   const kids = new Map<string | null, TreeLane[]>();
   for (const l of lanes) {
@@ -67,7 +67,7 @@ export function treeText(lanes: TreeLane[]) {
     (kids.get(p) ?? kids.set(p, []).get(p)!).push(l);
   }
   for (const list of kids.values()) list.sort((a, b) => a.name.localeCompare(b.name));
-  const out = ["HQ"];
+  const out = [head];
   const seen = new Set<string>();
   const walk = (parent: string | null, prefix: string) => {
     const list = kids.get(parent) ?? [];

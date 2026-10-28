@@ -10,6 +10,7 @@ import { SEASONS, chosenSeason, setSeason } from "../room/seasons.js";
 import { ACCESSORIES } from "../room/accessory-table.js";
 import { wornCache } from "../room/accessories.js";
 import { THEMES, THEME_CHOICES } from "../room/themes.js";
+import { floorsRow } from "./floors.js";
 
 // SETTINGS opens a panel of choices. Each choice has a default, and RESET puts them all back.
 const SETTING_OPTIONS = {
@@ -35,6 +36,7 @@ function renderSettings() {
     + `<form class="srow" data-levels><span class="k">LEVEL NAMES</span><div class="opts2"><input class="levels" name="levels" maxlength="200" spellcheck="false" autocomplete="off" value="${esc(settings.levels)}" aria-label="Level names, comma-separated"><button class="btn-s" type="submit">SAVE</button></div><span class="hint">From the top, comma-separated. Deeper lanes use the last name.</span></form>`
     + row("theme")
     + sweepRow()
+    + floorsRow()
     + `<div class="sfoot"><button class="btn-s" type="button" data-reset>RESET TO DEFAULTS</button></div>`;
 }
 // HQ SWEEP: the server nudges HQ to sweep when HQ is idle (src/server/hq-sweep.ts). Its settings live on the server

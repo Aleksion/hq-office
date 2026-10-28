@@ -56,11 +56,17 @@ export function updateAsk(id: number, body: any) {
     if (moved && !db.query("SELECT 1 FROM lanes WHERE name = ?").get(moved)) throw new Error(`no lane named ${moved}: register it first, or use --lane hq`);
     set.push("lane = ?");
     values.push(moved);
+    // A question moved to a lane goes to that lane's floor; taken off its lane, it stays where it is.
+    const floor = moved ? (db.query("SELECT floor FROM lanes WHERE name = ?").get(moved) as { floor: string | null }).floor : null;
+    if (floor) {
+      set.push("floor = ?");
+      values.push(floor);
+    }
   }
   if (!set.length) throw new Error("nothing to change: give --title, --body, --opt, --rec, --link or --lane");
   db.query(`UPDATE asks SET ${set.join(", ")} WHERE id = ?`).run(...values, id);
   db.query("INSERT INTO ask_edits (ask_id, edited_at) VALUES (?, ?) ON CONFLICT (ask_id) DO UPDATE SET edited_at = excluded.edited_at").run(id, Date.now());
-  event("hq", `edited ask #${id} (${set.map((s) => s.split(" ")[0]).join(", ")}): ${body.title ?? ask.title}`, ask.lane);
+  event("hq", `edited ask #${id} (${set.map((s) => s.split(" ")[0]).filter((f) => f !== "floor").join(", ")}): ${body.title ?? ask.title}`, ask.lane);
   if (moved !== undefined && moved !== (ask.lane ?? null)) event("hq", `moved ask #${id} to ${moved ?? "HQ (no lane)"}`, moved ?? ask.lane);
 }
 
@@ -151,9 +157,9 @@ export function ledgerView() {
 addStatePart("ledger", ledgerView);
 
 // hud ask ... --item T: the question and its checklist in one write.
-export function createAskWithItems(body: any) {
+export function createAskWithItems(body: any, callerFloor?: string) {
   const items = (Array.isArray(body.items) ? body.items : []).map((t: unknown) => String(t ?? "").trim()).filter(Boolean);
-  const id = createAsk(body);
+  const id = createAsk(body, callerFloor);
   if (items.length) addItems(id, items);
   return id;
 }

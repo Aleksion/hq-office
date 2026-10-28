@@ -8,6 +8,8 @@ import { clock, dur, esc, setClass, setHTML, setText } from "../core/format.js";
 import { mdClip, mdInline } from "../core/markdown.js";
 import { renderSecretTimes } from "../secrets/secrets.js";
 import { clearImages, composer, hasImages, imageKeys } from "../images/images.js";
+import { others, pick, scope, tagged } from "../core/scope.js";
+import { floorById, floorLabel, floorTagHTML, scopeLineHTML } from "../core/floors.js";
 
 // A question below the fold gets a red pill at the bottom of the list. Click it to go to the next one.
 export function renderBelow() {
@@ -44,15 +46,19 @@ export function renderHud() {
   const focusedSecret = document.activeElement?.dataset?.secret;
   const focusedMin = document.activeElement?.dataset?.secretMin !== undefined;
   // The count lives in the top bar now; the list only needs words when it is empty.
-  const head = S.open.length ? "" : `<div class="box"><h2>NOTHING NEEDS YOU</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Decisions and things only you can do land here.</div></div>`;
-  const html = head + S.open.map((a) => {
+  // Inside a floor (docs/floors.md): that floor's asks, under a line that says how many wait on other floors.
+  const open = pick(S.open), tags = tagged();
+  const line = scopeLineHTML(S, scope(), others(S.open));
+  const here = floorById(S, scope().floor);
+  const head = open.length ? "" : here && line ? `<div class="box"><h2>NOTHING ON ${esc(floorLabel(here))} NEEDS YOU</h2></div>` : `<div class="box"><h2>NOTHING NEEDS YOU</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Decisions and things only you can do land here.</div></div>`;
+  const html = line + head + open.map((a) => {
     const d = drafts.get(a.id) || {};
     const kind = a.kind;
     const want = a.secrets ?? [];
     const opts = a.options.map((o) => `<button class="opt ${d.opt === o ? "sel" : ""}" data-opt="${esc(o)}">${esc(o)}${a.recommended === o ? ` <span class="pick">HQ PICK</span>` : ""}</button>`).join("");
     return `<article class="box ask" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
       <div class="meta">
-        ${a.lane ? `<button class="tag lane" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : ""}
+        ${tags ? floorTagHTML(S, a.floor) : ""}${a.lane ? `<button class="tag lane" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : ""}
         <span class="tag kind ${esc(kind)}">${esc(KIND_LABEL[kind] ?? kind.toUpperCase())}</span>
         ${want.length ? `<span class="tag secret">SECRETS</span>` : ""}
         ${a.link ? `<a class="tag" href="${esc(a.link)}" target="_blank" rel="noopener">OPEN LINK</a>` : ""}

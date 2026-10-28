@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { DATA, OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import { bump, secrets } from "./push.ts";
-import { notifyHq } from "./hq-link.ts";
+import { notifyAllHqs } from "./hq-link.ts";
 import { addStatePart } from "./state.ts";
 import { createHandover, restartTime, type LostBook, type LostSecret } from "./secrets.ts";
 import { TOKEN_FILE } from "../secret-handover.ts";
@@ -66,7 +66,7 @@ function tellHq() {
   clearTimeout(noteTimer);
   const names = lostBook.list().map((l) => l.name);
   if (!names.length) return;
-  notifyHq(`HUD secrets lost: the server restarted at ${restartTime(startedAt)} and lost ${names.join(", ")} (values live in its memory only). hud secret get fails for them; ask ${OWNER} to set them again (hud ask --secret NAME).`);
+  notifyAllHqs(`HUD secrets lost: the server restarted at ${restartTime(startedAt)} and lost ${names.join(", ")} (values live in its memory only). hud secret get fails for them; ask ${OWNER} to set them again (hud ask --secret NAME).`);
 }
 const noteTimer = lost.size ? setTimeout(tellHq, NOTE_AFTER_MS) : undefined;
 if (!lost.size) told = true;

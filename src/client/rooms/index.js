@@ -21,6 +21,8 @@ import { qTab } from "../messages/messages.js";
 import { clearImages, composer, hasImages, notReady, openPreview, uploadTarget, withImages } from "../images/images.js";
 import { md, mdClip, mdInline } from "../core/markdown.js";
 import { ART_H, drawStrip, laneAt, stripKey } from "./pix.js";
+import { others, pick, scope, tagged } from "../core/scope.js";
+import { floorTagHTML, scopeLineHTML } from "../core/floors.js";
 
 const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -143,21 +145,22 @@ function rowHtml(r) {
   const last = r.last ? `<b>${r.last.who === "owner" ? `YOU → ${esc(r.last.to)}` : esc(r.last.who)}</b> ${mdInline(r.last.text, { links: false })}` : `No messages yet${r.artifacts ? ` · ${r.artifacts} on the shelf` : ""}`;
   const here = r.slug === openSlug;
   return `<article class="rrow${r.unread ? " unread" : ""}${r.archivedAt ? " archived" : ""}${here ? " here" : ""}" data-room="${esc(r.slug)}" tabindex="0" role="link" aria-label="Go to room ${esc(r.title)}"${here ? ` aria-current="page"` : ""}>
-      <div class="meta"><b class="rt">${mdInline(r.title, { links: false })}</b>${here ? `<span class="tag in">YOU ARE HERE</span>` : ""}${r.unread ? `<span class="tag new">${r.unread} NEW</span>` : ""}${r.undelivered ? `<span class="tag kept">${r.undelivered} KEPT</span>` : ""}<span class="age">${ago(r.lastAt)}</span></div>
+      <div class="meta">${tagged() ? floorTagHTML(S, r.floor) : ""}<b class="rt">${mdInline(r.title, { links: false })}</b>${here ? `<span class="tag in">YOU ARE HERE</span>` : ""}${r.unread ? `<span class="tag new">${r.unread} NEW</span>` : ""}${r.undelivered ? `<span class="tag kept">${r.undelivered} KEPT</span>` : ""}<span class="age">${ago(r.lastAt)}</span></div>
       <div class="people">${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}${state ? `<span class="tag ws ${state}">${WS[state]}</span>` : ""}${workHtml(r, false)}</div>
       <div class="last${r.last ? "" : " none"}">${last}</div>
     </article>`;
 }
+// Inside a floor, that floor's rooms (docs/floors.md).
 function renderList() {
-  const rooms = S?.rooms ?? [];
+  const rooms = pick(S?.rooms), line = S ? scopeLineHTML(S, scope(), others(S.rooms)) : "";
   const live = rooms.filter((r) => !r.archivedAt), old = rooms.filter((r) => r.archivedAt);
   const unread = live.filter((r) => r.unread).length;
-  setHTML(list, rooms.length
+  setHTML(list, line + (rooms.length
     ? `<div class="rsum">${live.length} OPEN ${live.length === 1 ? "ROOM" : "ROOMS"}${unread ? ` · ${unread} WITH NEW MESSAGES` : ""}</div>${live.map(rowHtml).join("")}${old.length ? `<h4>ARCHIVED (${old.length})</h4>${old.map(rowHtml).join("")}` : ""}`
-    : `<div class="empty">No rooms yet. HQ opens one for a piece of work with hud room create. Its lane keeps the brief and the artifacts there, and you talk to it here.</div>`);
+    : `<div class="empty">No rooms yet. HQ opens one for a piece of work with hud room create. Its lane keeps the brief and the artifacts there, and you talk to it here.</div>`));
 }
 function renderCount() {
-  const n = (S?.rooms ?? []).filter((r) => !r.archivedAt && r.unread).length, t = $("qtRooms");
+  const n = pick(S?.rooms).filter((r) => !r.archivedAt && r.unread).length, t = $("qtRooms");
   t.hidden = !n;
   t.textContent = n;
   t.title = `${n} ${n === 1 ? "room has" : "rooms have"} new messages`;
@@ -670,5 +673,6 @@ document.addEventListener("paste", (e) => {
 }, true);
 on("attach", (k) => { if (openSlug && k === key(openSlug)) sendState(); });
 on("state", render);
+on("scope", () => { renderCount(); if (qTab === "rooms") renderList(); });
 on("settings", () => { if (openSlug) renderStrip(roomOf(openSlug)); });
 on("qtab", (t) => { if (t === "rooms") render(); });

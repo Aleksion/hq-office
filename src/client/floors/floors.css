@@ -1,0 +1,38 @@
+/* FLOORS: the bar over the stage, THE BUILDING, floor tags and the scope line. None of it is on a page with one floor (floors/index.js makes the bar and the building at two). */
+.floorbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; color: #f8f8f0; }
+.floorbar .btn { color: var(--ink); padding: 7px 9px; font-size: 8px; border-width: 2px; border-radius: 6px; min-height: 32px; white-space: nowrap; }
+.floorbar .fswatch { width: 14px; height: 14px; border-radius: 3px; box-shadow: 0 0 0 2px #f8f8f0; flex: none; }
+.floorbar .fname { font: 11px/1.4 var(--pixel); overflow-wrap: anywhere; }
+.floorbar .fhq { color: #c8c8e0; font-size: 13px; overflow-wrap: anywhere; }
+.stage[data-floors="building"] > .room, .stage[data-floors="floor"] > .building, .stage.inroom > .floorbar, .stage.inroom > .building { display: none; }
+/* inside a floor, the office's frame takes the floor's colour */
+.stage[data-floors="floor"] > .room { border-color: var(--fc, var(--edge)); }
+@media (min-width: 1151px) {
+  .stage[data-floors]:not(.inroom) { grid-template-rows: auto minmax(0, 1fr) auto; }
+}
+
+/* THE BUILDING: the floors stacked, the first at the bottom, over the lobby */
+.building { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px; background: #1b1d2c; border-color: var(--edge); box-shadow: none; }
+.building::after { content: "LOBBY"; display: block; text-align: center; padding-top: 4px; font: 8px/1.6 var(--pixel); color: #8a8aa8; }
+.ftile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; flex: none; padding: 8px 12px 8px 8px; text-align: left; color: var(--ink); background: var(--box); border: 3px solid var(--edge); border-left: 10px solid var(--fc, var(--edge-2)); border-radius: 8px; }
+.ftile:hover, .ftile:focus-visible { background: #fff; outline: 3px solid var(--fc, var(--edge-2)); outline-offset: 0; }
+.ftile .fmap { display: block; width: 128px; height: 60px; max-width: none; margin: 0; border-radius: 3px; image-rendering: pixelated; cursor: inherit; }
+.ftile .fbody { display: contents; }
+.ftile .finfo { display: grid; gap: 4px; min-width: 0; }
+.ftile .fhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.ftile .fname { font: 10px/1.4 var(--pixel); overflow-wrap: anywhere; }
+.ftile .fhq { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.ftile .fcounts { font: 8px/1.8 var(--pixel); color: var(--muted); }
+.ftile .fcounts .hot { color: var(--red); }
+.ftile .fdown { font: 8px/1.3 var(--pixel); color: #fff; background: var(--red); padding: 5px 7px; border-radius: 4px; text-align: center; }
+@media (max-width: 600px) {
+  .ftile { grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; }
+  .ftile .fmap { width: 96px; height: 45px; }
+  .ftile .fdown { grid-column: 1 / -1; }
+}
+
+/* a card's floor, in the lists that show every floor */
+.tag.floortag { color: #fff; }
+/* the first line of a list scoped to a floor: what other floors hold, and the way to see it */
+.scopeline { display: block; width: 100%; margin: 0 0 8px; padding: 9px 12px; border: 2px solid var(--edge-2); border-radius: 8px; background: #fff; color: var(--ink); font: 8px/1.5 var(--pixel); text-align: left; cursor: pointer; }
+.scopeline:hover { border-color: var(--edge); }

@@ -7,6 +7,7 @@ import { event } from "./events.ts";
 import { UNREAD, promptIn } from "./prompt.ts";
 import { checkHq, notifyHq } from "./hq-link.ts";
 import { sweep } from "./hq-sweep.ts";
+import { isHqAgent, setPanes } from "./floors.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
@@ -48,6 +49,8 @@ async function readPane(machine: string, pane: string, blocked: boolean): Promis
 export async function syncHerdr() {
   const errors: string[] = [];
   const seen = new Map<string, { machine: string; agent: any }>();
+  // Every named agent's pane, so the server knows who calls hud (floors.ts).
+  const named: { machine: string; pane: string; name: string }[] = [];
   let local: any[] | null = null;
   await Promise.all(
     MACHINES.map(async (machine) => {
@@ -56,6 +59,7 @@ export async function syncHerdr() {
         if (machine === LOCAL) local = agents;
         for (const agent of agents) {
           if (agent.name) seen.set(agent.name, { machine, agent });
+          if (agent.name && agent.pane_id) named.push({ machine, pane: agent.pane_id, name: agent.name });
         }
       } catch (e) {
         errors.push(`${machine}: ${(e as Error).message}`);
@@ -127,17 +131,21 @@ export async function syncHerdr() {
   lastSync = { at: now, errors };
   // HQ is typed into on this machine: check it there even when this machine's lanes are not tracked.
   if (!MACHINES.includes(LOCAL)) local = await herdrList(LOCAL).catch((e) => (errors.push(`${LOCAL}: ${(e as Error).message}`), null));
+  if (!MACHINES.includes(LOCAL) && local) for (const a of local as any[]) if (a.name && a.pane_id) named.push({ machine: LOCAL, pane: a.pane_id, name: a.name });
+  // A machine that did not answer keeps the panes it had.
+  setPanes(named, (machine) => errors.some((e) => e.startsWith(`${machine}:`)));
   await checkHq(local, errors.find((e) => e.startsWith(`${LOCAL}:`))?.slice(LOCAL.length + 2));
   await sweep();
   for (const lane of nowBlocked) tellBlocked(lane);
   if (changed) bump();
 }
 
-// HQ hears of a block once, when it starts; the same block never again until it clears. HUD_HQ_BLOCKED=0: never.
+// The lane's floor's HQ hears of a block once, when it starts; the same block never again until it clears.
+// HUD_HQ_BLOCKED=0: never.
 function tellBlocked(lane: Lane) {
   event("herdr", `blocked on a prompt: ${lane.prompt.split("\n").join(" / ")}`, lane.name);
-  if (process.env.HUD_HQ_BLOCKED === "0" || lane.name === HQ_AGENT) return;
-  notifyHq(`Lane ${lane.name} is blocked on a prompt in herdr (${lane.machine}, ${lane.pane}): ${lane.prompt.split("\n").join(" / ")}`);
+  if (process.env.HUD_HQ_BLOCKED === "0" || isHqAgent(lane.name)) return;
+  notifyHq(`Lane ${lane.name} is blocked on a prompt in herdr (${lane.machine}, ${lane.pane}): ${lane.prompt.split("\n").join(" / ")}`, undefined, lane.floor);
 }
 
 // Types text into an agent's session through herdr (on another machine with `machine`). The one way the server
@@ -161,6 +169,7 @@ export function promptAgent(name: string, text: string, machine?: string | null,
   });
 }
 
-// The agent the owner's answers and notes are typed into, with a one-line reminder to reply through the HUD (the
-// owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out). The sending, and holding, is hq-link.ts.
+// The first floor's HQ agent when none is stored (floors.ts reads the same setting): the agent the owner's answers and
+// notes are typed into, with a one-line reminder to reply through the HUD (the owner does not read HQ's terminal;
+// HUD_HQ_HINT=0 leaves it out). The sending, and holding, is hq-link.ts; each floor has its own HQ.
 export const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";

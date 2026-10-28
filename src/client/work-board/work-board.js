@@ -4,6 +4,8 @@ import { CONFIG, S } from "../core/state.js";
 import { esc } from "../core/format.js";
 import { mdInline } from "../core/markdown.js";
 import { qTab } from "../messages/messages.js";
+import { others, pick, scope, tagged } from "../core/scope.js";
+import { floorTagHTML, scopeLineHTML } from "../core/floors.js";
 
 // Read-only. Every item's state comes from the server (GitHub, the lane, open asks); this only draws it.
 // It is rebuilt when the state changes, never on a timer. STALLED work also shows as a red strip on the
@@ -30,13 +32,16 @@ function workRow(i) {
   const what = i.state === "paused" || i.state === "owner" || i.state === "blocked" ? i.why : i.last ? "last: " + i.last.what : "nothing has happened yet";
   const age = i.state === "paused" && i.pausedAt ? now - i.pausedAt : i.last ? now - i.last.at : now - i.createdAt;
   return `<article class="wi ${i.state}">
-      <div class="meta"><span class="tag ws ${i.state}">${WORK_STATE[i.state]}</span>${workIssue(i)}${i.lane ? `<button class="tag lane" data-select="${esc(i.lane)}">${esc(i.lane)}</button>` : ""}${i.prs.map(workPr).join("")}<span class="age">${workAge(age)}</span></div>
+      <div class="meta">${tagged() ? floorTagHTML(S, i.floor) : ""}<span class="tag ws ${i.state}">${WORK_STATE[i.state]}</span>${workIssue(i)}${i.lane ? `<button class="tag lane" data-select="${esc(i.lane)}">${esc(i.lane)}</button>` : ""}${i.prs.map(workPr).join("")}<span class="age">${workAge(age)}</span></div>
       <div class="what">${mdInline(what)}</div>
     </article>`;
 }
 export function renderWork() {
   if (!S?.board) return;
-  const b = S.board, stalled = b.items.filter((i) => i.state === "stalled");
+  // Inside a floor, that floor's items and counts (S.board.counts counts every floor).
+  const items = pick(S.board.items), scoped = items !== S.board.items;
+  const counts = scoped ? items.reduce((c, i) => ((c[i.state] = (c[i.state] ?? 0) + 1), c), {}) : S.board.counts;
+  const b = { ...S.board, items, counts }, stalled = b.items.filter((i) => i.state === "stalled");
   const t = $("qtStalled");
   t.hidden = !stalled.length;
   t.textContent = stalled.length;
@@ -62,7 +67,7 @@ export function renderWork() {
     const its = b.items.filter((i) => i.state === s);
     return its.length ? `<h4 class="${s}">${WORK_STATE[s]} (${its.length})</h4>${underManagers(its)}` : "";
   }).join("");
-  $("work").innerHTML = b.items.length
+  $("work").innerHTML = scopeLineHTML(S, scope(), others(S.board.items)) + (b.items.length
     ? `<div class="sum">${open} OPEN · ${sum}</div>${groups}`
-    : `<div class="empty">No tracked work. HQ adds it with hud track.</div>`;
+    : `<div class="empty">No tracked work. HQ adds it with hud track.</div>`);
 }

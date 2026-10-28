@@ -3,7 +3,7 @@ import { addItems, commentAsk, createAskWithItems, tickItem, updateAsk } from ".
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
-  { method: "POST", path: "/api/ledger/asks", handle: ({ body }) => ({ id: createAskWithItems(body) }) },
+  { method: "POST", path: "/api/ledger/asks", handle: ({ body, caller }) => ({ id: createAskWithItems(body, caller().floor) }) },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/update$/, handle: ({ body, m }) => updateAsk(Number(m[1]), body) },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/comment$/, handle: ({ body, m }) => commentAsk(Number(m[1]), body.text) },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/items$/, handle: ({ body, m }) => ({ n: addItems(Number(m[1]), [body.text]) }) },

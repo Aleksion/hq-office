@@ -8,8 +8,9 @@ import { bump, listeners } from "./push.ts";
 import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { parsePr } from "./board.ts";
-import { HQ_AGENT, promptAgent } from "./herdr.ts";
+import { promptAgent } from "./herdr.ts";
 import { notifyHq } from "./hq-link.ts";
+import { floorOr, hqOf, laneFloor } from "./floors.ts";
 import { ensureFolder, reconcileRoom, removeItem, roomDir, saveFile, startFolders, unwatchRoom, watchRoom, writeBrief, writeShelf } from "./room-folder.ts";
 import { refusal, safeName } from "./attachments.ts";
 
@@ -18,7 +19,7 @@ const KINDS = ["claude-artifact", "link", "image", "file"];
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)(\?|#|$)/i;
 const THREAD_SHOWN = 300;
 
-type Room = { slug: string; title: string; owner: string; brief: string | null; brief_at: number | null; brief_by: string | null; created_at: number; rev: number; archived_at: number | null };
+type Room = { slug: string; title: string; owner: string; brief: string | null; brief_at: number | null; brief_by: string | null; created_at: number; rev: number; archived_at: number | null; floor: string | null };
 type Msg = { id: number; slug: string; at: number; author: string | null; to_lane: string | null; text: string; reply_to: number | null; delivery: string | null; delivered_at: number | null; error: string | null; read_at: number | null };
 
 const str = (v: unknown) => (v == null ? "" : String(v).trim());
@@ -51,8 +52,9 @@ function touch(slug: string) {
 // ---- writes ----
 
 // Create a room, or change one: a new title or owner, more members and more linked work. It also reopens an
-// archived room. A lane that stops owning the room stays in it as a member.
-export function createRoom(body: any) {
+// archived room. A lane that stops owning the room stays in it as a member. A room is on its owning lane's floor; one
+// HQ owns is on the caller's floor (and stays where it is when changed).
+export function createRoom(body: any, callerFloor?: string) {
   const slug = slugOf(body.slug);
   const before = room(slug);
   const title = str(body.title) || before?.title;
@@ -68,10 +70,11 @@ export function createRoom(body: any) {
     if (!ref) throw new Error(`not a PR: ${raw}`);
     return ref.key;
   });
+  const floor = (isHq(owner) ? null : laneFloor(owner)) ?? before?.floor ?? floorOr(callerFloor);
   const now = Date.now();
   db.transaction(() => {
-    if (before) db.query("UPDATE rooms SET title = ?, owner = ?, archived_at = NULL WHERE slug = ?").run(title, owner, slug);
-    else db.query("INSERT INTO rooms (slug, title, owner, created_at) VALUES (?, ?, ?, ?)").run(slug, title, owner, now);
+    if (before) db.query("UPDATE rooms SET title = ?, owner = ?, archived_at = NULL, floor = ? WHERE slug = ?").run(title, owner, floor, slug);
+    else db.query("INSERT INTO rooms (slug, title, owner, created_at, floor) VALUES (?, ?, ?, ?, ?)").run(slug, title, owner, now, floor);
     db.query("DELETE FROM room_members WHERE slug = ? AND lane = ?").run(slug, owner);
     for (const lane of add) db.query("INSERT OR IGNORE INTO room_members (slug, lane, added_at) VALUES (?, ?, ?)").run(slug, lane, now);
     for (const ref of issues) db.query("INSERT OR IGNORE INTO room_links (slug, kind, ref) VALUES (?, 'issue', ?)").run(slug, ref);
@@ -83,8 +86,8 @@ export function createRoom(body: any) {
   if (!before) { writeShelf(slug); writeBrief(slug); }
   if (before?.archived_at) reconcileRoom(slug);
   watchRoom(slug);
-  if (!before) event("hq", `opened room ${slug}: ${title}`, isHq(owner) ? null : owner);
-  else if (before.archived_at) event("hq", `reopened room ${slug}`, isHq(owner) ? null : owner);
+  if (!before) event("hq", `opened room ${slug}: ${title}`, isHq(owner) ? null : owner, floor);
+  else if (before.archived_at) event("hq", `reopened room ${slug}`, isHq(owner) ? null : owner, floor);
   return { slug, created: !before, folder: roomDir(slug) };
 }
 
@@ -212,9 +215,9 @@ export function archive(slugRaw: unknown, by?: unknown) {
   touch(r.slug);
   unwatchRoom(r.slug); // the folder stays; it is only no longer watched
   const lane = isHq(r.owner) ? null : r.owner;
-  if (by !== "owner") return event("hq", `archived room ${r.slug}`, lane);
-  event(OWNER, `closed room ${r.slug}`, lane);
-  notifyHq(`HUD: ${OWNER} closed room ${r.slug} (${r.title}); reopen it with hud room create ${r.slug}`);
+  if (by !== "owner") return event("hq", `archived room ${r.slug}`, lane, r.floor);
+  event(OWNER, `closed room ${r.slug}`, lane, r.floor);
+  notifyHq(`HUD: ${OWNER} closed room ${r.slug} (${r.title}); reopen it with hud room create ${r.slug}`, undefined, r.floor ?? undefined);
 }
 
 // ---- delivery: an owner's message typed into its lane through herdr (promptAgent, the same helper as notifyHq) ----
@@ -261,7 +264,7 @@ function deliver(id: number) {
   }
   const late = m.delivery === "away";
   if (late) set("sending");
-  const name = isHq(m.to_lane) ? HQ_AGENT : m.to_lane;
+  const name = isHq(m.to_lane) ? hqOf(r.floor) : m.to_lane;
   promptAgent(name, promptText(r, m, late), isHq(m.to_lane) ? null : laneRow(m.to_lane)?.machine).then((res) => {
     if (res.ok) set("sent");
     else set("failed", res.error.slice(0, 200));
@@ -302,6 +305,7 @@ function summary(r: Room) {
     slug: r.slug,
     title: r.title,
     owner: r.owner,
+    floor: r.floor,
     members: members(r.slug),
     ...links(r.slug),
     createdAt: r.created_at,
@@ -318,9 +322,9 @@ function summary(r: Room) {
   };
 }
 
-// Every open room, and the rooms archived in the last week, most recent activity first.
-export function roomsView(all = false) {
-  const rows = db.query(all ? "SELECT * FROM rooms" : "SELECT * FROM rooms WHERE archived_at IS NULL OR archived_at > ?").all(...(all ? [] : [Date.now() - 7 * 86_400_000])) as Room[];
+// Every open room, and the rooms archived in the last week, most recent activity first. One floor's, or every floor's.
+export function roomsView(all = false, floor: string | null = null) {
+  const rows = (db.query(all ? "SELECT * FROM rooms" : "SELECT * FROM rooms WHERE archived_at IS NULL OR archived_at > ?").all(...(all ? [] : [Date.now() - 7 * 86_400_000])) as Room[]).filter((r) => !floor || r.floor === floor);
   return rows.map(summary).sort((a, b) => b.lastAt - a.lastAt);
 }
 

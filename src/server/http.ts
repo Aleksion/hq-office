@@ -4,7 +4,7 @@ import { HOST, LEGACY_OWNER_WHO, OWNER, PORT, TRUSTED_ORIGINS } from "./config.t
 import { handle } from "./router.ts";
 import { json } from "./json.ts";
 import { bump, secrets } from "./push.ts";
-import { notifyHq } from "./hq-link.ts";
+import { notifyAllHqs } from "./hq-link.ts";
 import { event } from "./events.ts";
 import { redactEverywhere } from "./redact.ts";
 import { answerWithSecrets } from "./asks.ts";
@@ -37,8 +37,9 @@ Bun.serve({
         },
         lost: lostBook,
         handover,
+        // Secrets are shared by every floor: every floor's HQ hears of one the owner sets.
         onSet: (m) => {
-          if (m.by === "owner" || m.by === LEGACY_OWNER_WHO) notifyHq(`HUD secret from ${OWNER}: ${m.name}, ${expiresText(m.expiresAt)}; read it with: hud secret get ${m.name} | <command>`);
+          if (m.by === "owner" || m.by === LEGACY_OWNER_WHO) notifyAllHqs(`HUD secret from ${OWNER}: ${m.name}, ${expiresText(m.expiresAt)}; read it with: hud secret get ${m.name} | <command>`);
         },
       });
     }

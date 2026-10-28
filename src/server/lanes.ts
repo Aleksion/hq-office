@@ -4,6 +4,7 @@ import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { event } from "./events.ts";
 import { laneTree, levelName, levelNames, rankOf, underHq } from "../lane-tree.ts";
+import { firstFloor, laneFloor, mustFloor, type Caller } from "./floors.ts";
 
 // An agent at work: herdr says working, or an idle agent still has shells, a monitor or subagents running (bg).
 export const laneWorking = (lane: Lane | null | undefined) => !!lane && (lane.herdr === "working" || !!lane.bg);
@@ -26,12 +27,19 @@ export function laneStatus(lane: Lane, openByLane: Map<string, number>, now: num
 
 const LANE_FIELDS = ["title", "machine", "pane", "issue", "pr", "phase", "note"] as const;
 
-export function upsertLane(body: any) {
+// The lane's floor: an explicit floor (hud lane NAME --floor ID) moves it there with its subtree; a new lane is on its
+// parent's floor, else the caller's; a lane given a parent on another floor follows it there. Otherwise it stays.
+export function upsertLane(body: any, caller?: Pick<Caller, "floor" | "explicit">) {
   if (!body.name) throw new Error("name is required");
   const parent = body.parent === undefined ? undefined : underHq(body.parent) ? null : String(body.parent).trim();
   if (parent) checkParent(body.name, parent); // before any write: a refused parent changes nothing
+  const explicit = caller?.explicit ? mustFloor(caller.explicit).id : null;
+  const parentFloor = parent ? laneFloor(parent) : null;
+  if (explicit && parentFloor && parentFloor !== explicit) throw new Error(`${parent} is on floor ${parentFloor}: a lane reports to a lane on its own floor`);
+  const before = laneFloor(body.name);
+  const floor = explicit ?? parentFloor ?? before ?? caller?.floor ?? firstFloor();
   const now = Date.now();
-  db.query("INSERT INTO lanes (name, updated_at) VALUES (?, ?) ON CONFLICT(name) DO NOTHING").run(body.name, now);
+  db.query("INSERT INTO lanes (name, updated_at, floor) VALUES (?, ?, ?) ON CONFLICT(name) DO NOTHING").run(body.name, now, floor);
   for (const f of LANE_FIELDS) {
     if (body[f] !== undefined) db.query(`UPDATE lanes SET ${f} = ?, updated_at = ? WHERE name = ?`).run(body[f] === "" ? null : body[f], now, body.name);
   }
@@ -53,6 +61,29 @@ export function upsertLane(body: any) {
     event("hq", level ? `level ${level}` : "level from the tree", body.name);
   }
   if (body.note || body.phase) event("hq", [body.phase && `phase ${body.phase}`, body.note].filter(Boolean).join(": "), body.name);
+  if (before && floor !== before) moveLane(body.name, floor);
+}
+
+// A lane moves to another floor with its whole subtree, and their open questions and rooms go with them (board items
+// follow their lane on their own). A lane whose parent stays behind reports to its new floor's HQ.
+function moveLane(name: string, floor: string) {
+  db.transaction(() => {
+    const moved = [name];
+    for (let i = 0; i < moved.length; i++) {
+      for (const k of db.query("SELECT name FROM lanes WHERE parent = ?").all(moved[i]) as { name: string }[]) if (!moved.includes(k.name)) moved.push(k.name);
+    }
+    const at = moved.map(() => "?").join(", ");
+    db.query(`UPDATE lanes SET floor = ? WHERE name IN (${at})`).run(floor, ...moved);
+    db.query(`UPDATE asks SET floor = ? WHERE status = 'open' AND lane IN (${at})`).run(floor, ...moved);
+    db.query(`UPDATE rooms SET floor = ? WHERE owner IN (${at})`).run(floor, ...moved);
+    db.query(`UPDATE work_items SET floor = ? WHERE lane IN (${at})`).run(floor, ...moved);
+    const parent = (db.query("SELECT parent FROM lanes WHERE name = ?").get(name) as { parent: string | null }).parent;
+    if (parent && laneFloor(parent) !== floor) {
+      db.query("UPDATE lanes SET parent = NULL WHERE name = ?").run(name);
+      event("hq", `reports to HQ (${parent} stays on floor ${laneFloor(parent)})`, name);
+    }
+    event("hq", `moved to floor ${floor}${moved.length > 1 ? ` with ${moved.length - 1} ${moved.length === 2 ? "report" : "reports"}` : ""}`, name);
+  })();
 }
 
 // A lane reports to a lane that exists, never to itself, and never to one of its own reports (a loop).

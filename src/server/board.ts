@@ -108,6 +108,8 @@ export function createBoard(opts: {
   repo?: string;
   onChange?: () => void;
   event?: (who: string, text: string, lane?: string | null) => void;
+  // The floor of an item with no lane and none stored (FLOORS; see floors.ts). An item is on its lane's floor.
+  firstFloor?: () => string | null;
 }) {
   const { db } = opts;
   const gh = opts.gh ?? ghCli();
@@ -129,6 +131,9 @@ export function createBoard(opts: {
   `);
   // Tracking an item again reopens it: PRs that ended before then no longer count towards done.
   if (!(db.query("PRAGMA table_info(work_items)").all() as { name: string }[]).some((c) => c.name === "reopened_at")) db.exec("ALTER TABLE work_items ADD COLUMN reopened_at INTEGER");
+  // FLOORS: the floor an item was filed on; its lane's floor wins when it has a lane.
+  if (!(db.query("PRAGMA table_info(work_items)").all() as { name: string }[]).some((c) => c.name === "floor")) db.exec("ALTER TABLE work_items ADD COLUMN floor TEXT");
+  const firstFloor = opts.firstFloor ?? (() => null);
 
   const cache = new Map<string, PrFact>();
   const inflight = new Map<string, Promise<void>>();
@@ -169,7 +174,7 @@ export function createBoard(opts: {
     if (!issue) throw new Error("issue is required");
     const lane = body.lane ? String(body.lane) : null;
     const existing = getItem(issue);
-    if (!existing) db.query("INSERT INTO work_items (issue, lane, created_at) VALUES (?, ?, ?)").run(issue, lane, now());
+    if (!existing) db.query("INSERT INTO work_items (issue, lane, created_at, floor) VALUES (?, ?, ?, ?)").run(issue, lane, now(), body.floor ?? null);
     else {
       // Tracking again reopens it, even when its PRs have all ended (a new PR is coming).
       db.query("UPDATE work_items SET lane = COALESCE(?, lane), done_at = NULL, reopened_at = ? WHERE issue = ?").run(lane, now(), issue);
@@ -204,11 +209,11 @@ export function createBoard(opts: {
   // `hud lane NAME --issue X --pr N`: the lane's issue becomes a tracked item owned by that lane, with those PRs.
   function linkLane(body: any) {
     if (!body?.name || (body.issue === undefined && body.pr === undefined)) return;
-    const lane = db.query("SELECT issue, pr FROM lanes WHERE name = ?").get(body.name) as any;
+    const lane = db.query("SELECT * FROM lanes WHERE name = ?").get(body.name) as any;
     const issues = splitList(body.issue ?? lane?.issue).map(normIssue);
     if (!issues.length) return;
     for (const issue of issues) {
-      if (!getItem(issue)) db.query("INSERT INTO work_items (issue, lane, created_at) VALUES (?, ?, ?)").run(issue, body.name, now());
+      if (!getItem(issue)) db.query("INSERT INTO work_items (issue, lane, created_at, floor) VALUES (?, ?, ?, ?)").run(issue, body.name, now(), lane?.floor ?? null);
       else db.query("UPDATE work_items SET lane = ? WHERE issue = ?").run(body.name, issue);
     }
     const prs = splitList(body.pr).filter((p) => parsePr(p, repo));
@@ -313,7 +318,8 @@ export function createBoard(opts: {
 
   // ---- derived view ----
 
-  function view() {
+  // Every floor's items, or one floor's ({ floor }).
+  function view(scope: { floor?: string | null } = {}) {
     const t = now();
     const lanes = new Map((db.query("SELECT * FROM lanes").all() as any[]).map((l) => [l.name, l]));
     const asks = db.query("SELECT id, lane, title, body, status, created_at, answered_at FROM asks WHERE status != 'withdrawn'").all() as any[];
@@ -404,6 +410,7 @@ export function createBoard(opts: {
       return {
         issue: it.issue,
         lane: it.lane,
+        floor: (lane?.floor ?? it.floor ?? firstFloor()) as string | null,
         // The lane its lane reports to (null: HQ), so the board can group work under its managers.
         manager: lane?.parent && lanes.has(lane.parent) ? (lane.parent as string) : null,
         laneStatus: lane?.herdr ?? null,
@@ -420,14 +427,15 @@ export function createBoard(opts: {
         doneAt,
       };
     });
-    const shown = items.filter((i) => i.state !== "done" || t - (i.doneAt ?? t) < DONE_SHOWN_MS);
+    const onFloor = (f: string | null | undefined) => !scope.floor || f === scope.floor;
+    const shown = items.filter((i) => (i.state !== "done" || t - (i.doneAt ?? t) < DONE_SHOWN_MS) && onFloor(i.floor));
     // Within a state, the oldest last change first.
     shown.sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || (a.last?.at ?? 0) - (b.last?.at ?? 0));
     const counts = Object.fromEntries(STATE_ORDER.map((s) => [s, shown.filter((i) => i.state === s).length])) as Record<BoardState, number>;
     // Lanes blocked on a prompt with no open tracked item: `hud board` lists them too, so no block goes unseen.
     const covered = new Set(shown.filter((i) => i.state === "blocked").map((i) => i.lane));
     const blockedLanes = [...lanes.values()]
-      .filter((l) => l.prompt && !covered.has(l.name))
+      .filter((l) => l.prompt && !covered.has(l.name) && onFloor(l.floor ?? firstFloor()))
       .map((l) => ({ lane: l.name as string, machine: (l.machine ?? null) as string | null, pane: (l.pane ?? null) as string | null, prompt: l.prompt as string }));
     return { now: t, stallMs: STALL_MS, counts, items: shown, blockedLanes };
   }

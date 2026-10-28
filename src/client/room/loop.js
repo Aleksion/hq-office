@@ -16,6 +16,8 @@ import { GLYPH, drawBubble, drawLabel, drawRoom, stillOpaque, stillPicture } fro
 import { danceMove, drawNotes, drawShadow, drawSleep, drawSparkles, isNight, slideChange, sliding } from "./hero.js";
 import { drawProp, drawWatchCheck, idleBrain, idleLift } from "./breakroom.js";
 import { changeAt, danceClock, nextChange, steadyClock, walkMs, mode } from "./beat.js";
+import { cut, floorById } from "../core/floors.js";
+import { inBuilding, officeFloor } from "../core/scope.js";
 
 // At most one frame is ever waiting: either its timer or the display frame the timer asked for.
 let last = performance.now();
@@ -25,7 +27,8 @@ let frameNext = 0;
 let walked = false;
 // The office rests while something covers it: a conference room opened on the stage (rooms/) says so on the bus.
 let covered = false;
-const roomVisible = () => document.visibilityState === "visible" && !covered;
+// With floors, it rests while the building shows instead (docs/floors.md).
+const roomVisible = () => document.visibilityState === "visible" && !covered && !inBuilding();
 function scheduleFrame() {
   if (!roomVisible()) {
     clearTimeout(frameTimer);
@@ -61,6 +64,7 @@ function wake() {
   scheduleFrame();
 }
 on("state", wake);
+on("scope", wake);
 on("stage", (shown) => { covered = shown !== "office"; wake(); });
 on("settings", wake); // PERFORMANCE switches at once
 window.addEventListener("focus", wake);
@@ -101,7 +105,9 @@ function drawScene(now, dt) {
     drawEventCounter(now);
     drawLabel("YOU", 20 * TS, 3 * TS + 10, true);
     drawSprite(hqPal(), 16 * TS, 5 * TS - 6, "up", 0);
-    drawLabel("HQ", 16 * TS + 8, 5 * TS + 10, true);
+    // Inside a floor, HQ at the terminal is that floor's HQ, by its name.
+    const floor = floorById(S, officeFloor());
+    drawLabel(floor ? cut(floor.hq) : "HQ", 16 * TS + 8, 5 * TS + 10, true);
 
     const list = [...workers.values()];
     for (const w of list) if (w.brain) idleBrain(w, now, list);

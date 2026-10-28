@@ -37,6 +37,12 @@
 //   hud guide            how HQ talks to the owner (through the HUD, never only in its terminal)
 // conference rooms: one per piece of work, where the owner talks straight to the lane that owns it (see roomCmd below)
 //   hud room create|path|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
+// floors: one HQ agent and everything it runs (see floorCmd below). hud tells the server which pane it runs in
+// ($HERDR_PANE_ID), so an HQ's or a lane's writes land on its own floor, and inbox, wait, ack, board, tree and
+// room list show its own floor only; --all shows every floor, and --floor ID picks a floor by hand.
+//   hud floor add ID --hq AGENT [--name N] [--color #hex]  |  list  |  set ID [--name] [--hq] [--color]  |  rm ID
+//   hud floor tell FLOOR TEXT    type a line into another floor's HQ
+//   hud lane NAME --floor ID     move a lane, with every lane under it, to another floor
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";
 import { atText, expiresText } from "./src/client/secrets/expiry.js";
@@ -56,10 +62,19 @@ function parse(argv: string[]) {
   return { flags, rest, one };
 }
 
+// Who is calling (the server maps the pane to an agent, and the agent to its floor), and the floor asked for by hand.
+function who(): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (process.env.HERDR_PANE_ID) h["x-hud-pane"] = process.env.HERDR_PANE_ID;
+  if (process.env.HUD_LOCAL_MACHINE) h["x-hud-machine"] = process.env.HUD_LOCAL_MACHINE;
+  if (FLOOR) h["x-hud-floor"] = FLOOR;
+  return h;
+}
+
 async function call(method: string, path: string, body?: unknown) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { "content-type": "application/json", "x-hud": "1" },
+    headers: { "content-type": "application/json", "x-hud": "1", ...who() },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json();
@@ -79,7 +94,11 @@ function dueAt(hhmm?: string) {
 }
 
 const [cmd, ...argv] = process.argv.slice(2);
-const { flags, rest, one } = parse(argv);
+// --all (every floor) takes no value; --json neither (read with `"json" in flags`, so it goes last or alone).
+const ALL = argv.includes("--all");
+const { flags, rest, one } = parse(argv.filter((a) => a !== "--all"));
+// `hud floor` names its floor as an argument; everywhere else --floor ID picks the floor by hand.
+const FLOOR = ALL ? "all" : cmd === "floor" ? undefined : one("floor");
 
 switch (cmd) {
   case "ask": {
@@ -131,9 +150,13 @@ switch (cmd) {
     console.log(`lane ${rest[0]}`);
     break;
   case "tree": {
-    const { lanes } = await call("GET", "/api/state");
-    const view = lanes.map((l: any) => ({ name: l.name, parent: l.parent, depth: l.depth, level: l.level, status: l.status, path: l.path }));
-    console.log("json" in flags ? JSON.stringify(view, null, 2) : treeText(view));
+    // The caller's floor's lanes, or every floor's (--all), each floor under its own HQ.
+    const [{ lanes }, { floors, caller }] = await Promise.all([call("GET", "/api/state"), call("GET", "/api/floors")]);
+    const view = lanes.map((l: any) => ({ name: l.name, parent: l.parent, depth: l.depth, level: l.level, status: l.status, path: l.path, floor: l.floor }));
+    const shown = floors.filter((f: any) => ALL || f.id === caller);
+    // One floor prints exactly what it did before floors: no floor field.
+    if ("json" in flags) console.log(JSON.stringify(view.filter((l: any) => shown.some((f: any) => f.id === l.floor)).map(({ floor, ...l }: any) => (floors.length > 1 ? { ...l, floor } : l)), null, 2));
+    else console.log(shown.map((f: any) => treeText(view.filter((l: any) => l.floor === f.id), floors.length > 1 ? `HQ of floor ${f.id} (${f.hq})` : "HQ")).join("\n\n"));
     break;
   }
   case "rm-lane":
@@ -196,7 +219,7 @@ switch (cmd) {
       console.log(JSON.stringify(await call("GET", "/api/board?refresh=1"), null, 2));
       break;
     }
-    const res = await fetch(`${BASE}/api/board?refresh=1&format=text`);
+    const res = await fetch(`${BASE}/api/board?refresh=1&format=text`, { headers: who() });
     if (!res.ok) {
       console.error(await res.text());
       process.exit(1);
@@ -210,8 +233,11 @@ switch (cmd) {
   case "room":
     await roomCmd(argv);
     break;
+  case "floor":
+    await floorCmd();
+    break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|floor|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 
@@ -382,7 +408,7 @@ async function roomCmd(args: string[]) {
         }
         const name = file.split("/").pop()!;
         const q = new URLSearchParams({ name, title: o("title") ?? name, ...(o("kind") ? { kind: o("kind")! } : {}), ...(o("as") ? { as: o("as")! } : {}) });
-        const res = await fetch(`${BASE}${path}/files?${q}`, { method: "POST", headers: { "content-type": blob.type || "application/octet-stream", "x-hud": "1" }, body: blob });
+        const res = await fetch(`${BASE}${path}/files?${q}`, { method: "POST", headers: { "content-type": blob.type || "application/octet-stream", "x-hud": "1", ...who() }, body: blob });
         const out = await res.json();
         if (!res.ok) {
           console.error(out.error ?? res.statusText);
@@ -436,6 +462,57 @@ async function roomCmd(args: string[]) {
     case "archive":
       await call("POST", `${path}/archive`, {});
       console.log(`room ${slug} archived`);
+      break;
+    default:
+      usage();
+  }
+}
+
+// ---- floors (hud floor ...): one HQ agent and everything it runs ----
+
+async function floorCmd() {
+  const [verb, id, ...words] = rest;
+  const usage = () => {
+    console.error(`usage:
+  hud floor list [--json]                                  every floor: its HQ, whether it is receiving, lanes, waiting on the owner
+  hud floor add ID --hq AGENT [--name N] [--color #hex]    a new floor, run by the herdr agent AGENT
+  hud floor set ID [--name N] [--hq AGENT] [--color #hex]
+  hud floor rm ID                                          only an empty floor (move its lanes first: hud lane NAME --floor OTHER)
+  hud floor tell FLOOR TEXT                                type a line into that floor's HQ, from your floor`);
+    process.exit(2);
+  };
+  switch (verb) {
+    case "list": {
+      const { floors, caller } = await call("GET", "/api/floors");
+      if ("json" in flags) {
+        console.log(JSON.stringify(floors, null, 2));
+        break;
+      }
+      for (const f of floors) {
+        const link = f.receiving === true ? "receiving" : f.receiving === false ? `NOT receiving (${f.reason})` : "not checked yet";
+        console.log(`${f.id === caller ? "*" : " "} ${f.id}  "${f.name}"  HQ ${f.hq}  ${link}  ${f.counts.lanes} lanes  ${f.counts.needsYou} waiting on the owner`);
+      }
+      break;
+    }
+    case "add":
+      if (!id) usage();
+      await call("POST", "/api/floors", { id, name: one("name"), hq: one("hq"), color: one("color") });
+      console.log(`floor ${id} added`);
+      break;
+    case "set":
+      if (!id) usage();
+      await call("POST", `/api/floors/${encodeURIComponent(id)}`, { name: one("name"), hq: one("hq"), color: one("color") });
+      console.log(`floor ${id} changed`);
+      break;
+    case "rm":
+      if (!id) usage();
+      await call("POST", `/api/floors/${encodeURIComponent(id)}`, { rm: true });
+      console.log(`floor ${id} removed`);
+      break;
+    case "tell":
+      if (!id || !words.length) usage();
+      await call("POST", `/api/floors/${encodeURIComponent(id)}/tell`, { text: words.join(" ") });
+      console.log(`told floor ${id}`);
       break;
     default:
       usage();

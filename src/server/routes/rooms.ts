@@ -13,11 +13,12 @@ const at = (tail: string) => new RegExp(`^/api/rooms/${S}${tail}$`);
 const fileResponse = (path: string, name: string) => serve(path, name, { textInline: true });
 
 const routes: Route[] = [
-  { method: "GET", path: "/api/rooms", handle: ({ url }) => json(roomsView(!!url.searchParams.get("all"))) },
+  // ?all=1 adds the archived rooms; the caller's floor's only, unless x-hud-floor: all.
+  { method: "GET", path: "/api/rooms", handle: ({ url, caller }) => json(roomsView(!!url.searchParams.get("all"), caller().all ? null : caller().floor)) },
   { method: "GET", pattern: at(""), handle: ({ m }) => json(roomView(m[1])) },
   // hud room read: the owner's messages after ?since=ID; with ?wait=S it waits up to S seconds (at most 240) for one.
   { method: "GET", pattern: at("/read"), handle: async ({ m, url }) => json(await readOwner(m[1], url.searchParams.get("since"), Math.min(Number(url.searchParams.get("wait") ?? 0) || 0, 240) * 1000)) },
-  { method: "POST", path: "/api/rooms", handle: ({ body }) => createRoom(body) },
+  { method: "POST", path: "/api/rooms", handle: ({ body, caller }) => createRoom(body, caller().floor) },
   { method: "POST", pattern: at("/brief"), handle: ({ body, m }) => setBrief(m[1], body) },
   { method: "POST", pattern: at("/artifacts"), handle: ({ body, m }) => addLink(m[1], body) },
   // The owner takes an item off the shelf (an image removed from the send box): a file in the folder goes too.

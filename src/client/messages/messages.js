@@ -9,6 +9,8 @@ import { renderWork } from "../work-board/work-board.js";
 import { on } from "../core/bus.js";
 import { clearImages, composer, hasImages, notReady, withImages } from "../images/images.js";
 import { emit } from "../core/bus.js";
+import { listFloor, others, pick, scope, tagged } from "../core/scope.js";
+import { floorById, floorTagHTML, scopeLineHTML } from "../core/floors.js";
 
 // QUESTIONS and MESSAGES share the question column; one shows at a time. The choice is remembered in this browser.
 // MESSAGES is one thread, oldest at the top: HQ's updates and your notes, by time. A reply is an ordinary note
@@ -54,19 +56,22 @@ export function renderQTabs() {
   $("work").hidden = qTab !== "work";
   $("rooms").hidden = qTab !== "rooms"; // its count is set by rooms/
   if (!S) return;
-  const n = S.open.length, u = S.updatesUnread ?? 0;
+  // Inside a floor the tabs count that floor's (docs/floors.md); WAITING ON YOU in the top bar counts every floor.
+  const n = pick(S.open).length, u = unreadIn(listFloor());
   $("qtCount").hidden = !n;
   $("qtCount").textContent = n;
   $("qtUnread").hidden = !u;
   $("qtUnread").textContent = `${u} NEW`;
 }
+// Unread updates from HQ: a floor's (S.floors counts every one, not only the newest 40), or every floor's.
+export const unreadIn = (floor) => (floor ? floorById(S, floor)?.counts?.unreadMessages ?? 0 : S.updatesUnread ?? 0);
 // Every update and note becomes a message; a note that starts with a re: reference hangs under its parent.
 function msgModel() {
   const items = [
-    ...(S.updates ?? []).map((u) => ({ key: `u${u.id}`, who: "HQ", at: u.at, lane: u.lane, title: u.title, text: u.body || "", unread: !u.read_at || msgFresh.has(u.id) })),
-    ...S.notes.map((n) => {
+    ...pick(S.updates).map((u) => ({ key: `u${u.id}`, who: "HQ", at: u.at, lane: u.lane, floor: u.floor, title: u.title, text: u.body || "", unread: !u.read_at || msgFresh.has(u.id) })),
+    ...pick(S.notes).map((n) => {
       const r = n.text.match(REF);
-      return { key: `n${n.id}`, who: "YOU", at: n.at, text: r ? n.text.slice(r[0].length) : n.text, parent: r ? r[1] + r[2] : null, said: r?.[3] || "", acked: !!n.acked_at };
+      return { key: `n${n.id}`, who: "YOU", at: n.at, floor: n.floor, text: r ? n.text.slice(r[0].length) : n.text, parent: r ? r[1] + r[2] : null, said: r?.[3] || "", acked: !!n.acked_at };
     }),
   ].sort((a, b) => a.at - b.at);
   const byKey = new Map(items.map((m) => [m.key, Object.assign(m, { kids: [] })]));
@@ -83,7 +88,7 @@ function msgItem(m, nameParent) {
   // A reply names what it answers when that is not the message right above it, or is too old to be in the list.
   const to = m.up ? (nameParent ? `${m.up.who} ${clock(m.up.at)}: ${short(m.up.title || m.up.text, 70)}` : "") : m.parent ? `an earlier message${m.said ? `: ${m.said}` : ""}` : "";
   return `<article class="msg ${m.who === "HQ" ? "hq" : "you"}${m.unread ? " unread" : ""}" data-msg="${m.key}">
-      <div class="meta"><span class="who">${m.who}</span><span class="tag">${clock(m.at)}</span>${m.lane ? `<span class="tag lane">${esc(m.lane)}</span>` : ""}${m.unread ? `<span class="tag new">NEW</span>` : ""}${m.who === "YOU" ? `<span class="seen ${m.acked ? "ok" : ""}">${m.acked ? "HQ HAS IT" : "NOT PICKED UP YET"}</span>` : ""}<button class="btn-s" type="button" data-reply="${m.key}">${replyTo === m.key ? "CANCEL" : "REPLY"}</button></div>
+      <div class="meta">${tagged() ? floorTagHTML(S, m.floor) : ""}<span class="who">${m.who}</span><span class="tag">${clock(m.at)}</span>${m.lane ? `<span class="tag lane">${esc(m.lane)}</span>` : ""}${m.unread ? `<span class="tag new">NEW</span>` : ""}${m.who === "YOU" ? `<span class="seen ${m.acked ? "ok" : ""}">${m.acked ? "HQ HAS IT" : "NOT PICKED UP YET"}</span>` : ""}<button class="btn-s" type="button" data-reply="${m.key}">${replyTo === m.key ? "CANCEL" : "REPLY"}</button></div>
       ${to ? `<div class="quote">↩ to ${mdInline(to, { links: false })}</div>` : ""}
       ${m.title ? `<h3>${mdInline(m.title)}</h3>` : ""}${body}
     </article>${replyTo === m.key ? replyBox(m) : ""}`;
@@ -107,14 +112,15 @@ function msgNode(m, depth) {
 export function renderMsgs() {
   if (qTab !== "messages" || !S) return;
   const box = $("msgs");
-  for (const u of S.updates ?? []) {
+  // Only what shows is marked read: inside a floor, that floor's updates.
+  for (const u of pick(S.updates)) {
     if (u.read_at || readSent.has(u.id)) continue;
     readSent.add(u.id);
     msgFresh.add(u.id);
     post(`/api/updates/${u.id}/read`, {}).catch(() => readSent.delete(u.id));
   }
   const caret = document.activeElement?.closest?.("[data-rbox]") ? document.activeElement.selectionStart : null;
-  const html = msgModel().roots.map((m) => msgNode(m, 0)).join("") || `<div class="empty">No messages yet. HQ's updates and your notes land here.</div>`;
+  const html = scopeLineHTML(S, scope(), others(S.updates) + others(S.notes)) + (msgModel().roots.map((m) => msgNode(m, 0)).join("") || `<div class="empty">No messages yet. HQ's updates and your notes land here.</div>`);
   if (phone()) {
     // The thread scrolls itself (core/layout.css): at the newest message (just opened, or within 40px of it), stay
     // on it; reading older ones, what you read stays where it is, whatever lands above or below.
@@ -156,7 +162,8 @@ async function sendReply(btn) {
   const said = p ? ` ("${short(p.title || p.text, 50).replace(/"/g, "'")}")` : "";
   btn.disabled = true;
   try {
-    await post("/api/notes", { text: `re: #${replyTo}${said} ${text}` });
+    // A reply goes to the HQ of the floor of what it answers.
+    await post("/api/notes", { text: `re: #${replyTo}${said} ${text}`, ...(p?.floor && S.floors?.length > 1 ? { floor: p.floor } : {}) });
     replyTo = null; replyText = "";
     clearImages("reply");
     renderMsgs();

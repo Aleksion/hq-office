@@ -1,11 +1,11 @@
 // Routes for asks. The router loads every file in this folder; see src/server/router.ts.
 import { db } from "../db.ts";
 import { event } from "../events.ts";
-import { answerAsk, createAsk, notYet } from "../asks.ts";
+import { answerAsk, checkScope, createAsk, notYet } from "../asks.ts";
 import type { Route } from "../router.ts";
 
 const routes: Route[] = [
-  { method: "POST", path: "/api/asks", handle: ({ body }) => ({ id: createAsk(body) }) },
+  { method: "POST", path: "/api/asks", handle: ({ body, caller }) => ({ id: createAsk(body, caller().floor) }) },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/answer$/, handle: ({ body, m }) => {
     answerAsk(Number(m[1]), String(body.answer ?? "").trim() || "done");
   } },
@@ -17,9 +17,11 @@ const routes: Route[] = [
       Date.now(),
       Number(m[1]),
     );
-    event("hq", `withdrew ask #${m[1]}${body.reason ? `: ${body.reason}` : ""}`);
+    const ask = db.query("SELECT lane, floor FROM asks WHERE id = ?").get(Number(m[1])) as { lane: string | null; floor: string | null } | null;
+    event("hq", `withdrew ask #${m[1]}${body.reason ? `: ${body.reason}` : ""}`, ask?.lane, ask?.floor);
   } },
-  { method: "POST", pattern: /^\/api\/asks\/(\d+)\/ack$/, handle: ({ m }) => {
+  { method: "POST", pattern: /^\/api\/asks\/(\d+)\/ack$/, handle: ({ m, caller }) => {
+    checkScope("ask", Number(m[1]), caller());
     db.query("UPDATE asks SET acked_at = ? WHERE id = ?").run(Date.now(), Number(m[1]));
   } },
 ];

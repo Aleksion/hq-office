@@ -140,6 +140,27 @@ In Arena nothing seasonal is drawn over a mask (guards, the hero, HQ; so HERO HA
 leave off seasonal hats and coats but keep what they hold. Office with no tree looks as it always did. The art is
 our own, not any show's.
 
+## Floors
+
+A floor is one HQ agent and everything it runs. When one HQ has too many lanes, run several: one HQ per domain
+(frontend, backend, marketing, legal), each with its own questions, messages, work board, rooms, lane tree and sweep
+nudge. Secrets, settings and machines are shared. Everything you have starts as the first floor (`HUD_FLOOR_NAME`
+names it, `HQ` by default), and one floor works exactly as HQ Office always has.
+
+```
+hud floor add backend --hq hq-backend --name Backend --color #4a90d9   # hq-backend is that HQ's name in herdr
+hud floor list                                                            # HQ, receiving, lanes, waiting on you
+hud floor set backend --name "Back end"
+hud floor rm backend                                                      # only an empty floor
+hud lane api-auth --floor backend                                         # moves it, with every lane under it
+hud floor tell legal "can you review the terms change?"                  # from one HQ to another floor's HQ
+```
+
+`hud` sends its herdr pane with every call, so an HQ's work lands on its own floor without any setup, and a lane's on
+its lane's floor. Your answers and notes reach the HQ of their floor only. `hud inbox`, `wait`, `ack`, `board`, `tree`
+and `room list` show the caller's floor; `--all` shows every floor, and `--floor ID` picks one by hand. The details
+and the state the page reads are in [docs/floors.md](docs/floors.md).
+
 ## The work board
 
 The WORK tab lists every piece of work in flight: an issue key, its pull requests and the lane that owns it. HQ adds one with `hud track ISSUE --lane L --pr N`, and `hud lane NAME --issue X --pr N` links a lane's work too. Each item's state is worked out from facts, in this order: done (all PRs merged or closed, or `hud done ISSUE`), waiting on you (an open question names its lane, issue or PR), waiting on CI (a check is running), paused (`hud pause ISSUE REASON`, undone with `hud resume ISSUE`), moving (the lane is working, or something changed in the last 45 minutes), and otherwise stalled. Stalled work shows red at the top of the question column and at the top of `hud board` (`--json` for JSON).
@@ -204,7 +225,8 @@ Set these in `config.env`. An empty value means the default.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `HUD_HQ_AGENT` | `hq` | herdr agent name of your HQ lane. Answers and notes are typed into it. |
+| `HUD_HQ_AGENT` | `hq` | herdr agent name of your HQ lane. Answers and notes are typed into it. With floors, it is the first floor's HQ. |
+| `HUD_FLOOR_NAME` | `HQ` | Name of the first floor, read once, when the first floor is made (its id is the name as a slug). |
 | `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
 | `HUD_HQ_BLOCKED` | on | `0` stops telling HQ when a lane's agent becomes blocked on a prompt in herdr (the page still shows it). |
 | `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |

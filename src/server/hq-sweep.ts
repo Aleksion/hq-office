@@ -4,6 +4,8 @@
 // since the last nudge. It lists what HQ should look at; with nothing to list it sends nothing. A nudge HQ does not
 // act on (HQ never works after it) doubles the wait for the next, up to 2 h. Never queued: a nudge that cannot go
 // now is dropped, since an old one says nothing.
+// Per floor: the settings are shared, but each floor's HQ is nudged about its own floor only, with its own last
+// nudge, next one and backoff.
 import { OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import { event } from "./events.ts";
@@ -11,8 +13,9 @@ import { addStatePart } from "./state.ts";
 import { getSettings } from "./settings.ts";
 import { board } from "./work-board.ts";
 import { withHint } from "../hq-guide.ts";
-import { HQ_AGENT, promptAgent } from "./herdr.ts";
-import { hqLink, hqNow } from "./hq-link.ts";
+import { promptAgent } from "./herdr.ts";
+import { hqLink, hqNowOf } from "./hq-link.ts";
+import { firstFloor, floorList, hqOf } from "./floors.ts";
 
 export const SWEEP_DEFAULTS = { on: false, minutes: 20, hours: "8-24" };
 const MINUTE = Number(process.env.HUD_SWEEP_MINUTE_MS) || 60_000;
@@ -39,19 +42,19 @@ function inWindow(spec: string, now: Date) {
   return a < b ? h >= a && h < b : h >= a || h < b;
 }
 
-// The last nudge, from the event log, so a restart does not forget it.
-const lastAt = () => (db.query("SELECT MAX(at) AS at FROM events WHERE who = 'hud' AND text LIKE ?").get(`${NUDGED}%`) as { at: number | null }).at ?? 0;
-// Nudges in a row that HQ did not act on. Memory only: after a restart HQ counts as having acted.
-let unanswered = 0;
-const waitMin = (minutes: number) => Math.min(MAX_WAIT_MIN, minutes * 2 ** unanswered);
+// A floor's last nudge, from the event log, so a restart does not forget it.
+const lastAt = (floor: string) => (db.query("SELECT MAX(at) AS at FROM events WHERE who = 'hud' AND text LIKE ? AND floor = ?").get(`${NUDGED}%`, floor) as { at: number | null }).at ?? 0;
+// Nudges in a row that a floor's HQ did not act on. Memory only: after a restart HQ counts as having acted.
+const unanswered = new Map<string, number>();
+const waitMin = (minutes: number, floor: string) => Math.min(MAX_WAIT_MIN, minutes * 2 ** (unanswered.get(floor) ?? 0));
 
-// What HQ should look at, in one line; null when there is nothing.
-function findings(): string | null {
-  const lanes = db.query("SELECT name, herdr FROM lanes WHERE herdr IN ('idle', 'done') AND bg IS NULL ORDER BY name").all() as { name: string }[];
-  const gone = db.query("SELECT name FROM lanes WHERE herdr = 'gone' AND phase NOT IN ('done', 'parked') ORDER BY name").all() as { name: string }[];
-  const stalled = board.view().items.filter((i: any) => i.state === "stalled").map((i: any) => i.issue as string);
-  const asks = db.query("SELECT COUNT(*) AS n, MIN(created_at) AS at FROM asks WHERE status = 'open'").get() as { n: number; at: number | null };
-  const rooms = db.query("SELECT DISTINCT slug FROM room_messages WHERE author IS NULL AND delivery IN ('away', 'failed') ORDER BY slug").all() as { slug: string }[];
+// What a floor's HQ should look at, in one line; null when there is nothing.
+function findings(floor: string): string | null {
+  const lanes = db.query("SELECT name, herdr FROM lanes WHERE herdr IN ('idle', 'done') AND bg IS NULL AND floor = ? ORDER BY name").all(floor) as { name: string }[];
+  const gone = db.query("SELECT name FROM lanes WHERE herdr = 'gone' AND phase NOT IN ('done', 'parked') AND floor = ? ORDER BY name").all(floor) as { name: string }[];
+  const stalled = board.view({ floor }).items.filter((i: any) => i.state === "stalled").map((i: any) => i.issue as string);
+  const asks = db.query("SELECT COUNT(*) AS n, MIN(created_at) AS at FROM asks WHERE status = 'open' AND floor = ?").get(floor) as { n: number; at: number | null };
+  const rooms = db.query("SELECT DISTINCT m.slug FROM room_messages m JOIN rooms r ON r.slug = m.slug WHERE m.author IS NULL AND m.delivery IN ('away', 'failed') AND r.floor = ? ORDER BY m.slug").all(floor) as { slug: string }[];
   const parts: string[] = [];
   const list = (label: string, names: string[]) => names.length && parts.push(`${label} ${names.length}: ${names.join(", ")}`);
   list("idle or done lanes", lanes.map((l) => l.name));
@@ -63,24 +66,38 @@ function findings(): string | null {
 }
 const age = (ms: number) => (ms < 3600_000 ? `${Math.round(ms / 60_000)}m` : ms < 86_400_000 ? `${Math.round(ms / 3600_000)}h` : `${Math.round(ms / 86_400_000)}d`);
 
-// After each sync. Resolves once a nudge, if any, has been typed in.
+// After each sync: every floor in turn. Resolves once the nudges, if any, have been typed in.
 export async function sweep(now = Date.now()) {
   const c = config();
-  if (!c.on) return;
-  const last = lastAt();
-  if (hqNow.workingAt > last) unanswered = 0; // HQ worked since the last nudge
-  if (last && now - last < waitMin(c.minutes) * MINUTE) return;
-  if (!inWindow(c.hours, new Date(now))) return;
-  if (!["idle", "done"].includes(hqNow.status ?? "") || hqLink().ok !== true) return;
-  const found = findings();
-  if (!found) return;
-  const r = await promptAgent(HQ_AGENT, withHint(`HUD sweep: ${found}. Sweep now (hud board, hud inbox, the rooms); an idle lane must be idle for a reason, and only HQ can judge it.`));
-  if (!r.ok) return; // dropped, never held: the link check says why on the page
-  event("hud", `${NUDGED}${found}`.slice(0, 500));
-  if (last) unanswered += 1;
+  if (!c.on || !inWindow(c.hours, new Date(now))) return;
+  for (const f of floorList()) await sweepFloor(f.id, c, now);
 }
 
+async function sweepFloor(floor: string, c: ReturnType<typeof config>, now: number) {
+  const last = lastAt(floor);
+  const hq = hqNowOf(floor);
+  if (hq.workingAt > last) unanswered.set(floor, 0); // HQ worked since the last nudge
+  if (last && now - last < waitMin(c.minutes, floor) * MINUTE) return;
+  if (!["idle", "done"].includes(hq.status ?? "") || hqLink(floor).ok !== true) return;
+  const found = findings(floor);
+  if (!found) return;
+  const r = await promptAgent(hqOf(floor), withHint(`HUD sweep: ${found}. Sweep now (hud board, hud inbox, the rooms); an idle lane must be idle for a reason, and only HQ can judge it.`));
+  if (!r.ok) return; // dropped, never held: the link check says why on the page
+  event("hud", `${NUDGED}${found}`.slice(0, 500), null, floor);
+  if (last) unanswered.set(floor, (unanswered.get(floor) ?? 0) + 1);
+}
+
+// A floor's last and next nudge and its backoff.
+function timing(floor: string, minutes: number) {
+  const last = lastAt(floor);
+  return { lastAt: last || null, nextAt: last ? last + waitMin(minutes, floor) * MINUTE : null, backoff: unanswered.get(floor) ?? 0 };
+}
+// S.sweep: the settings and the first floor's timing, as before floors. S.sweepByFloor: every floor's timing.
 addStatePart("sweep", () => {
-  const c = config(), last = lastAt();
-  return { ...c, lastAt: last || null, nextAt: last ? last + waitMin(c.minutes) * MINUTE : null, backoff: unanswered };
+  const c = config();
+  return { ...c, ...timing(firstFloor(), c.minutes) };
+});
+addStatePart("sweepByFloor", () => {
+  const c = config();
+  return Object.fromEntries(floorList().map((f) => [f.id, timing(f.id, c.minutes)]));
 });

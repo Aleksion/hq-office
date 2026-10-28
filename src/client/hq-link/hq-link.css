@@ -17,3 +17,7 @@
   .wrap:has(> .hqdown:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
 }
 .hqdown .hqfix { background: var(--green); border-color: #1d6b3a; color: #fff; }
+/* With floors, in the building: one line per floor whose HQ isn't receiving */
+.hqdown .fline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; }
+.hqdown .fline > b { font: 9px/1.4 var(--pixel); color: var(--red); }
+.hqdown .fline .acts .btn { padding: 5px 8px; font-size: 8px; }

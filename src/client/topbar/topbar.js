@@ -1,4 +1,4 @@
-// The top bar: waiting count, oldest wait, working, on HQ, bank, FROM HQ, machines.
+// The top bar: waiting count, oldest wait, working, on HQ, bank, FROM HQ, machines. With floors it counts every floor.
 import { $ } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { dur, esc, setClass, setHTML, setText } from "../core/format.js";
@@ -35,6 +35,8 @@ export function renderStats() {
   const unread = S.updatesUnread ?? 0;
   setClass($("sFrom"), "box fromhq" + (unread ? " unread" : ""));
   setText($("sFrom").querySelector(".v"), `${unread} NEW`);
-  const title = (S.hq?.ok === false ? "HQ ISN'T RECEIVING · " : "") + (n ? `(${n}) HQ Office` : "HQ Office");
+  // Any floor's HQ (docs/floors.md); with one floor, S.hq.
+  const down = S.hq?.ok === false || (S.floors ?? []).some((f) => f.receiving === false);
+  const title = (down ? "HQ ISN'T RECEIVING · " : "") + (n ? `(${n}) HQ Office` : "HQ Office");
   if (document.title !== title) document.title = title;
 }

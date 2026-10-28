@@ -313,6 +313,8 @@ export async function capture(dir: string, opts: { timing?: boolean } = {}): Pro
     await evaluate(`document.querySelector('[data-set="performance"]')?.closest(".srow").remove()`);
     // The LEVEL NAMES and LEVEL THEME rows are new in the lane tree's release; left out the same way.
     await evaluate(`document.querySelector("[data-levels]")?.remove(); document.querySelector('[data-set="theme"]')?.closest(".srow").remove()`);
+    // The FLOORS section is new with floors' page (where a second floor is added); left out the same way.
+    await evaluate(`document.querySelector("#settings [data-floors]")?.remove()`);
     styles["1440x900 settings open"] = await evaluate(STYLE_HASH);
     await evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
     styles["1440x900 messages tab"] = await evaluate(STYLE_HASH);
