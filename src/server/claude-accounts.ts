@@ -2,33 +2,13 @@
 // no turn is cut off; an idle one exits Claude and starts it again on the other home with --resume, so the
 // conversation carries on. A lane showing a dialog is never typed into: a question is filed. If anything goes wrong after /exit, a question
 // holds the command that brings the lane back on its own home.
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { DATA, DIR, HERDR, LOCAL } from "./config.ts";
+import { LOCAL } from "./config.ts";
 import { db } from "./db.ts";
 import { createAsk } from "./asks.ts";
 import { readMachine } from "./accounts.ts";
 import { bump } from "./push.ts";
-import { DEFAULT, NAME, dialogKind, homeDir, quote, relaunchCommand } from "./claude-home.ts";
-import { BG, SUBAGENT } from "./herdr.ts";
-
-// The settings file that gives this process (and no other) a status line recording its account's rate limits.
-export function laneSettings(account: string): string {
-  const file = join(DATA, `claude-lane-${account}.settings.json`);
-  const command = `python3 -I ${quote(join(DIR, "src/server/claude-statusline.py"))} ${quote(account)}`;
-  writeFileSync(file, JSON.stringify({ statusLine: { type: "command", command } }));
-  return file;
-}
-
-async function herdr(...args: string[]): Promise<string> {
-  const proc = Bun.spawn([HERDR, ...args], { stdout: "pipe", stderr: "pipe" });
-  const timer = setTimeout(() => proc.kill(), 15_000);
-  const out = await new Response(proc.stdout).text();
-  const code = await proc.exited;
-  clearTimeout(timer);
-  if (code !== 0) throw new Error((await new Response(proc.stderr).text()).trim().split("\n").pop() || `herdr ${args[0]} ${args[1]} failed`);
-  return out;
-}
+import { DEFAULT, NAME, dialogKind, homeDir, laneSettings, relaunchCommand } from "./claude-home.ts";
+import { BG, SUBAGENT, herdr as run } from "./herdr.ts";
 
 export const laneAccount = (lane: string) => (db.query("SELECT account FROM lane_accounts WHERE lane = ?").get(lane) as { account: string } | null)?.account ?? DEFAULT;
 
@@ -63,6 +43,8 @@ function fileUnconfirmedQuestion(lane: string, account: string, why: string) {
   );
 }
 
+// This machine's herdr, as before the shared runner.
+const herdr = (...args: string[]) => run(LOCAL, args);
 const exited = async (pane: string) => JSON.parse(await herdr("pane", "get", pane)).result?.pane?.agent == null;
 const agents = async (): Promise<any[]> => JSON.parse(await herdr("agent", "list")).result.agents;
 const moving = new Set<string>();

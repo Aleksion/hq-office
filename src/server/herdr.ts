@@ -7,18 +7,27 @@ import { event } from "./events.ts";
 import { expireDefaults } from "./requests.ts";
 import { UNREAD, promptIn } from "./prompt.ts";
 import { checkHq, notifyHq } from "./hq-link.ts";
+import { accountEnv, dialogKind, laneSettings } from "./claude-home.ts";
+
+// The one runner for herdr: its stdout, or an Error carrying herdr's last line of stderr. `machine` other than this one
+// runs it there (--machine), as herdrList and promptAgent do. Killed after `timeoutMs`.
+export async function herdr(machine: string | null | undefined, args: string[], timeoutMs = 15_000): Promise<string> {
+  const on = machine && machine !== LOCAL ? ["--machine", machine] : [];
+  const proc = Bun.spawn([HERDR, ...on, ...args], { stdout: "pipe", stderr: "pipe" });
+  let killed = false;
+  const timer = setTimeout(() => ((killed = true), proc.kill()), timeoutMs);
+  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  clearTimeout(timer);
+  if (killed) throw new Error(`herdr ${args.slice(0, 2).join(" ")} timed out after ${Math.round(timeoutMs / 1000)} s`);
+  if (code !== 0) throw new Error(err.trim().split("\n").pop() || `herdr ${args.slice(0, 2).join(" ")} failed`);
+  return out;
+}
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
 
 async function herdrList(machine: string): Promise<any[]> {
-  const args = machine === LOCAL ? [HERDR, "agent", "list"] : [HERDR, "--machine", machine, "agent", "list"];
-  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-  const timer = setTimeout(() => proc.kill(), 15_000);
-  const out = await new Response(proc.stdout).text();
-  clearTimeout(timer);
-  await proc.exited;
-  return JSON.parse(out).result.agents;
+  return JSON.parse(await herdr(machine, ["agent", "list"])).result.agents;
 }
 
 // An idle agent can still be working. Its pane's tail says so: "· 2 shells still running", "monitor still running",
@@ -168,3 +177,98 @@ export function promptAgent(name: string, text: string, machine?: string | null)
 // The agent the owner's answers and notes are typed into, with a one-line reminder to reply through the HUD (the
 // owner does not read HQ's terminal; HUD_HQ_HINT=0 leaves it out). The sending, and holding, is hq-link.ts.
 export const HQ_AGENT = process.env.HUD_HQ_AGENT || "hq";
+
+// ---- starting and stopping an agent ----
+
+export type StartStep = "workspace" | "agent" | "ready" | "trust" | "account";
+export type StartResult = { ok: true; pane: string } | { ok: false; step: StartStep; error: string; pane?: string };
+
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const tuning = (name: string, fallback: number) => Number(process.env[name] ?? fallback);
+
+// Claude's folder-trust dialog (cursor on "No, exit"): Down, Enter trusts the folder. Anything else that blocks is not ours to answer.
+const TRUST = /trust/i;
+
+// Starts a Claude agent in a new workspace of its own in `cwd`, and returns once it is ready for a prompt. The steps
+// are workspace, agent, ready (3 minutes in all: a start that has not come up by then reads failed) and, if the
+// folder-trust dialog shows, trust. A failure names its step and, once the pane exists, carries it: the caller
+// undoes what came before (closePane). The brief is not typed here; promptAgent sends it.
+// An account is put on the agent the way claude-accounts.ts moves a lane: CLAUDE_CONFIG_DIR and a --settings file.
+export async function startAgent(o: { name: string; machine: string; cwd: string; model: string; account?: string; env?: Record<string, string> }): Promise<StartResult> {
+  const { name, machine, cwd, model, account } = o;
+  const env: Record<string, string> = { ...o.env };
+  const claudeArgs = ["--model", model];
+  if (account) {
+    // The home and the settings file are on this machine's disk.
+    if (machine !== LOCAL) return { ok: false, step: "account", error: `an account can only be set on this machine so far, not on ${machine}` };
+    try {
+      Object.assign(env, accountEnv(account));
+      claudeArgs.push("--settings", laneSettings(account));
+    } catch (e) {
+      return { ok: false, step: "account", error: errText(e) };
+    }
+  }
+
+  let pane: string;
+  try {
+    const out = await herdr(machine, ["workspace", "create", "--cwd", cwd, "--label", name, "--no-focus", ...Object.entries(env).flatMap(([k, v]) => ["--env", `${k}=${v}`])]);
+    pane = JSON.parse(out).result.root_pane.pane_id;
+    if (typeof pane !== "string" || !pane) throw new Error("herdr named no pane");
+  } catch (e) {
+    return { ok: false, step: "workspace", error: errText(e) };
+  }
+
+  // The new pane's shell may not take the command at once: try for a while.
+  const poll = tuning("HUD_START_POLL_MS", 1000);
+  const agentBy = Date.now() + tuning("HUD_START_AGENT_WAIT_MS", 20_000);
+  for (;;) {
+    try {
+      await herdr(machine, ["agent", "start", name, "--kind", "claude", "--pane", pane, "--", ...claudeArgs]);
+      break;
+    } catch (e) {
+      if (Date.now() > agentBy) return { ok: false, step: "agent", error: errText(e), pane };
+      await Bun.sleep(poll);
+    }
+  }
+
+  const readyBy = Date.now() + tuning("HUD_START_READY_WAIT_MS", 180_000);
+  let trusted = false;
+  let last = "no agent listed";
+  while (Date.now() < readyBy) {
+    let agent: any;
+    try {
+      agent = JSON.parse(await herdr(machine, ["agent", "list"])).result.agents.find((a: any) => a.name === name);
+    } catch (e) {
+      last = errText(e);
+    }
+    if (agent) {
+      if (agent.interactive_ready) return { ok: true, pane };
+      last = String(agent.agent_status ?? "unknown");
+      if (agent.agent_status === "blocked" && !trusted) {
+        try {
+          const screen = await herdr(machine, ["pane", "read", pane, "--source", "visible"]);
+          if (TRUST.test(screen) && dialogKind(screen)) {
+            trusted = true;
+            await herdr(machine, ["pane", "send-keys", pane, "down"]);
+            await Bun.sleep(poll);
+            await herdr(machine, ["pane", "send-keys", pane, "enter"]);
+          }
+        } catch (e) {
+          return { ok: false, step: "trust", error: errText(e), pane };
+        }
+      }
+    }
+    await Bun.sleep(poll);
+  }
+  return { ok: false, step: "ready", error: `${name} was not ready after ${Math.round(tuning("HUD_START_READY_WAIT_MS", 180_000) / 1000)} s (${last}); read its pane`, pane };
+}
+
+// Stops an agent by name; the pane stays. Throws herdr's own message.
+export async function stopAgent(name: string, machine?: string | null): Promise<void> {
+  await herdr(machine, ["agent", "stop", name]);
+}
+
+// Closes a pane, which ends whatever runs in it. Throws herdr's own message.
+export async function closePane(pane: string, machine?: string | null): Promise<void> {
+  await herdr(machine, ["pane", "close", pane]);
+}

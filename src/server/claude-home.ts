@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { DATA, DIR } from "./config.ts";
 
 export const DEFAULT = "default";
 export const NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
@@ -74,6 +75,17 @@ export function makeHome(account: string): { dir: string; mcpNeedsSecret: string
 }
 
 export const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+// The settings file that gives a lane's process (and no other) a status line recording its account's rate limits.
+export function laneSettings(account: string): string {
+  const file = join(DATA, `claude-lane-${account}.settings.json`);
+  const command = `python3 -I ${quote(join(DIR, "src/server/claude-statusline.py"))} ${quote(account)}`;
+  writeFileSync(file, JSON.stringify({ statusLine: { type: "command", command } }));
+  return file;
+}
+
+// What a Claude process needs in its environment to run on an account: none for the default home.
+export const accountEnv = (account: string): Record<string, string> => (account === DEFAULT ? {} : { CLAUDE_CONFIG_DIR: homeDir(account) });
 
 export function relaunchCommand(account: string, session: string, settings: string): string {
   const env = account === DEFAULT ? "env -u CLAUDE_CONFIG_DIR" : `CLAUDE_CONFIG_DIR=${quote(homeDir(account))}`;
