@@ -75,7 +75,8 @@ case "$1 $2" in
     elif [ -e "$F/never-ready" ]; then echo '{"result":{"agents":[{"name":"'$(cat "$F/started")'","agent_status":"unknown","pane_id":"w1:p1"}]}}'
     else echo '{"result":{"agents":[{"name":"'$(cat "$F/started")'","agent":"claude","agent_status":"idle","interactive_ready":true,"pane_id":"w1:p1"}]}}'; fi ;;
   "agent prompt") fail prompt; [ -e "$F/slow-prompt" ] && sleep 1; printf '%s|%s\\n<<END>>\\n' "$3" "$4" >> '${PROMPTS}' ;;
-  "agent stop"|"pane close") fail stop ;;
+  "pane close") fail stop ;;
+  "agent stop") echo "unknown agent command: stop" >&2; exit 2 ;;
 esac
 exit 0
 `, 0o755);
@@ -234,15 +235,15 @@ test("a held recruit can be withdrawn, and then nothing starts", async () => {
   expect((await post("/api/recruit/stop", { name: "orch-withdrawn" })).error).toMatch(/no live recruit/);
 });
 
-// Each failure undoes what came before: no lane, no live floor, the agent stopped and the pane closed (where they exist).
-const FAILURES: [string, string, string[], boolean, boolean][] = [
-  // [flag, failing step, steps logged, agent stop expected, pane close expected]
-  ["fail-workspace", "workspace", ["check", "folder", "!workspace"], false, false],
-  ["fail-agent", "agent", ["check", "folder", "workspace", "!agent", "undo pane"], false, true],
-  ["never-ready", "ready", ["check", "folder", "workspace", "agent", "!ready", "undo agent", "undo pane"], true, true],
-  ["fail-prompt", "brief", ["check", "folder", "workspace", "agent", "ready", "!brief", "undo agent", "undo pane"], true, true],
+// Each failure undoes what came before: no lane, no live floor, the pane closed (where it exists; the agent ends with it).
+const FAILURES: [string, string, string[], boolean][] = [
+  // [flag, failing step, steps logged, pane close expected]
+  ["fail-workspace", "workspace", ["check", "folder", "!workspace"], false],
+  ["fail-agent", "agent", ["check", "folder", "workspace", "!agent", "undo pane"], true],
+  ["never-ready", "ready", ["check", "folder", "workspace", "agent", "!ready", "undo pane"], true],
+  ["fail-prompt", "brief", ["check", "folder", "workspace", "agent", "ready", "!brief", "undo pane"], true],
 ];
-for (const [name, step, steps, stopsAgent, closesPane] of FAILURES) {
+for (const [name, step, steps, closesPane] of FAILURES) {
   test(`a failure at ${step} is undone`, async () => {
     flag(name);
     const id = `orch-fail-${step}`;
@@ -254,7 +255,7 @@ for (const [name, step, steps, stopsAgent, closesPane] of FAILURES) {
     const s = await state();
     expect(s.lanes.some((l: any) => l.name === id)).toBe(false);
     expect(s.floors.some((f: any) => f.id === id && !f.stopped_at)).toBe(false);
-    expect(commands().includes(`agent stop ${id}`)).toBe(stopsAgent);
+    expect(commands().some((c) => c.startsWith("agent stop"))).toBe(false);
     expect(commands().includes("pane close w1:p1")).toBe(closesPane);
     // The folder stays: it holds the brief, for a retry.
     expect(readFileSync(join(START_ROOT, id, "brief.md"), "utf8")).toContain(`Brief for ${id}`);
@@ -267,7 +268,7 @@ test("an undo step that fails is logged and the rest of the undo goes on", async
   flag("fail-stop");
   await ask("orch-fail-undo");
   const r = await until("orch-fail-undo", ["up", "failed"]);
-  expect(stepsOf(r).slice(-3)).toEqual(["!brief", "!undo agent", "!undo pane"]);
+  expect(stepsOf(r).slice(-2)).toEqual(["!brief", "!undo pane"]);
   expect(commands()).toContain("pane close w1:p1");
 });
 
@@ -280,9 +281,9 @@ test("a failure after the lane is made (the floor step) removes the lane too", a
   sql((db) => db.query("INSERT INTO floors (id, name, head, origin, color, created_at) VALUES ('squatter', 'Squatter', 'orch-fail-floor', 'recruited', 8, 1)").run());
   const r = await until("orch-fail-floor", ["up", "failed"]);
   expect(r.state).toBe("failed");
-  expect(stepsOf(r)).toEqual(["check", "folder", "workspace", "agent", "ready", "brief", "lane", "!floor", "undo lane", "undo agent", "undo pane"]);
+  expect(stepsOf(r)).toEqual(["check", "folder", "workspace", "agent", "ready", "brief", "lane", "!floor", "undo lane", "undo pane"]);
   expect((await state()).lanes.some((l: any) => l.name === "orch-fail-floor")).toBe(false);
-  expect(commands()).toContain("agent stop orch-fail-floor");
+  expect(commands()).toContain("pane close w1:p1");
 });
 
 test("two recruits of one name at once: one is refused", async () => {
@@ -293,12 +294,12 @@ test("two recruits of one name at once: one is refused", async () => {
   expect(await recruitsOf("orch-twin")).toHaveLength(1);
 });
 
-test("stop: the agent stops, the pane closes, the floor row stops and the lane goes", async () => {
+test("stop: the pane closes (the agent ends with it), the floor row stops and the lane goes", async () => {
   await ask("orch-stop");
   await until("orch-stop", ["up"]);
   rmSync(LOG);
   expect((await post("/api/recruit/stop", { name: "orch-stop" })).status).toBe(200);
-  expect(commands()).toEqual(["agent stop orch-stop", "pane close w1:p1"]);
+  expect(commands()).toEqual(["pane close w1:p1"]);
   const r = (await recruitsOf("orch-stop"))[0];
   expect(r).toMatchObject({ state: "stopped", error: null, stopped_at: expect.any(Number) });
   const s = await state();
@@ -317,7 +318,7 @@ test("a stop whose agent is already gone still ends the recruit, and says what f
   expect((await post("/api/recruit/stop", { name: "orch-gone" })).status).toBe(200);
   const r = (await recruitsOf("orch-gone"))[0];
   expect(r.state).toBe("stopped");
-  expect(r.error).toMatch(/stop agent: boom in stop; close pane: boom in stop/);
+  expect(r.error).toMatch(/^close pane: boom in stop$/);
   expect((await state()).lanes.some((l: any) => l.name === "orch-gone")).toBe(false);
 });
 

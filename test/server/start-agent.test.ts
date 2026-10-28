@@ -12,7 +12,7 @@ const FAKE = join(DIR, "fake-herdr");
 afterAll(() => rmSync(DIR, { recursive: true, force: true }));
 
 // Files in DIR steer the fake: fail-<verb> makes that command exit 1 saying so; dialog shows the folder-trust menu
-// until Enter is sent; never-ready lists the agent as starting for ever; other-dialog blocks it on another menu.
+// until Enter is sent; untrusted makes agent start answer agent_not_ready, as the real herdr does for a folder Claude does not trust yet (the agent stays up, blocked on the dialog); never-ready lists the agent as starting for ever; other-dialog blocks it on another menu.
 writeFileSync(
   FAKE,
   `#!/bin/sh
@@ -23,7 +23,7 @@ verb="$1 $2"
 fail() { [ -e "$D/fail-$1" ] && { echo "boom in $1" >&2; echo "noise" >&2; exit 1; }; }
 case "$verb" in
   "workspace create") fail workspace; echo '{"result":{"root_pane":{"pane_id":"w1:p1"}}}' ;;
-  "agent start") fail agent; touch "$D/started" ;;
+  "agent start") fail agent; touch "$D/started"; [ -e "$D/untrusted" ] && { touch "$D/dialog"; echo "agent_not_ready: a1 is blocked during startup" >&2; exit 1; } ;;
   "agent list")
     fail list
     if [ ! -e "$D/started" ] || [ -e "$D/never-ready" ]; then echo '{"result":{"agents":[{"name":"a1","agent_status":"unknown","pane_id":"w1:p1"}]}}'
@@ -33,7 +33,8 @@ case "$verb" in
     if [ -e "$D/other-dialog" ]; then printf 'Allow this tool?\\n❯ 1. Yes\\n  2. No\\nEsc to cancel\\n'
     else printf 'Do you trust the files in this folder?\\n❯ 1. No, exit\\n  2. Yes, I trust this folder\\nEnter to confirm · Esc to cancel\\n'; fi ;;
   "pane send-keys") fail trust; [ "$4" = "enter" ] && touch "$D/entered" ;;
-  "agent stop"|"pane close") fail stop ;;
+  "pane close") fail stop ;;
+  "agent stop") echo "unknown agent command: stop" >&2; exit 2 ;;
 esac
 exit 0
 `,
@@ -70,14 +71,14 @@ const START = { name: "a1", machine: "local", cwd: "/work/tree", model: "sonnet"
 const commands = () => (existsSync(LOG) ? readFileSync(LOG, "utf8").trim().split("\n").filter(Boolean) : []);
 
 beforeEach(() => {
-  for (const f of ["fail-workspace", "fail-agent", "fail-list", "fail-trust", "fail-stop", "dialog", "other-dialog", "never-ready", "started", "entered", "commands.log"]) rmSync(join(DIR, f), { force: true });
+  for (const f of ["fail-workspace", "fail-agent", "fail-list", "fail-trust", "fail-stop", "dialog", "untrusted", "other-dialog", "never-ready", "started", "entered", "commands.log"]) rmSync(join(DIR, f), { force: true });
 });
 
 test("a start makes the workspace, starts the agent in its pane and returns once it is ready", async () => {
   expect(await call("start", START)).toEqual({ ok: true, pane: "w1:p1" });
   expect(commands().slice(0, 2)).toEqual([
     "workspace create --cwd /work/tree --label a1 --no-focus",
-    "agent start a1 --kind claude --pane w1:p1 -- --model sonnet",
+    "agent start a1 --kind claude --pane w1:p1 --timeout 600 -- --model sonnet",
   ]);
 });
 
@@ -114,6 +115,13 @@ test("the folder-trust dialog is answered with Down, Enter, then the start waits
   expect(commands().filter((c) => c.startsWith("pane send-keys"))).toEqual(["pane send-keys w1:p1 down", "pane send-keys w1:p1 enter"]);
 });
 
+test("a start in an untrusted folder gets agent_not_ready, answers the dialog and comes up", async () => {
+  writeFileSync(join(DIR, "untrusted"), "");
+  expect(await call("start", START)).toEqual({ ok: true, pane: "w1:p1" });
+  expect(commands().filter((c) => c.startsWith("agent start")).length).toBe(1);
+  expect(commands().filter((c) => c.startsWith("pane send-keys"))).toEqual(["pane send-keys w1:p1 down", "pane send-keys w1:p1 enter"]);
+});
+
 test("a failure answering the dialog is the trust step", async () => {
   writeFileSync(join(DIR, "dialog"), "");
   writeFileSync(join(DIR, "fail-trust"), "");
@@ -139,7 +147,7 @@ test("an account sets CLAUDE_CONFIG_DIR and a settings file, as a move does; the
   await call("start", { ...START, account: "second" });
   const cmds = commands();
   expect(cmds[0]).toMatch(/--env CLAUDE_CONFIG_DIR=\S+\/\.claude-second$/);
-  expect(cmds[1]).toMatch(/-- --model sonnet --settings \S+claude-lane-second\.settings\.json$/);
+  expect(cmds[1]).toMatch(/ --timeout \d+ -- --model sonnet --settings \S+claude-lane-second\.settings\.json$/);
   rmSync(LOG);
   await call("start", { ...START, account: "default" });
   expect(commands()[0]).not.toContain("CLAUDE_CONFIG_DIR");
@@ -150,10 +158,11 @@ test("an account on the other machine is refused before anything runs", async ()
   expect(commands()).toEqual([]);
 });
 
-test("stopAgent and closePane run on the right machine, and throw herdr's message", async () => {
+test("stopAgent closes the pane agent list names; closePane runs on the right machine; both throw herdr's message", async () => {
   await call("stop", { name: "a1" });
   await call("close", { pane: "w1:p1", machine: "other" });
-  expect(commands()).toEqual(["agent stop a1", "--machine other pane close w1:p1"]);
+  expect(commands()).toEqual(["agent list", "pane close w1:p1", "--machine other pane close w1:p1"]);
+  expect(await call("stop", { name: "nobody" })).toEqual({ threw: "no agent named nobody is listed" });
   writeFileSync(join(DIR, "fail-stop"), "");
   expect(await call("stop", { name: "a1" })).toEqual({ threw: "noise" });
   expect(await call("close", { pane: "w1:p1" })).toEqual({ threw: "noise" });

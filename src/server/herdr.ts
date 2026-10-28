@@ -230,20 +230,25 @@ export async function startAgent(o: { name: string; machine: string; cwd: string
     return { ok: false, step: "workspace", error: errText(e) };
   }
 
-  // The new pane's shell may not take the command at once: try for a while.
+  // The 3 minutes run from the first `agent start`. herdr's own wait for the agent to be ready is capped by what is left.
   const poll = tuning("HUD_START_POLL_MS", 1000);
+  const total = tuning("HUD_START_READY_WAIT_MS", 180_000);
+  const readyBy = Date.now() + total;
+  const startWait = Math.min(tuning("HUD_START_AGENT_TIMEOUT_MS", 30_000), total);
+  // The new pane's shell may not take the command at once: try for a while. agent_not_ready is not that: the agent runs,
+  // blocked at startup (a new folder's trust dialog), and herdr keeps its name, so the ready loop below answers it.
   const agentBy = Date.now() + tuning("HUD_START_AGENT_WAIT_MS", 20_000);
   for (;;) {
     try {
-      await herdr(machine, ["agent", "start", name, "--kind", "claude", "--pane", pane, "--", ...claudeArgs]);
+      await herdr(machine, ["agent", "start", name, "--kind", "claude", "--pane", pane, "--timeout", String(startWait), "--", ...claudeArgs], startWait + 10_000);
       break;
     } catch (e) {
+      if (/agent_not_ready/.test(errText(e))) break;
       if (Date.now() > agentBy) return { ok: false, step: "agent", error: errText(e), pane };
       await Bun.sleep(poll);
     }
   }
 
-  const readyBy = Date.now() + tuning("HUD_START_READY_WAIT_MS", 180_000);
   let trusted = false;
   let last = "no agent listed";
   while (Date.now() < readyBy) {
@@ -272,15 +277,18 @@ export async function startAgent(o: { name: string; machine: string; cwd: string
     }
     await Bun.sleep(poll);
   }
-  return { ok: false, step: "ready", error: `${name} was not ready after ${Math.round(tuning("HUD_START_READY_WAIT_MS", 180_000) / 1000)} s (${last}); read its pane`, pane };
+  return { ok: false, step: "ready", error: `${name} was not ready after ${Math.round(total / 1000)} s (${last}); read its pane`, pane };
 }
 
-// Stops an agent by name; the pane stays. Throws herdr's own message.
+// Stops an agent by name. herdr has no agent stop: an agent ends when its pane closes, so this finds the agent's pane
+// and closes it. Throws herdr's own message, or says no such agent is listed.
 export async function stopAgent(name: string, machine?: string | null): Promise<void> {
-  await herdr(machine, ["agent", "stop", name]);
+  const agent = JSON.parse(await herdr(machine, ["agent", "list"])).result.agents.find((a: any) => a.name === name);
+  if (!agent?.pane_id) throw new Error(`no agent named ${name} is listed`);
+  await closePane(agent.pane_id, machine);
 }
 
-// Closes a pane, which ends whatever runs in it. Throws herdr's own message.
+// Closes a pane, which ends whatever runs in it, an agent too. Throws herdr's own message.
 export async function closePane(pane: string, machine?: string | null): Promise<void> {
   await herdr(machine, ["pane", "close", pane]);
 }

@@ -190,13 +190,10 @@ async function runSteps(id: number, undo: Undo[]) {
     undo.push(["pane", () => closePane(started.pane!, r.machine)]);
   }
   if (!started.ok) {
-    // The agent is running once its start got as far as waiting for ready.
-    if (started.step === "ready" || started.step === "trust") undo.push(["agent", () => stopAgent(r.name, r.machine)]);
     for (const s of before(started.step)) note(id, s, true);
     return give(started.step, started.error);
   }
   for (const s of START_STEPS) note(id, s, true, s === "ready" ? started.pane : undefined);
-  undo.push(["agent", () => stopAgent(r.name, r.machine)]);
 
   const told = await promptAgent(r.name, `You are the Orchestrator of floor "${r.floor}". Your folder is this directory: read brief.md in it, then run \`hud guide\`.`, r.machine, { confirm: true });
   if (!told.ok) return give("brief", told.error);
@@ -232,7 +229,7 @@ function dropLane(name: string) {
 
 const stopping = new Set<string>();
 
-// An up recruit: its agent and pane stop, its floor row stops and its lane goes. A step that fails is logged and the rest
+// An up recruit: its pane closes (and the agent with it), its floor row stops and its lane goes. A step that fails is logged and the rest
 // goes on, so a recruit whose agent is already gone can still be stopped; what failed is said in `error`.
 // A held recruit is withdrawn. One that is still starting is not stopped midway.
 export async function stopRecruit(name: string, by: string) {
@@ -257,8 +254,9 @@ export async function stopRecruit(name: string, by: string) {
         note(r.id, label, false, message(e));
       }
     };
-    await attempt("stop agent", () => stopAgent(name, r.machine));
+    // The agent ends with its pane; a recruit with no pane on record is stopped by name.
     if (r.pane) await attempt("close pane", () => closePane(r.pane!, r.machine));
+    else await attempt("stop agent", () => stopAgent(name, r.machine));
     await attempt("stop floor", () => stopFloor(name));
     await attempt("remove lane", () => dropLane(name));
     settle(r.id, "stopped", problems.join("; ") || undefined);
