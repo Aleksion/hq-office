@@ -12,6 +12,9 @@
 .tag.decision { background: #ece0ff; color: #5a2fb0; }
 .tag.action { background: #dcebff; color: #1f4fa8; }
 .tag.info { background: #eee; }
+/* TO DO: NOT YET beside DONE; the card stays, HQ hears it */
+.reply .acts .notyet { margin-left: auto; min-height: 28px; padding: 0 12px; background: var(--box); color: var(--ink); border: 3px solid var(--edge); border-radius: 8px; font: 10px/1 var(--pixel); }
+.reply .acts .notyet + .send { margin-left: 8px; }
 .timer { margin-left: auto; font: 10px/1 var(--pixel); color: var(--blue); }
 .ask.warm .timer { color: var(--amber); }
 .ask.hot .timer { color: var(--red); }

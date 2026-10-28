@@ -33,6 +33,20 @@ $("main").addEventListener("click", async (e) => {
     if (send && ask) send.disabled = !canSend(ask, d);
     return;
   }
+  // NOT YET on a TO DO: it stays (still waiting on the owner); HQ hears it, with what is in the box as the note.
+  if (e.target.closest(".notyet")) {
+    e.target.disabled = true;
+    try {
+      await post(`/api/asks/${id}/notyet`, { note: withImages(id, (d.text || "").trim()) });
+      drafts.set(id, { ...d, text: "" });
+      clearImages(id);
+      const ta = card.querySelector("textarea");
+      if (ta) ta.value = "";
+      toast("HQ KNOWS: NOT YET.");
+    } catch (err) { toast(err.message); }
+    e.target.disabled = false;
+    return;
+  }
   if (e.target.closest(".send")) {
     const ask = S.open.find((a) => a.id === id);
     const wait = notReady(id);

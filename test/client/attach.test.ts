@@ -65,7 +65,8 @@ afterAll(async () => {
 describe.skipIf(!chromeFound)("attach", () => {
   // Each composer, in order: its children, the photo button's input, and its height.
   const COMPOSERS = `[...document.querySelectorAll(".reply")].map((r) => { const i = r.querySelector(".acts > label.attach:first-child input[type=file]");
-    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!i.closest("label").nextElementSibling?.matches(".send") }, height: r.getBoundingClientRect().height }; })`;
+    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!(i.closest("label").nextElementSibling?.matches(".send") || i.closest("label").nextElementSibling?.matches(".notyet") && i.closest("label").nextElementSibling.nextElementSibling?.matches(".send")) }, height: r.getBoundingClientRect().height }; })`;
+  // A TO DO has NOT YET between the photo button and DONE.
   test("every send box is one composer: the tray, the field, then the photo button and SEND; compact on a desktop", async () => {
     const boxes = await page.evaluate(COMPOSERS);
     expect(boxes.map((b: any) => b.key)).toContain("note");

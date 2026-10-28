@@ -7,6 +7,7 @@ import type { Ask } from "./types.ts";
 import { secrets } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
+import { commentAsk } from "./ledger.ts";
 
 export function createAsk(body: any) {
   if (!body.title) throw new Error("title is required");
@@ -57,4 +58,16 @@ export function answerWithSecrets(id: number, body: any) {
   const set = wanted.map((name, i) => secrets.set(name, values[i], minutes, "owner"));
   const note = String(body.note ?? "").trim();
   answerAsk(id, `secrets set: ${wanted.join(", ")}, ${expiresText(set[0].expiresAt)}; read with: hud secret get NAME | <command>${note ? `. ${note}` : ""}`);
+}
+
+// NOT YET on something the owner must do: it stays open (the owner is still the one it waits on), HQ hears it at
+// once, and a line on the card says it, with the owner's note.
+export function notYet(id: number, note: unknown) {
+  const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
+  if (!ask) throw new Error(`no ask ${id}`);
+  if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
+  const n = String(note ?? "").trim();
+  commentAsk(id, `${OWNER}: not yet${n ? `. ${n}` : ""}`);
+  event(OWNER, `not yet on "${ask.title}"${n ? `: ${n}` : ""}`, ask.lane);
+  notifyHq(`HUD not yet #${id}${ask.lane ? ` (${ask.lane})` : ""}: "${ask.title}"${n ? ` -> ${n}` : ""}`);
 }

@@ -3,6 +3,20 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-10-28
+
+### Changed
+
+- **QUESTIONS is now NEEDS YOU.** It holds everything you are the blocker on, and each card says which kind it is:
+  a **QUESTION** to decide (options, SEND), a **TO DO** only you can do, like recording a video, merging a PR or
+  signing in (DONE or NOT YET), or **FYI** (OK). It is the same ask as before, so `hud ask` is still the way in, and
+  answers and comments work as they did. A TO DO is `hud ask --kind action`.
+
+### Added
+
+- **NOT YET on a TO DO.** It keeps the card open, since you are still the blocker. HQ hears it at once with whatever
+  you typed as a note, and a line on the card says when. DONE closes it as before.
+
 ## [0.12.0] - 2026-10-28
 
 ### Added
