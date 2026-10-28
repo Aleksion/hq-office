@@ -81,7 +81,9 @@ export function frameStubs(data: string, paneFile: string) {
   const bin = join(data, "bin");
   mkdirSync(bin);
   const lanes = frameLanes(), blocked = lanes.findIndex((l) => l.name === frameBlocked());
-  const agents = (machine: string) => JSON.stringify({ result: { agents: lanes.flatMap((l, i) => (l.machine === machine ? [{ name: l.name, agent_status: l.herdr, pane_id: `w1:p${i}`, agent: l.account === "codex" ? "codex" : "claude" }] : [])) } });
+  // HQ's own agent is on the laptop, so the page's "HQ ISN'T RECEIVING" banner stays out of the way of the room
+  const hq = { name: "hq", agent_status: "idle", pane_id: "w1:hq", agent: "claude" };
+  const agents = (machine: string) => JSON.stringify({ result: { agents: [...lanes.flatMap((l, i) => (l.machine === machine ? [{ name: l.name, agent_status: l.herdr, pane_id: `w1:p${i}`, agent: l.account === "codex" ? "codex" : "claude" }] : [])), ...(machine === "laptop" ? [hq] : [])] } });
   const script = (name: string, body: string) => {
     writeFileSync(join(bin, name), `#!/bin/sh
 ${body}`);
