@@ -57,7 +57,7 @@ beforeAll(async () => {
   chrome = await startChrome();
   server = await startServer(ROOT, { HERDR_BIN: herdr, HUD_HQ_RENAME: "0" });
   for (const name of ["alpha", "golf", "bravo"]) await server.post("/api/lanes", { name, machine: "local", title: INLINE, note: BLOCK });
-  const ask = (await server.post("/api/ledger/asks", { lane: "bravo", kind: "decision", title: INLINE, body: BLOCK, options: ["A", "B"], items: [INLINE] })).id;
+  const ask = (await server.post("/api/ledger/asks", { lane: "bravo", kind: "decision", title: INLINE, body: BLOCK, options: ["A", "B"], recommended: "A", items: [INLINE] })).id;
   await server.post(`/api/asks/${ask}/comment`, { text: INLINE });
   const done = (await server.post("/api/asks", { lane: "golf", kind: "info", title: INLINE })).id;
   await server.post(`/api/asks/${done}/answer`, { answer: BLOCK });
