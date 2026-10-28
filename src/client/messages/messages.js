@@ -2,7 +2,7 @@
 import { $, keepPlace, keepScroll, pageScrolls, phone, showEdges, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
-import { clipText, linkify, renderBody } from "../core/text.js";
+import { mdClip, mdInline } from "../core/markdown.js";
 import { post } from "../core/net.js";
 import { renderBelow } from "../questions/questions.js";
 import { renderWork } from "../work-board/work-board.js";
@@ -15,9 +15,9 @@ import { scope, toggleAll, view } from "../core/scope.js";
 
 // QUESTIONS and MESSAGES share the question column; one shows at a time. The choice is remembered in this browser.
 // MESSAGES is one thread, oldest at the top: HQ's updates and your notes, by time. A reply is an ordinary note
-// that starts with  re: #u12 ("first words of the parent")  (u = from HQ, n = your note), so the server needs
+// that starts with  re: #u12 ("first words of the parent")  (u = from HQ, n = your note; nq12 is a note that went to HQ's queue), so the server needs
 // nothing new and HQ reads what the reply answers.
-const REF = /^re: #([un])(\d+)(?: \("([^"\n]*)"\))?[ \t]*/;
+const REF = /^re: #([un])(q?\d+)(?: \("([^"\n]*)"\))?[ \t]*/;
 export let qTab = (() => { try { const t = localStorage.getItem("hq-qtab"); return ["messages", "work", "rooms"].includes(t) ? t : "questions"; } catch { return "questions"; } })();
 export let replyTo = null, replyText = "", msgStick = true;
 // The open reply, put back after the page reloads (questions/drafts.js keeps it with the other drafts).
@@ -86,18 +86,18 @@ function msgModel() {
   return { roots, byKey, hidden };
 }
 function msgItem(m, nameParent) {
-  const body = m.text ? `<div class="text">${m.text.includes("```") ? renderBody(m.text) : clipText(m.text, `m${m.key}`)}</div>` : "";
+  const body = m.text ? `<div class="text md">${mdClip(m.text, `m${m.key}`)}</div>` : "";
   // A reply names what it answers when that is not the message right above it, or is too old to be in the list.
   const to = m.up ? (nameParent ? `${m.up.who} ${clock(m.up.at)}: ${short(m.up.title || m.up.text, 70)}` : "") : m.parent ? `an earlier message${m.said ? `: ${m.said}` : ""}` : "";
   return `<article class="msg ${m.who === "HQ" ? "hq" : "you"}${m.unread ? " unread" : ""}" data-msg="${m.key}">
       <div class="meta"><span class="who">${m.who}</span><span class="tag">${clock(m.at)}</span>${m.who === "HQ" ? floorTagHTML(S, m) : ""}${m.lane ? `<span class="tag lane">${esc(m.lane)}</span>` : ""}${m.unread ? `<span class="tag new">NEW</span>` : ""}${m.who === "YOU" ? `<span class="seen ${m.acked ? "ok" : ""}">${m.acked ? "HQ HAS IT" : "NOT PICKED UP YET"}</span>` : ""}<button class="btn-s" type="button" data-reply="${m.key}">${replyTo === m.key ? "CANCEL" : "REPLY"}</button></div>
-      ${to ? `<div class="quote">↩ to ${esc(to)}</div>` : ""}
-      ${m.title ? `<h3>${linkify(m.title)}</h3>` : ""}${body}
+      ${to ? `<div class="quote">↩ to ${mdInline(to, { links: false })}</div>` : ""}
+      ${m.title ? `<h3>${mdInline(m.title)}</h3>` : ""}${body}
     </article>${replyTo === m.key ? replyBox(m) : ""}`;
 }
 function replyBox(m) {
   return `<div class="thread rbox" data-rbox>
-      <div class="quote">↩ ${m.who} ${clock(m.at)}: ${esc(short(m.title || m.text, 90))}</div>
+      <div class="quote">↩ ${m.who} ${clock(m.at)}: ${mdInline(short(m.title || m.text, 90), { links: false })}</div>
       ${composer("reply", `<textarea name="reply" rows="1" placeholder="Your reply. ⌘↩ sends, Esc closes.">${esc(replyText)}</textarea>`, `<button class="send go" type="button" data-rsend ${replyText.trim() || hasImages("reply") ? "" : "disabled"}>SEND</button>`)}
     </div>`;
 }

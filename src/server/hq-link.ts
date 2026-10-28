@@ -10,7 +10,7 @@ import { addStatePart } from "./state.ts";
 import { withHint } from "../hq-guide.ts";
 import { HQ_AGENT, promptAgent, syncHerdr } from "./herdr.ts";
 
-type Held = { id: number; at: number; text: string; ref: string | null; error: string | null; tries: number };
+type Held = { id: number; at: number; text: string; ref: string | null; error: string | null; tries: number; sent_at: number | null; confirmed_at: number | null; resend: number };
 // seen: what the last sync found (null: fine, or not checked yet). sent: why the last delivery failed (null once one
 // succeeds). The page shows the first of the two.
 let seen: string | null = null;
@@ -29,6 +29,7 @@ function reasonOf(error: string): string {
   } catch {}
   if (code === "agent_not_found") return `no agent in herdr is named "${HQ_AGENT}"`;
   if (code === "agent_blocked") return "HQ is stopped at a prompt (a permission or a question) in its pane";
+  if (code === "agent_prompt_stalled") return "HQ did not start working on a message typed into its pane (at a menu, or stuck?); it is held and tried again";
   return `herdr could not type into HQ: ${message}`.slice(0, 300);
 }
 
@@ -50,6 +51,8 @@ function setReason(next: { seen?: string | null; sent?: string | null }) {
 // same kind at every sync since (the same occupant). Memory only, so never across a server restart (the NAME button
 // is there for that). HUD_HQ_RENAME=0 leaves it to the owner.
 let tracked: { pane: string; agent: string } | null = null;
+// HQ's herdr status at the last sync, and when it was last seen working (the sweep nudge reads both).
+export const hqNow: { status: string | null; workingAt: number } = { status: null, workingAt: 0 };
 const AUTO_RENAME = process.env.HUD_HQ_RENAME !== "0";
 
 async function rename(pane: string): Promise<string | null> {
@@ -69,6 +72,7 @@ export async function checkHq(agents: any[] | null, error?: string) {
   checked = true;
   if (!agents) {
     candidate = null;
+    hqNow.status = null;
     setReason({ seen: `herdr did not answer on this machine${error ? `: ${error}` : ""}`.slice(0, 300) });
     return;
   }
@@ -85,6 +89,8 @@ export async function checkHq(agents: any[] | null, error?: string) {
       }
     }
   }
+  hqNow.status = hq?.agent_status ?? null;
+  if (hq?.agent_status === "working") hqNow.workingAt = Date.now();
   if (hq) {
     candidate = null;
     tracked = { pane: hq.pane_id, agent: hq.agent };
@@ -99,7 +105,28 @@ export async function checkHq(agents: any[] | null, error?: string) {
     candidate = there ? { pane: there.pane_id, agent: there.agent } : null;
     setReason({ seen: `no agent in herdr is named "${HQ_AGENT}"` });
   }
-  if (!seen) flush();
+  if (!seen) {
+    if (["idle", "done"].includes(hq?.agent_status)) reconfirm();
+    flush();
+  }
+}
+
+// HQ is idle: what was typed in while it was mid-turn could not be confirmed, and a queued message can be lost. Each
+// of the owner's notes and answers among them goes once more, unless HQ acked it meanwhile; anything else counts as
+// delivered. Only recent ones (RESEND_WINDOW, 3 h) and at most MAX_RESEND per check: an old backlog is never replayed.
+const RESEND_WINDOW = Number(process.env.HUD_RESEND_WINDOW_MS) || 3 * 3600_000;
+const MAX_RESEND = 3;
+function reconfirm() {
+  const now = Date.now();
+  let resent = 0;
+  for (const row of db.query("SELECT * FROM hq_outbox WHERE sent_at IS NOT NULL AND confirmed_at IS NULL ORDER BY id").all() as Held[]) {
+    const old = now - (row.sent_at ?? 0) > RESEND_WINDOW;
+    if (!row.ref || row.resend || old || alreadyRead(row.ref)) db.query("UPDATE hq_outbox SET confirmed_at = ? WHERE id = ?").run(now, row.id);
+    else if (resent < MAX_RESEND) {
+      db.query("UPDATE hq_outbox SET sent_at = NULL, resend = 1 WHERE id = ?").run(row.id);
+      resent += 1;
+    }
+  }
 }
 
 // The one way to tell HQ something. `ref` ties it to what it carries ("note:12", "ask:5") so the page can mark it held.
@@ -129,12 +156,16 @@ function flush(): Promise<void> {
           db.query("UPDATE hq_outbox SET sent_at = ?, error = NULL WHERE id = ?").run(Date.now(), row.id);
           continue;
         }
-        const late = Date.now() - row.at > 60_000 ? `(held while HQ was not receiving; written at ${clock(row.at)}) ` : "";
-        const r = await promptAgent(HQ_AGENT, withHint(late + row.text));
+        const late = row.resend ? `(sent again: it was typed in while you were mid-turn${ackHint(row.ref)}) ` : Date.now() - row.at > 60_000 ? `(held while HQ was not receiving; written at ${clock(row.at)}) ` : "";
+        // Idle: herdr confirms HQ starts working on it. Mid-turn: typed in now (it may be read at once), confirmed or
+        // sent again when HQ is next idle (reconfirm).
+        const idle = ["idle", "done"].includes(hqNow.status ?? "");
+        const r = await promptAgent(HQ_AGENT, withHint(late + row.text), null, { confirm: idle });
         if (r.ok) {
-          db.query("UPDATE hq_outbox SET sent_at = ?, error = NULL, tries = tries + 1 WHERE id = ?").run(Date.now(), row.id);
+          const now = Date.now();
+          db.query("UPDATE hq_outbox SET sent_at = ?, confirmed_at = ?, error = NULL, tries = tries + 1 WHERE id = ?").run(now, idle ? now : null, row.id);
           setReason({ sent: null });
-          if (row.ref || late) bump();
+          bump();
         } else if (r.error.includes("agent_not_found") && tracked && AUTO_RENAME) {
           // HQ's name went between syncs and the server knows its pane: heal it now, quietly. The row stays held
           // without an error, so the page shows nothing; the sync after the rename sends it.
@@ -157,6 +188,24 @@ function flush(): Promise<void> {
 
 // Resolves when the current flush, if any, is done: a route that checks HQ answers with what came of it.
 export const flushed = () => flushing ?? Promise.resolve();
+
+// An ask in a queue (a lane's urgent request, an urgent Tell) is answered from the queue: hud ack refuses it.
+const ackHint = (ref: string | null) => {
+  const [kind, id] = (ref ?? "").split(":");
+  if (kind === "note") return `; ack it with hud ack n:${id}`;
+  if (kind !== "ask") return "";
+  const ask = db.query("SELECT recipient FROM asks WHERE id = ?").get(Number(id)) as { recipient: string } | null;
+  return ask && ask.recipient !== "owner" ? `; it is #${id} in your queue (hud req next)` : `; ack it with hud ack a:${id}`;
+};
+
+// Where each of the owner's notes and answers stands, for the page: held (not typed in yet), unconfirmed (typed in
+// while HQ was mid-turn), delivered (HQ started working on it) or acked (HQ acked it). The last day's, by ref.
+function deliveries() {
+  const out: Record<string, string> = {};
+  const rows = db.query("SELECT ref, sent_at, confirmed_at FROM hq_outbox WHERE ref IS NOT NULL AND at > ? ORDER BY id").all(Date.now() - 86_400_000) as { ref: string; sent_at: number | null; confirmed_at: number | null }[];
+  for (const r of rows) out[r.ref] = alreadyRead(r.ref) ? "acked" : !r.sent_at ? "held" : r.confirmed_at ? "delivered" : "unconfirmed";
+  return out;
+}
 
 function alreadyRead(ref: string | null) {
   const [kind, id] = (ref ?? "").split(":");
@@ -193,6 +242,7 @@ export function hqLink() {
     reason,
     since: reason ? since : null,
     candidate,
+    deliveries: deliveries(),
     // While HQ is not receiving, all of it; otherwise only what failed (the rest is on its way).
     held: rows.filter((r) => reason || r.error).map((r) => ({ id: r.id, at: r.at, ref: r.ref, text: r.text.length > 240 ? r.text.slice(0, 239) + "…" : r.text })),
   };

@@ -27,7 +27,7 @@ herdr plugin install NicolaiHerforth/hq-office
    herdr plugin action invoke hq-office.reload
    ```
 
-The database and uploaded images live in the plugin's state directory, so they survive reinstalls.
+The database and uploaded images and files live in the plugin's state directory, so they survive reinstalls.
 
 To keep HQ Office running across crashes and restarts, install it as a service (below). To give HQ the `hud` command, run `herdr plugin action invoke hq-office.install-hud`.
 
@@ -90,9 +90,56 @@ teaches it without any setup per session:
 
 ## The question panel and Tell HQ
 
-Questions from HQ appear at the top of the panel, most urgent first. Pick an option or type an answer; it goes to HQ the moment you send it. Tell HQ is a free-text box for anything HQ did not ask about, such as a new priority or a correction. Both are stored, so nothing is lost if HQ is busy.
+Questions from HQ appear at the top of the panel, most urgent first. Pick an option or type an answer; it goes to HQ the moment you send it. Tell HQ is a free-text box for anything HQ did not ask about, such as a new priority or a correction. Both are stored, so nothing is lost if HQ is busy. A plain Tell waits in HQ's queue (see HQ's queue below); the URGENT toggle puts it first and types one line into HQ's pane.
 
 HQ uses the CLI in `hud.ts` (the `hud` command after the install hud command action, or `bun hud.ts` from the plugin directory with `HUD_URL` set if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read. `hud guide` prints how HQ should reach you.
+
+## HQ's queue
+
+Every message to HQ waits in one queue, so a lane never interrupts HQ's work and HQ never loses a message. HQ sees the count at every step and reads the queue when it chooses. The queue is the same list as the owner's desk, with a different recipient: an item is an ask whose recipient is HQ (or an orchestrator or PM) instead of the owner.
+
+A lane hands back or asks with `hud request`. It returns at once and types nothing into any pane:
+
+```sh
+hud request --lane NAME [--kind READY|BLOCK|QUESTION|DONE|NOTE] [--urgent] [--lead NAME] [--pr N] \
+            [--default "what I will do" --by HH:MM|+30m] ("text" | --file PATH)
+```
+
+- `NAME` is the lane's herdr agent name. The kind defaults to `NOTE`, a plain message.
+- `--file PATH` reads the text from a file; use it for long messages, which get truncated when typed on the line.
+- `--lead` names who must answer. Without it the server reads the orchestration registry (`HUD_ORCHESTRATION`, a JSON file): the PM the lane works under, else the orchestrator that lists it, else HQ.
+- `--default ... --by ...` (BLOCK and QUESTION only): when the time comes the item is marked `defaulted`, leaves the open queue, and the lane goes ahead on its own. HQ can still answer it.
+- `--urgent` puts the item first and also types one line into the recipient's pane: `URGENT from <lane>: <first line>`. Nothing else is ever typed. `hud ask --urgent` does the same for the owner's desk, where the question sorts to the top marked URGENT, and `hud urgent ID --by WHO` (or `--lane NAME`) pushes an open item up; the report counts uses by who made them.
+
+HQ reads and answers the queue:
+
+```sh
+hud req next [--lead NAME]          # the first open item: urgent first, then oldest
+hud req list [--lead NAME] [--all] [--json]
+hud req answer ID "text"            # types the answer into the lane's pane and closes the item
+hud req close ID "why"              # for a lane that is gone; refused for a live lane
+hud urgent --since 7d               # urgent uses by who and by recipient, with counts
+```
+
+An item closes only when its answer has reached the lane's pane: if the pane refuses it, the item stays open, `hud req answer` exits 1 and the item shows why. The owner's Tell HQ box files to the queue too; its URGENT toggle sends the note at once. Whether a plain Tell goes to the queue or straight into HQ's pane is the constant `TELL_GOES_TO_QUEUE` in `src/server/queue.ts`.
+
+The top bar shows the queue as a label over a value (`HQ QUEUE`, `4 OLDEST 12M 1 URGENT`), a green `0` when it is empty, red when an item is urgent or has waited over 30 minutes. `HUD_LEAD` (default `HQ`) says whose queue the bar shows; the hook shows nothing unless `HUD_LEAD` is set.
+
+### The hook: the count at every step
+
+`bin/hq-queue-hook.ts` is a Claude Code hook for HQ's own session. It prints one line, `HQ QUEUE 4 · oldest 12m · 1 URGENT`, and nothing when the queue is empty or the server is down. It gives up on the server after 150 ms, always exits 0, and never fails the session. On UserPromptSubmit and PostToolUse the line goes into HQ's context; on Stop it blocks once with the count and "`hud req next` to read", and lets HQ stop when `stop_hook_active` is true, so it never loops. It acts only where `HUD_LEAD` is set, to the name of the queue it shows; with no `HUD_LEAD` it prints nothing and exits 0. It edits no settings. Start HQ's session with `HUD_LEAD` set, for example `HUD_LEAD=HQ claude`: that is what marks the session as HQ's, and any other session stays silent even where the hook is installed. Then add the snippet to `.claude/settings.local.json` in the folder HQ's session starts in. That file is local and never committed, so it can't reach a lane through the repository. Never add it to `~/.claude/settings.json`: every lane runs as the same user, so a user-level file reaches every lane. Use the path to your copy of the plugin:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "bun /path/to/hq-office/bin/hq-queue-hook.ts", "timeout": 5 }] }]
+  }
+}
+```
+
+Set `HUD_URL` in the environment HQ's session runs in if it differs from `http://127.0.0.1:4747`. An orchestrator's queue is the same snippet in its own folder, with its own name in `HUD_LEAD` when its session starts. If a session's start can't carry the variable, put it in the command instead (`HUD_LEAD=HQ bun ...`); then any session started in that folder runs the hook as HQ.
 
 ## Secrets
 
@@ -109,6 +156,13 @@ hud secret list                          # names, who set them, when they expire
 Every expiry is said both ways, in local time: `expires in 6d 23h (Mon 2 Nov, 13:45)`, or `expires in 23h (tomorrow 13:45)`.
 
 Values live in the server's memory only: never in the database, the log, `/api/state` or any listing. The deadline is checked on every read. Secret routes answer only to this machine, the read route only to a client that is not a browser, and any request from another web origin is refused.
+
+One exception, for you: **COPY** on a secret in the SECRETS tab puts its value on your clipboard. It is the only way a value reaches a browser, and the server gives it only to the HUD's own page:
+- the page's own origin, or one you listed in `HUD_TRUSTED_ORIGINS` (such as your tailnet address);
+- a same-origin request (`Sec-Fetch-Site`) with the page's header;
+- only when you click.
+
+The value goes straight to the clipboard and is never written into the page, its storage, `/api/state`, the log or the database. Each copy adds an event line, "copied NAME". Anything that can read your clipboard, a clipboard manager for instance, can read a copied value.
 
 **Restarts.** A planned restart (the plugin's reload or install service action, which a plugin update needs) hands the secrets over: the plugin takes them from the running server over loopback, holds them in its own memory while the new server starts, and gives them back with their original deadlines. Nothing is written to disk on the way. The handover routes also need a token that each server start writes to `secret-handover.token` in the data folder (readable by you only; it is not a secret value), and the new server takes a handover only while it holds no secrets, within 2 minutes of its start.
 
@@ -181,13 +235,17 @@ Your typed answer stays on the card through an edit; a picked option the edit re
 
 SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND next to it turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
 
-## Images
+## Images and files
 
-Every send box (Tell HQ, each question's answer, a reply in MESSAGES) is one composer: attached images on top, the text field, then the photo button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone it opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker, and dropping or pasting an image into a text box works too.
+Every send box (Tell HQ, each question's answer, a reply in MESSAGES, a room's send box) is one composer: attachments on top, the text field, then the attach button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone the attach button opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker. Dropping images or files on a box, or anywhere on its panel or card (the TELL HQ panel, a question's card, the reply under a message, the TO row of a room's send box), attaches them to that box, which lights up while they are over it; pasting into a box works too. A drop anywhere else on the page does nothing (in a room, a drop outside the send box goes on the shelf).
 
-Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the data directory (10 MB at most).
+Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. 10 MB at most.
 
-Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. The text you type stays clean. An image is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and an image that is too big or that the browser cannot read says why in one line. When you send, each image's path is added to the end of your text as `[image: /path]`, which is how HQ opens it. Images are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never the pictures), and are cleared once the message is sent.
+Other files go as they are, 25 MB at most each, and only these kinds: pdf, txt, md, csv, tsv, json, log, yaml, yml, xml, zip, gz, tar, docx, xlsx, pptx, mp4, mov, webm, mp3, wav, m4a. The kind is checked by the extension and the browser's file type on the page, and by the extension on the server; anything else (html, svg, scripts, programs, installers) is refused. A message carries 10 attachments at most.
+
+Attached images show as thumbnails in the box and files as chips with their name and size, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen, a file chip to open the file. The text you type stays clean. An attachment is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and one that is refused says why in one line. When you send, each one's full path on the HUD's machine is added to the end of your text, `[image: /path]` for an image and `[file: /path]` for any other file, which is how HQ or a lane opens it; sent messages show a thumbnail or a link named after the file. Attachments are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never their bytes), and are cleared once the message is sent.
+
+Everything stays on this machine. Outside a room it is saved in the data directory's `uploads/`; in a room, in the room's `files/`, so it shows on the shelf. Each file keeps its own name (`name-2.ext` when the name is taken). Files are served sandboxed and never sniffed: images and video show in the browser, everything else downloads.
 
 ## Configuration
 
@@ -199,6 +257,8 @@ Set these in `config.env`. An empty value means the default.
 | `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
 | `HUD_HQ_BLOCKED` | on | `0` stops telling HQ when a lane's agent becomes blocked on a prompt in herdr (the page still shows it). |
 | `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |
+| `HUD_LEAD` | `HQ` | Whose queue the top bar and `bin/hq-queue-hook.ts` show. |
+| `HUD_ORCHESTRATION` | empty | A JSON registry of orchestrators and PMs; a request's recipient is read from it. Empty sends every request to HQ. |
 | `HUD_OWNER` | empty | Your name: on the desk sign, on the default hero, and in the notes and answers HQ is sent. Empty means "the owner" (and "YOU" on the hero). |
 | `HUD_PORT` | `4747` | Port the server listens on. |
 | `HUD_HOST` | `127.0.0.1` | Address the server binds to. |

@@ -3,6 +3,7 @@
 //   hud ask --lane L --title T [--body B] [--opt A --opt B --rec A] [--kind decision|action|info] [--link URL] [--due HH:MM]
 //           a decision with --opt needs --rec (your pick; the why goes in --body); no options (--kind action|info) needs none
 //           [--from LANE]         the lane that handed this question in (shown on the card as handed in by it)
+//           [--urgent]            sort it to the top of the desk, marked URGENT (it is counted: hud urgent)
 //           [--secret NAME ...]   ask the owner for named secrets, filled in on the question card
 //           [--item TEXT ...]     a checklist; an item naming a PR (#123) ticks itself when it merges, and the
 //                                 question closes itself ("all done") when every item is done
@@ -30,17 +31,22 @@
 //   hud secret set NAME --minutes N [--by WHO]   the value comes from stdin, never from an argument
 //   hud secret get NAME [--once] | <command>     the raw value to a pipe; refuses a terminal; says if it was lost
 //   hud secret rm NAME
+//   hud secret redact NAME  replace the value wherever it was typed and stored (answers, notes, updates) with [secret NAME]
 //   hud secret list      names, who set them and when they expire, and LOST ones (lost in a restart); never values
-// requests: what a lane needs from HQ, as a record that closes only when HQ's answer reaches the lane's pane
-//   hud request --kind READY|BLOCK|QUESTION|DONE --lane NAME [--lead NAME] [--pr N] [--default "what I will do" --by HH:MM|+30m] "verbatim text"
-//                                   a lane files it (NAME is its herdr agent name); --lead names who must answer (default: the
-//                                   server resolves it from the orchestration registry, else HQ); --default/--by only on BLOCK or QUESTION,
-//                                   never for a product call: when --by comes the lane goes ahead and the row is marked defaulted
-//   hud req next [--lead NAME]      the oldest open request (nothing when the queue is empty); --lead: only that lead's
-//   hud req list [--lead NAME] [--all] [--json]   open requests, oldest first (--all: closed and defaulted too)
-//   hud req answer ID "text"        types the answer into the lane's pane and closes the row; if it does not
-//                                   reach the pane the row stays open and this exits 1
-//   hud req close ID "why"         closes a request whose lane is gone (no live agent), with the reason; refused for a live lane
+// the queue: what a lane sends HQ. It waits until HQ reads it; only --urgent also types a line into HQ's pane.
+//   hud request --lane NAME [--kind READY|BLOCK|QUESTION|DONE|NOTE] [--urgent] [--lead NAME] [--pr N]
+//               [--default "what I will do" --by HH:MM|+30m] ("text" | --file PATH)
+//                                   files it and returns at once. NAME is the lane's herdr agent name; the kind defaults to NOTE;
+//                                   --file reads the text from a file (a long message typed on the line gets truncated);
+//                                   --lead names who must answer (default: the orchestration registry, else HQ); --default/--by
+//                                   only on BLOCK or QUESTION: when --by comes the lane goes ahead and the item is marked defaulted
+//   hud req next [--lead NAME]      the first open item: urgent first, then oldest (nothing when the queue is empty)
+//   hud req list [--lead NAME] [--all] [--json]   open items in that order (--all: closed and defaulted too)
+//   hud req answer ID "text"        types the answer into the lane's pane and closes the item; if it does not
+//                                   reach the pane the item stays open and this exits 1
+//   hud req close ID "why"         closes an item whose lane is gone (no live agent), with the reason; refused for a live lane
+//   hud urgent ID --by WHO|--lane NAME      push an open item (desk or queue) to the top of its list
+//   hud urgent [--since 7d]         the urgent uses in that window, by who and by recipient
 // work board: one item per issue in flight; its state is derived from GitHub, the lane, and open asks
 //   hud track ISSUE --lane L --pr N [--pr N...]   track (or add PRs to) a piece of work
 //   hud done ISSUE                                close it by hand (merged or closed PRs close it on their own)
@@ -56,13 +62,15 @@ import { restartTime } from "./src/server/secrets.ts";
 
 const BASE = process.env.HUD_URL ?? "http://127.0.0.1:4747";
 
+const SWITCHES = new Set(["urgent", "all", "json"]);
+
 function parse(argv: string[]) {
   const flags: Record<string, string[]> = {};
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    // A flag followed by another flag has no value (hud req list --all --lead HQ).
-    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(argv[i + 1]?.startsWith("--") ? "" : (argv[++i] ?? ""));
+    // A switch takes no value; every other flag takes the next word, even one that begins with -- (--opt "--force push").
+    if (a.startsWith("--")) (flags[a.slice(2)] ??= []).push(SWITCHES.has(a.slice(2)) ? "" : (argv[++i] ?? ""));
     else rest.push(a);
   }
   const one = (k: string) => flags[k]?.at(-1);
@@ -122,7 +130,7 @@ function age(ms: number) {
 }
 
 function showRequest(r: any, full: boolean) {
-  const head = `#${r.id} ${r.kind} ${r.lane}${r.pr ? ` PR #${r.pr}` : ""} ${r.status === "open" ? `open ${age(r.created_at)}` : `${r.status} ${age(r.answered_at ?? r.defaulted_at ?? r.created_at)} ago`} lead ${r.lead ?? "HQ"}`;
+  const head = `#${r.id} ${r.kind}${r.urgent_at ? " URGENT" : ""} ${r.lane ?? "owner"}${r.pr ? ` PR #${r.pr}` : ""} ${r.status === "open" ? `open ${age(r.created_at)}` : `${r.status} ${age(r.answered_at ?? r.defaulted_at ?? r.created_at)} ago`} lead ${r.lead}`;
   if (!full) return `${head}: ${r.text.replace(/\s+/g, " ").slice(0, 100)}`;
   const lines = [head, r.text];
   if (r.default_by) lines.push(`default: ${r.default_action} (${r.status === "open" ? `at ${new Date(r.default_by).toLocaleTimeString()}` : "came due"})`);
@@ -148,6 +156,7 @@ switch (cmd) {
       due: dueAt(one("due")),
       secrets: flags.secret ?? [],
       items: flags.item,
+      urgent: "urgent" in flags,
     });
     console.log(`ask #${out.id}`);
     break;
@@ -202,7 +211,7 @@ switch (cmd) {
   case "tell":
   case "say":
     // The text may come as --body or as the trailing words: on 24 Oct 2026 every HQ tell passed it positionally,
-    // it was dropped, and Aleks saw titles only.
+    // it was dropped, and the owner saw titles only.
     await call("POST", "/api/updates", { lane: one("lane"), title: one("title"), body: one("body") ?? (rest.join(" ") || undefined) });
     break;
   case "inbox":
@@ -234,7 +243,13 @@ switch (cmd) {
     await secret(argv);
     break;
   case "request": {
-    const out = await call("POST", "/api/requests", { kind: one("kind"), lane: one("lane"), lead: one("lead"), pr: one("pr"), default: one("default"), by: byAt(one("by")), text: rest.join(" ") });
+    const file = one("file");
+    if (file !== undefined && !file) {
+      console.error("--file needs a path");
+      process.exit(2);
+    }
+    const text = file ? await Bun.file(file).text().catch((e: Error) => (console.error(`--file: ${e.message}`), process.exit(2))) : rest.join(" ");
+    const out = await call("POST", "/api/requests", { kind: one("kind"), lane: one("lane"), lead: one("lead"), pr: one("pr"), default: one("default"), by: byAt(one("by")), urgent: "urgent" in flags, text });
     if (out.warning) console.error(`warning: ${out.warning}`);
     console.log(`request #${out.id}`);
     break;
@@ -255,16 +270,36 @@ switch (cmd) {
       else console.log(list.length ? list.map((r: any) => showRequest(r, false)).join("\n") : "no open requests");
     } else if (verb === "answer" && more[0] && more.length > 1) {
       const out = await call("POST", `/api/requests/${more[0]}/answer`, { text: more.slice(1).join(" ") });
-      console.log(`request #${out.id} answered: delivered to ${out.lane} and closed`);
+      console.log(out.lane ? `request #${out.id} answered: delivered to ${out.lane} and closed` : `request #${out.id} answered: posted to the owner as an update (FROM HQ and MESSAGES) and closed`);
     } else if (verb === "close" && more[0] && more.length > 1) {
       const out = await call("POST", `/api/requests/${more[0]}/close`, { reason: more.slice(1).join(" ") });
-      console.log(`request #${out.id} closed without delivery: ${out.lane} is gone`);
+      console.log(out.lane ? `request #${out.id} closed without delivery: ${out.lane} is gone` : `the owner's note #${out.id} closed with no reply`);
     } else {
       console.error('usage: hud req next [--lead NAME] | list [--lead NAME] [--all] [--json] | answer ID "text" | close ID "why"');
       process.exit(2);
     }
     break;
   }
+  case "urgent":
+    if (/^\d+$/.test(rest[0] ?? "")) {
+      // Every use is counted by who made it, so say who: a lane its name, HQ --by hq.
+      const by = (one("by") || one("lane"))?.trim();
+      if (!by) {
+        console.error("usage: hud urgent ID --by WHO (or --lane NAME): the urgent report counts uses by who made them");
+        process.exit(2);
+      }
+      await call("POST", `/api/asks/${rest[0]}/urgent`, { by });
+      console.log(`#${rest[0]} is urgent`);
+    } else {
+      const since = one("since") || "7d";
+      const rows = await call("GET", `/api/urgent?since=${encodeURIComponent(since)}`);
+      if (!rows.length) console.log(`no urgent uses in the last ${since}`);
+      else {
+        console.log(`urgent uses in the last ${since}: ${rows.reduce((n: number, r: any) => n + r.n, 0)}`);
+        for (const r of rows) console.log(`${String(r.n).padStart(4)}  ${r.by} -> ${r.recipient}`);
+      }
+    }
+    break;
   // ---- work board ----
   case "track":
     await call("POST", "/api/board/track", { issue: rest[0], lane: one("lane"), prs: flags.pr ?? [] });
@@ -299,7 +334,7 @@ switch (cmd) {
     await roomCmd(argv);
     break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|track|done|pause|resume|board|room|guide");
+    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|request|req|urgent|track|done|pause|resume|board|room|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 
@@ -324,7 +359,7 @@ async function secret(args: string[]) {
   const { rest, one } = parse(args.filter((a) => a !== "--once"));
   const [verb, name, ...extra] = rest;
   const usage = () => {
-    console.error("usage: hud secret set NAME --minutes N  (value on stdin) | get NAME [--once] | rm NAME | list");
+    console.error("usage: hud secret set NAME --minutes N  (value on stdin) | get NAME [--once] | rm NAME | redact NAME | list");
     process.exit(2);
   };
   if (verb !== "list" && !name) usage();
@@ -349,6 +384,12 @@ async function secret(args: string[]) {
       }
       const { value } = await call("POST", "/api/secrets/get", { name, once });
       process.stdout.write(value);
+      break;
+    }
+    case "redact": {
+      // The server replaces the value wherever it is stored with [secret NAME]; the value never comes through here.
+      const { rows, tables } = await call("POST", "/api/secrets/redact", { name });
+      console.log(rows ? `redacted ${name} from ${rows} stored ${rows === 1 ? "row" : "rows"}: ${Object.entries(tables).map(([k, n]) => `${k} ${n}`).join(", ")}` : `${name} is not stored anywhere`);
       break;
     }
     case "rm": {
@@ -389,9 +430,20 @@ function roomUsage() {
 }
 
 // Text from an argument, else from stdin when it is piped.
+// Text from --body, else piped in. A stdin that is open but says nothing (a shell or an agent's tool that never closes
+// it) would wait forever: with no first bytes within a second it counts as nothing given.
 async function textArg(given: string | undefined) {
   if (given !== undefined) return given;
-  return process.stdin.isTTY ? "" : (await Bun.stdin.text()).replace(/\r?\n$/, "");
+  if (process.stdin.isTTY) return "";
+  const reader = Bun.stdin.stream().getReader();
+  const first = await Promise.race([reader.read(), Bun.sleep(1000).then(() => null)]);
+  if (!first || first.done) {
+    reader.releaseLock();
+    return "";
+  }
+  const chunks = [first.value];
+  for (let r = await reader.read(); !r.done; r = await reader.read()) chunks.push(r.value);
+  return new TextDecoder().decode(Buffer.concat(chunks)).replace(/\r?\n$/, "");
 }
 
 function ago(t: number) {

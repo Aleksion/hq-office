@@ -1,7 +1,7 @@
 // Clicks delegated from the whole document: choose an agent (core/scope.js), switch the feed tab, MORE/LESS.
 import { renderFeed, renderLog, setFeedTab } from "../feed/feed.js";
 import { chooseAgent } from "./scope.js";
-import { expanded } from "./text.js";
+import { expanded } from "./markdown.js";
 import { renderHud } from "../questions/questions.js";
 import { renderMsgs } from "../messages/messages.js";
 

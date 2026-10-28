@@ -10,7 +10,7 @@ import "./sound/sound.js";
 import "./room/input.js";
 import "./core/status.js";
 import "./core/format.js";
-import "./core/text.js";
+import "./core/markdown.js";
 import "./core/net.js";
 import "./room/canvas.js";
 import "./room/sprites.js";
