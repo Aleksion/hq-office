@@ -50,6 +50,8 @@ function setReason(next: { seen?: string | null; sent?: string | null }) {
 // same kind at every sync since (the same occupant). Memory only, so never across a server restart (the NAME button
 // is there for that). HUD_HQ_RENAME=0 leaves it to the owner.
 let tracked: { pane: string; agent: string } | null = null;
+// HQ's herdr status at the last sync, and when it was last seen working (the sweep nudge reads both).
+export const hqNow: { status: string | null; workingAt: number } = { status: null, workingAt: 0 };
 const AUTO_RENAME = process.env.HUD_HQ_RENAME !== "0";
 
 async function rename(pane: string): Promise<string | null> {
@@ -69,6 +71,7 @@ export async function checkHq(agents: any[] | null, error?: string) {
   checked = true;
   if (!agents) {
     candidate = null;
+    hqNow.status = null;
     setReason({ seen: `herdr did not answer on this machine${error ? `: ${error}` : ""}`.slice(0, 300) });
     return;
   }
@@ -85,6 +88,8 @@ export async function checkHq(agents: any[] | null, error?: string) {
       }
     }
   }
+  hqNow.status = hq?.agent_status ?? null;
+  if (hq?.agent_status === "working") hqNow.workingAt = Date.now();
   if (hq) {
     candidate = null;
     tracked = { pane: hq.pane_id, agent: hq.agent };

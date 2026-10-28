@@ -3,6 +3,23 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-10-28
+
+### Added
+
+- **HQ SWEEP: the HUD can nudge HQ to sweep.** A new row in SETTINGS, off by default. When it is on, the HUD types
+  one "HUD sweep:" line into HQ, listing what needs a look: idle or done lanes (an idle lane must be idle for a
+  reason, and only HQ can judge it), gone lanes, stalled board items, questions waiting on you, and rooms with
+  undelivered messages. It only goes when:
+  - HQ is idle or done right now, never in the middle of a turn, and is receiving;
+  - the interval (20, 30 or 60 min) has passed since the last nudge;
+  - the hour is in the window (8-24 by default, this machine's clock);
+  - something needs a look. A quiet office gets no nudge.
+- **No pile-up.** A nudge HQ does not act on doubles the wait for the next, up to 2 h. A nudge that cannot go is
+  dropped, never queued. Each nudge is a line in the event log, and the row shows the last and next one.
+- It runs on the HUD's existing 20-second check, with no timer of its own. The settings are kept with your other
+  settings and survive restarts. Secrets are not touched.
+
 ## [0.11.2] - 2026-10-27
 
 ### Fixed

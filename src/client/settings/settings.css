@@ -11,4 +11,7 @@
 .sfoot { display: flex; justify-content: flex-end; }
 .srow .levels { flex: 1 1 180px; min-width: 0; border: 3px solid var(--edge-2); border-radius: 6px; padding: 4px 8px; font: 16px/1.3 var(--text); background: #fff; color: var(--ink); }
 .srow .levels:focus { outline: none; border-color: var(--edge); }
+/* HQ SWEEP: the hours, from-to (8-24) */
+.srow .hours { flex: 0 0 72px; min-width: 0; border: 3px solid var(--edge-2); border-radius: 6px; padding: 4px 8px; font: 16px/1.3 var(--text); background: #fff; color: var(--ink); text-align: center; }
+.srow .hours:focus { outline: none; border-color: var(--edge); }
 .srow .hint { color: var(--muted); font-size: 12px; }

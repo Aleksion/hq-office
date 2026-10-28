@@ -6,6 +6,7 @@ import { bump } from "./push.ts";
 import { event } from "./events.ts";
 import { UNREAD, promptIn } from "./prompt.ts";
 import { checkHq, notifyHq } from "./hq-link.ts";
+import { sweep } from "./hq-sweep.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
@@ -127,6 +128,7 @@ export async function syncHerdr() {
   // HQ is typed into on this machine: check it there even when this machine's lanes are not tracked.
   if (!MACHINES.includes(LOCAL)) local = await herdrList(LOCAL).catch((e) => (errors.push(`${LOCAL}: ${(e as Error).message}`), null));
   await checkHq(local, errors.find((e) => e.startsWith(`${LOCAL}:`))?.slice(LOCAL.length + 2));
+  await sweep();
   for (const lane of nowBlocked) tellBlocked(lane);
   if (changed) bump();
 }
