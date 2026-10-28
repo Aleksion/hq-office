@@ -247,6 +247,31 @@ for (const [width, height] of SIZES) {
   }, 30_000);
 }
 
+// The signed design's office: five floors, so the building is three rows of tiles and the stage scrolls for it.
+test.skipIf(!chromeFound)("five floors at 1440: a label stays inside its tile, and a click on it zooms into that floor", async () => {
+  const office = await startFloors({ frame: true });
+  try {
+    await open(office.base, 1440, 900);
+    await until(`document.querySelectorAll(".building .tile").length === 5`);
+    const ids = (await ev(`[...document.querySelectorAll(".tile")].map((t) => t.dataset.floor)`)) as string[];
+    expect(ids).toEqual(ids.map((id) => id.toLowerCase()));
+    for (const id of ids) {
+      await ev(`document.querySelector('.tile[data-floor="${id}"] .tlabel').scrollIntoView({ block: "center" })`);
+      await ev(`new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))`); // the layout has settled
+      const at = (await ev(`(() => { const t = document.querySelector('.tile[data-floor="${id}"]').getBoundingClientRect(), l = document.querySelector('.tile[data-floor="${id}"] .tlabel').getBoundingClientRect(); return { inside: l.left >= t.left - 0.5 && l.right <= t.right + 0.5, x: l.left + 10, y: l.top + l.height / 2, tile: t.width }; })()`)) as { inside: boolean; x: number; y: number; tile: number };
+      expect(at.inside).toBe(true);
+      expect(at.tile).toBeGreaterThan(300); // not the 80 px minimum
+      for (const type of ["mousePressed", "mouseReleased"]) await page.s("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", clickCount: 1 });
+      await until(`document.querySelector(".room").dataset.stage === "in"`);
+      expect(await scopeOf()).toEqual({ floor: id, agent: null, all: false });
+      await press("Escape");
+      await until(`document.querySelector(".room").dataset.stage === "out"`);
+    }
+  } finally {
+    await office.stop();
+  }
+}, 90_000);
+
 test.skipIf(!chromeFound)("one floor: today's page under a stage bar that holds RUNDOWN alone: no building, no way back, no floor tags and no floor border", async () => {
   for (const [width, height] of SIZES) {
     await open(single.base, width, height);
