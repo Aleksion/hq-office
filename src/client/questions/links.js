@@ -12,7 +12,7 @@ export const openLinkHTML = (ask) => (/^https?:\/\//i.test(String(ask?.link ?? "
 
 export function linksHTML(S, ask) {
   const { projects, issues, prs } = askLinks(S, CONFIG, ask);
-  return projects.map((p) => `<button class="tag project" type="button" data-project="${esc(p.slug)}" title="${esc(p.title)}">PROJECT · ${esc(p.title)}</button><a class="tag room" href="#room/${esc(p.slug)}">ROOM</a>`).join("")
+  return projects.map((p) => `<button class="tag project" type="button" data-project="${esc(p.slug)}" title="${esc(p.title)}">PROJECT · ${esc(p.title)}</button><a class="tag roomlink" href="#room/${esc(p.slug)}">ROOM</a>`).join("")
     + issues.map((i) => tag("key", i.href, i.key)).join("")
     + prs.map((p) => tag("pr", p.href, `#${p.num}`)).join("");
 }

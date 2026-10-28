@@ -205,12 +205,12 @@ for (const [width, height] of SIZES) {
     await until(`document.querySelectorAll("#hud .ask").length === 6`);
     const tags = (lane: string) => ev(`[...document.querySelectorAll('#hud .ask[data-lane="${lane}"] .meta .tag')].map((t) => t.className.replace("tag ", "").split(" ")[0] + ":" + t.textContent)`) as Promise<string[]>;
     const pm = await tags("hq-pm");
-    expect(pm).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "room:ROOM", `key:${FACTS.release.issue}`, "pr:#12"]));
-    expect((await tags("hq-ops")).filter((t) => /^(project|room|key|pr):/.test(t))).toEqual([]);
+    expect(pm).toEqual(expect.arrayContaining([`project:PROJECT · ${FACTS.release.title}`, "roomlink:ROOM", `key:${FACTS.release.issue}`, "pr:#12"]));
+    expect((await tags("hq-ops")).filter((t) => /^(project|roomlink|key|pr):/.test(t))).toEqual([]);
     // the links sit in the meta row, and the question's title and options are still there
     expect(await ev(`document.querySelector('#hud .ask[data-lane="hq-pm"] h3') !== null && document.querySelectorAll('#hud .ask[data-lane="hq-pm"] .opt').length`)).toBe(2);
     // ROOM goes to the conference room; the project panel's OPEN THE ROOM does too, and the panel closes behind it
-    await click(`#hud .ask[data-lane="hq-pm"] a.tag.room`);
+    await click(`#hud .ask[data-lane="hq-pm"] a.tag.roomlink`);
     await until(`location.hash === "#room/release" && !document.getElementById("roomView").hidden`);
     await ev(`history.replaceState(null, "", location.pathname); dispatchEvent(new HashChangeEvent("hashchange"))`);
     await until(`document.getElementById("roomView").hidden`);
