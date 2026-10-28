@@ -3,6 +3,27 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] - 2026-10-28
+
+### Added
+
+- **Everyday gadgets.** Each worker in the office has a habit: a coffee mug, a water bottle, a donut or a big
+  tumbler with a handle and a straw.
+  - While a worker sits at its desk, the gadget stands on the desk beside the monitor.
+  - Standing or walking, the worker holds it.
+  - About once a minute it takes a sip or a bite. At the desk it lifts the gadget to its hand, then puts it back.
+  - Now and then it brings something else for a couple of hours, or nothing at all.
+  - A worker holding a seasonal item carries the gadget in its other hand.
+  - Gadgets work in both themes and never cover a status bubble, a name label, a mask's mark or a player's number.
+  - Your hero and HQ hold none.
+  - Sips add no frames: POWER SAVER shows none.
+
+### Fixed
+
+- `hud room brief SLUG` (and other commands that can read text piped in) no longer waits forever when stdin is left
+  open but silent, as an agent's tool or a background job may leave it. With no input within a second it counts as
+  nothing given, and the brief is printed.
+
 ## [0.16.2] - 2026-10-28
 
 ### Fixed

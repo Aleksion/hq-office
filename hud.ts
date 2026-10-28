@@ -307,9 +307,20 @@ function roomUsage() {
 }
 
 // Text from an argument, else from stdin when it is piped.
+// Text from --body, else piped in. A stdin that is open but says nothing (a shell or an agent's tool that never closes
+// it) would wait forever: with no first bytes within a second it counts as nothing given.
 async function textArg(given: string | undefined) {
   if (given !== undefined) return given;
-  return process.stdin.isTTY ? "" : (await Bun.stdin.text()).replace(/\r?\n$/, "");
+  if (process.stdin.isTTY) return "";
+  const reader = Bun.stdin.stream().getReader();
+  const first = await Promise.race([reader.read(), Bun.sleep(1000).then(() => null)]);
+  if (!first || first.done) {
+    reader.releaseLock();
+    return "";
+  }
+  const chunks = [first.value];
+  for (let r = await reader.read(); !r.done; r = await reader.read()) chunks.push(r.value);
+  return new TextDecoder().decode(Buffer.concat(chunks)).replace(/\r?\n$/, "");
 }
 
 function ago(t: number) {

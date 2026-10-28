@@ -90,6 +90,14 @@ describe("hud room", () => {
     expect(v.briefBy).toBe("pm");
   });
 
+  test("brief with an open but silent stdin (a shell that never closes it) prints the brief instead of waiting", async () => {
+    const proc = Bun.spawn([process.execPath, join(ROOT, "hud.ts"), "room", "brief", "ope-12-auth"], { env: { ...process.env, HUD_URL: BASE }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    const done = await Promise.race([proc.exited.then(() => true), Bun.sleep(4000).then(() => false)]);
+    if (!done) proc.kill();
+    expect(done).toBe(true);
+    expect(await new Response(proc.stdout).text()).toContain((await room("ope-12-auth")).brief);
+  });
+
   test("brief with nothing given prints it and never writes; an empty --body is refused; --clear clears", async () => {
     const before = (await room("ope-12-auth")).brief;
     const shown = await hud(["room", "brief", "ope-12-auth"]);
