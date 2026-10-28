@@ -1,10 +1,12 @@
 // The themes: how each level of the lane tree dresses. Data only; room/looks.js picks a look, sprites.js paints it.
 //
-// A theme lists one look per depth and one label mark per depth (depth 1 reports to HQ, 2 to a depth-1 lane, ...); deeper than the list wears the
-// last one. `flat` is what a room with no tree yet wears (every lane straight under HQ): Office keeps the everyday
-// look there, so nothing changes until the owner builds a tree. A look of null is the everyday look. `hero` dresses the
-// owner's hero behind the counter and `hq` the HQ figure at its terminal (null: as they always were). A theme that
-// dresses anyone dresses everyone: Office dresses only a tree's levels, and its everyday look is its costume.
+// A theme lists one look per rank and one label mark per rank (rank 1 is the top level: a lane straight under HQ, or
+// one set to the first level by hand; see lanes.ts withTree); a rank past the list wears the last one. `flat` is what
+// a room with no tree and no level set by hand wears: Office keeps the everyday look there, so nothing changes until
+// the owner builds a tree. A theme without `flat` shows ranks from the start. A look of null is the everyday look.
+// `hero` dresses the owner's hero behind the counter and `hq` the HQ figure at its terminal (null: as they always
+// were). A theme that dresses anyone dresses everyone: Office dresses only a tree's levels, and its everyday look is
+// its costume.
 //
 // A look is a clothing layer over the worker's own head and colours:
 //   pal(base, h)  colours it adds or replaces; base is the worker's own palette, h the hash of its name
@@ -15,7 +17,8 @@
 //   number        (optional) a white number on the chest and back: the lane's place in the room
 //   hides         accessory slots it leaves out, so a seasonal coat or hat never covers the level
 // A mark is drawn at the start of a worker's name label, so the level reads from any side, even from behind at a
-// desk: { color, pips } (pips 3, 2, 1 from the top level down, in a colour that matches the look).
+// desk: { color, pips } (pips 3, 2, 1 from the top level down, in a colour that matches the look), or
+// { color, symbol } with the mask's own shape (star, square, triangle, circle).
 // Letters as in sprites.js, plus: J/j jacket and its shade, n/N tie, V/v/y cardigan, its shade and buttons, g/G/q suit, its light
 // and shade, m mask, x the mask's mark, o belt and gloves, T/t/r tracksuit, its shade and light, u/U/z coat, its light
 // and shade. Original art only.
@@ -69,12 +72,17 @@ function guard(id, front, back, belt, pal = SUIT) {
     hides: ["head", "body", "hand"],
   };
 }
-// The marks, 8 columns wide in the middle of the face (front: on the mask; back: on the hood).
+// The marks, 8 columns wide in the middle of the face (front: on the mask; back: on the hood). The rank reads from the
+// shape: a star (our own top rank, above the square), a square with corners, a solid triangle, a round ring.
+const STAR = ["mmmxxmmm", "mxxxxxxm", "mmxxxxmm", "mmxmmxmm"];
 const SQUARE = ["mmxxxxmm", "mmxmmxmm", "mmxmmxmm", "mmxxxxmm"];
 const TRIANGLE = ["mmmxxmmm", "mmxxxxmm", "mxxxxxxm", "mmmmmmmm"];
+const CIRCLE = ["mmmxxmmm", "mmxmmxmm", "mmxmmxmm", "mmmxxmmm"];
 const onHood = (mark) => mark.map((r) => r.replace(/m/g, "g"));
+const GUARD_STAR = guard("guard-star", STAR, onHood(STAR), true);
 const GUARD_SQUARE = guard("guard-square", SQUARE, onHood(SQUARE), true);
 const GUARD_TRIANGLE = guard("guard-triangle", TRIANGLE, onHood(TRIANGLE), false);
+const GUARD_CIRCLE = guard("guard-circle", CIRCLE, onHood(CIRCLE), false);
 // HQ, at its terminal: the senior guard, above every lane and below the game master. The same hooded suit and belt
 // with a gold crown for its mark; HQ faces its terminal, so the crown on the back of the hood is the one that shows.
 const CROWN = ["mxmxxmxm", "mxxxxxxm", "mxxxxxxm", "mmmmmmmm"];
@@ -120,9 +128,11 @@ export const THEMES = {
     label: "OFFICE", flat: null, hero: null, hq: null, depths: [BLAZER, CARDIGAN, null],
     marks: [{ color: "#ffd84a", pips: 3 }, { color: "#ece2c8", pips: 2 }, { color: "#7fc8ff", pips: 1 }],
   },
+  // Arena has no flat look: a lane straight under HQ is the top rank from the start. The ranks, top down: star,
+  // square, triangle, circle; a lane deeper than that is a numbered player.
   arena: {
-    label: "ARENA", flat: PLAYER, hero: GAME_MASTER, hq: HQ_GUARD, depths: [GUARD_SQUARE, GUARD_TRIANGLE, PLAYER],
-    marks: [{ color: "#ff5aa0", pips: 3 }, { color: "#ff5aa0", pips: 2 }, { color: "#3fd0bf", pips: 1 }],
+    label: "ARENA", hero: GAME_MASTER, hq: HQ_GUARD, depths: [GUARD_STAR, GUARD_SQUARE, GUARD_TRIANGLE, GUARD_CIRCLE, PLAYER],
+    marks: [{ color: "#ffffff", symbol: "star" }, { color: "#ffffff", symbol: "square" }, { color: "#ffffff", symbol: "triangle" }, { color: "#ffffff", symbol: "circle" }, { color: "#3fd0bf", pips: 1 }],
   },
 };
 export const THEME_CHOICES = Object.keys(THEMES);

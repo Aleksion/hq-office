@@ -2,17 +2,15 @@
 // lane in it. A room has an owning lane, member lanes, linked work (issue keys and PRs), a pinned brief (replaced as
 // a whole), a shelf of artifacts and a thread. The owner's messages are typed into the lane they are addressed to;
 // one for a lane that is away is kept and typed in when herdr sees the lane again. Nothing in a thread is ever lost.
-import { mkdirSync } from "node:fs";
-import { CONFIG, DATA, OWNER } from "./config.ts";
+import { CONFIG, OWNER } from "./config.ts";
 import { db } from "./db.ts";
 import { bump, listeners } from "./push.ts";
 import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { parsePr } from "./board.ts";
 import { HQ_AGENT, promptAgent } from "./herdr.ts";
+import { ensureFolder, reconcileRoom, removeItem, roomDir, saveFile, startFolders, unwatchRoom, watchRoom, writeBrief, writeShelf } from "./room-folder.ts";
 
-export const ROOM_FILES = `${DATA}/room-files`;
-mkdirSync(ROOM_FILES, { recursive: true });
 export const MAX_ROOM_FILE = 25 * 1024 * 1024;
 const KINDS = ["claude-artifact", "link", "image", "file"];
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)(\?|#|$)/i;
@@ -78,18 +76,26 @@ export function createRoom(body: any) {
     for (const ref of prs) db.query("INSERT OR IGNORE INTO room_links (slug, kind, ref) VALUES (?, 'pr', ?)").run(slug, ref);
     touch(slug);
   })();
+  // The room's folder: made with the room, watched while it is open.
+  ensureFolder(slug);
+  if (!before) { writeShelf(slug); writeBrief(slug); }
+  if (before?.archived_at) reconcileRoom(slug);
+  watchRoom(slug);
   if (!before) event("hq", `opened room ${slug}: ${title}`, isHq(owner) ? null : owner);
   else if (before.archived_at) event("hq", `reopened room ${slug}`, isHq(owner) ? null : owner);
-  return { slug, created: !before };
+  return { slug, created: !before, folder: roomDir(slug) };
 }
 
 export function setBrief(slugRaw: unknown, body: any) {
   const r = mustRoom(slugRaw);
   const text = String(body.body ?? "").replace(/\s+$/, "");
+  // An empty brief clears the room's brief, so it has to be asked for: a client that sends nothing never wipes it.
+  if (!text.trim() && body.clear !== true) throw new Error("the brief is empty: send clear: true to clear it (hud room brief SLUG --clear)");
   if (text.length > 100_000) throw new Error("the brief is over 100,000 characters");
   const by = str(body.as) || r.owner;
   db.query("UPDATE rooms SET brief = ?, brief_at = ?, brief_by = ? WHERE slug = ?").run(text || null, Date.now(), by, r.slug);
   touch(r.slug);
+  writeBrief(r.slug);
 }
 
 export function kindOf(url: string, kind?: unknown) {
@@ -102,12 +108,13 @@ export function kindOf(url: string, kind?: unknown) {
   try { u = new URL(url, "http://local"); } catch {}
   if (u && (/(^|\.)claude\.ai$/.test(u.hostname) && /\/artifacts?\//.test(u.pathname) || /(^|\.)claude\.site$/.test(u.hostname))) return "claude-artifact";
   if (IMAGE.test(url)) return "image";
-  return url.startsWith("/room-files/") ? "file" : "link";
+  return url.startsWith("/room-files/") || url.startsWith("/rooms/") ? "file" : "link";
 }
 
 function addArtifact(r: Room, a: { title: string; url: string; kind: string; by: string; path?: string | null }) {
   const res = db.query("INSERT INTO room_artifacts (slug, at, by, kind, title, url, path) VALUES (?, ?, ?, ?, ?, ?, ?)").run(r.slug, Date.now(), a.by, a.kind, a.title, a.url, a.path ?? null);
   touch(r.slug);
+  writeShelf(r.slug);
   return Number(res.lastInsertRowid);
 }
 
@@ -121,22 +128,21 @@ export function addLink(slugRaw: unknown, body: any) {
   return { id: addArtifact(r, { title, url, kind: kindOf(url, body.kind), by: str(body.as) || r.owner }) };
 }
 
-// A file on the shelf, uploaded as raw bytes. Kept under room-files/ and served from there (see routes/rooms.ts).
+// A file on the shelf, uploaded as raw bytes: it lands in the room's files/ under its own name (see room-folder.ts).
+// ?name= ?title= ?kind= ?as= describe it; as=owner is the owner, from the page.
 export async function addFile(slugRaw: unknown, req: Request, url: URL) {
   const r = mustRoom(slugRaw);
   const bytes = await req.arrayBuffer();
   if (!bytes.byteLength) throw new Error("the file is empty");
   if (bytes.byteLength > MAX_ROOM_FILE) throw new Error("the file is over 25 MB");
-  const original = str(url.searchParams.get("name")) || "file";
-  const ext = (original.match(/\.([A-Za-z0-9]{1,8})$/)?.[1] ?? "bin").toLowerCase();
-  const stem = original.replace(/\.[^.]*$/, "").replace(/[^\w-]+/g, "-").slice(0, 40) || "file";
-  const name = `${Date.now()}-${stem}.${ext}`;
-  await Bun.write(`${ROOM_FILES}/${name}`, bytes);
-  const href = `/room-files/${name}`;
-  const kind = str(url.searchParams.get("kind")) ? kindOf(href, url.searchParams.get("kind")) : IMAGE.test(name) ? "image" : "file";
-  const title = str(url.searchParams.get("title")) || original;
-  const id = addArtifact(r, { title, url: href, kind, by: str(url.searchParams.get("as")) || r.owner, path: `${ROOM_FILES}/${name}` });
-  return { id, url: href, path: `${ROOM_FILES}/${name}`, kind };
+  const given = str(url.searchParams.get("name")) || "file";
+  const kind = str(url.searchParams.get("kind")) ? kindOf("", url.searchParams.get("kind")) : undefined;
+  const out = await saveFile(r.slug, given, bytes, { title: str(url.searchParams.get("title")), kind, by: str(url.searchParams.get("as")) || r.owner });
+  return { id: out.id, url: out.url, path: out.path, name: out.name, kind: out.kind };
+}
+
+export function removeArtifact(slugRaw: unknown, id: number) {
+  removeItem(mustRoom(slugRaw).slug, id);
 }
 
 function replyTarget(r: Room, reply: unknown) {
@@ -198,6 +204,7 @@ export function archive(slugRaw: unknown) {
   if (r.archived_at) return;
   db.query("UPDATE rooms SET archived_at = ? WHERE slug = ?").run(Date.now(), r.slug);
   touch(r.slug);
+  unwatchRoom(r.slug); // the folder stays; it is only no longer watched
   event("hq", `archived room ${r.slug}`, isHq(r.owner) ? null : r.owner);
 }
 
@@ -228,7 +235,7 @@ export function promptText(r: Room, m: Msg, late: boolean) {
     ` (message #${m.id}):`,
   ].join("");
   const keep = lane === r.owner ? "Keep the room's brief (hud room brief" : `${r.owner} owns the room and keeps its brief (hud room brief`;
-  return `${head}\n${m.text}\nReply in the room, not only here: hud room say ${r.slug} "<your reply>"${as} [--reply ${m.id}]. ${keep} ${r.slug} --body ...) and artifacts (hud room artifact ${r.slug} --title T --url U | --file PATH) current; ${OWNER} reads the room, not this terminal.`;
+  return `${head}\n${m.text}\nRoom folder: ${roomDir(r.slug)} (files/ is shared; anything you save there shows on the shelf)\nReply in the room, not only here: hud room say ${r.slug} "<your reply>"${as} [--reply ${m.id}]. ${keep} ${r.slug} --body ...) and artifacts (hud room artifact ${r.slug} --title T --url U | --file PATH) current; ${OWNER} reads the room, not this terminal.`;
 }
 
 function deliver(id: number) {
@@ -317,6 +324,7 @@ export function roomView(slugRaw: unknown) {
     ...summary(r),
     brief: r.brief,
     briefBy: r.brief_by,
+    folder: roomDir(r.slug),
     artifactList: db.query("SELECT id, at, by, kind, title, url, path FROM room_artifacts WHERE slug = ? ORDER BY id").all(r.slug),
     messages: msgs.map(message),
     earlier: Math.max(0, (db.query("SELECT COUNT(*) AS n FROM room_messages WHERE slug = ?").get(r.slug) as { n: number }).n - msgs.length),
@@ -350,3 +358,4 @@ export async function readOwner(slugRaw: unknown, sinceRaw: string | null, waitM
 }
 
 addStatePart("rooms", () => roomsView());
+startFolders();

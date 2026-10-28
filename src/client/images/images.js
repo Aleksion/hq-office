@@ -106,14 +106,22 @@ function changed(key, toEnd = false) {
   emit("attach", String(key));
 }
 
+// Where a box's images go: /api/uploads, unless a feature claims the box's key by its prefix (a room's send box,
+// "room:SLUG", puts them in the room's folder). Such a target answers with an id too, and can take an image back
+// (remove) when it is removed from the tray before sending.
+const targets = [];
+export const uploadTarget = (prefix, target) => { targets.push({ prefix, ...target }); };
+const targetOf = (key) => targets.find((t) => String(key).startsWith(t.prefix));
+
 async function upload(key, a) {
   a.state = "up";
   changed(key);
   try {
-    const res = await fetch(`/api/uploads?name=${encodeURIComponent(a.blob.name || "image")}`, { method: "POST", headers: { "content-type": typeOf(a.blob), "x-hud": "1" }, body: a.blob });
+    const name = a.blob.name || "image", t = targetOf(key);
+    const res = await fetch(t ? t.url(String(key), name) : `/api/uploads?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "content-type": typeOf(a.blob), "x-hud": "1" }, body: a.blob });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || res.statusText);
-    Object.assign(a, { state: "done", path: data.path, url: data.url, blob: null, error: "" });
+    Object.assign(a, { state: "done", path: data.path, url: data.url, ref: data.id ?? null, blob: null, error: "" });
   } catch (err) {
     Object.assign(a, { state: "err", label: "FAILED", error: `${a.name} did not upload. Tap it to retry.` });
   }
@@ -144,6 +152,7 @@ export function removeImage(key, id) {
   if (!a) return;
   if (a.preview) URL.revokeObjectURL(a.preview);
   attached.set(String(key), list.filter((x) => x !== a));
+  if (a.state === "done" && a.ref != null) targetOf(key)?.remove?.(String(key), a);
   changed(key);
 }
 export function clearImages(key) {
@@ -166,7 +175,7 @@ export function notReady(key) {
 export const withImages = (key, text) => [text, ...listOf(key).filter((a) => a.state === "done").map((a) => `[image: ${a.path}]`)].filter(Boolean).join(" ");
 
 // Kept with the drafts across a reload: only uploaded images, as their paths. The bytes are on the HUD's disk.
-export const savedImages = () => imageKeys().map((k) => [k, listOf(k).filter((a) => a.state === "done").map(({ name, path, url }) => ({ name, path, url }))]).filter(([, l]) => l.length);
+export const savedImages = () => imageKeys().map((k) => [k, listOf(k).filter((a) => a.state === "done").map(({ name, path, url, ref }) => ({ name, path, url, ref }))]).filter(([, l]) => l.length);
 export function restoreImages(saved) {
   for (const [k, list] of saved ?? []) attached.set(String(k), list.map((a) => ({ ...a, id: `i${++seq}`, state: "done" })));
 }

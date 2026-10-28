@@ -31,24 +31,42 @@ async function post(base: string, path: string, tok: string, body: unknown) {
   return { ok: res.ok, status: res.status, data };
 }
 
-// Names the running server lists, for a report when it cannot hand them over (a server from before the handover).
-async function listedNames(base: string): Promise<string[]> {
+// What the running server lists: names, setters and deadlines, never values.
+async function listed(base: string): Promise<{ name: string; by: string; setAt: number; expiresAt: number }[]> {
   try {
     const res = await fetch(`${base}/api/secrets`, { signal: AbortSignal.timeout(1500) });
     const list = res.ok ? await res.json() : [];
-    return Array.isArray(list) ? list.filter((s: any) => !s?.lostAt).map((s: any) => String(s?.name)) : [];
+    return Array.isArray(list) ? list.filter((s: any) => !s?.lostAt && s?.name) : [];
   } catch {
     return [];
   }
 }
 
+// A server from before the handover (no token, no export): each value is read the way `hud secret get` reads it, from
+// this machine and not a browser, into this process's memory. Whatever cannot be read is named as lost.
+async function takeOneByOne(base: string): Promise<{ held: Held | null; note: string | null }> {
+  const secrets: Carried[] = [];
+  const lost: string[] = [];
+  for (const s of await listed(base)) {
+    try {
+      const res = await fetch(`${base}/api/secrets/get`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify({ name: s.name }), signal: AbortSignal.timeout(5000) });
+      const data: any = await res.json().catch(() => ({}));
+      if (res.ok && typeof data?.value === "string") secrets.push({ name: s.name, value: data.value, by: s.by, setAt: s.setAt, expiresAt: s.expiresAt });
+      else lost.push(s.name);
+    } catch {
+      lost.push(s.name);
+    }
+  }
+  return {
+    held: secrets.length ? { secrets, names: secrets.map((s) => s.name), token: "" } : null,
+    note: lost.length ? `could not read ${lost.join(", ")} from the running server; lost in this restart` : null,
+  };
+}
+
 // Takes the running server's secrets. `held` is null when there is nothing to carry; `note` says what went wrong.
 export async function takeSecrets(base: string, dataDir: string): Promise<{ held: Held | null; note: string | null }> {
   const tok = token(dataDir);
-  if (!tok) {
-    const names = await listedNames(base);
-    return { held: null, note: names.length ? `the running server cannot hand over its secrets (it predates the handover); lost in this restart: ${names.join(", ")}` : null };
-  }
+  if (!tok) return takeOneByOne(base);
   try {
     const r = await post(base, "/api/secrets/export", tok, {});
     if (!r.ok) return { held: null, note: `could not take the secrets from the running server (${r.data?.error ?? `HTTP ${r.status}`}); they are lost in this restart` };

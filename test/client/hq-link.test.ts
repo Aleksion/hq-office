@@ -38,7 +38,7 @@ const banner = `document.querySelector(".hqdown")`;
 beforeAll(async () => {
   if (!chromeFound) return;
   chrome = await startChrome();
-  server = await startServer(ROOT, { HERDR_BIN: herdr });
+  server = await startServer(ROOT, { HERDR_BIN: herdr, HUD_HQ_RENAME: "0" }); // the banner, not the quiet fix (hq-heal.test.ts)
   await server.post("/api/sync", {}); // HQ seen in w8:p1
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });

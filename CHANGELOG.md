@@ -20,6 +20,74 @@ All notable changes to HQ Office are listed here, newest first. The format follo
   through its own status line. Codex accounts are read from the rate limits each Codex session records. The panel
   shows account names and percentages only, never a token, an email or a credential file.
 
+## [0.11.2] - 2026-10-27
+
+### Fixed
+
+- **Clicking an option in a question no longer slides the list away from it.** Picking an option built the whole
+  question list again and then put the focus back on that question's text box, and the browser scrolled the list
+  to the box. Now an option changes its card in place. When the list is built again (a new question arriving), it
+  keeps its place. Focus only goes back to a box you were typing in, without scrolling anything.
+- The same in MESSAGES: the reply box gets its focus back without moving the list.
+- In a conference room, the TO dropdown is no longer rewritten while it is open. It used to close or jump when a
+  lane came or went; it now catches up when it closes.
+
+## [0.11.1] - 2026-10-27
+
+### Fixed
+
+- **`hud room brief SLUG` no longer wipes the brief.** With no `--body` and nothing piped in, it read an empty brief
+  and saved it, clearing the room's brief. Now it prints the current brief and never writes. An empty `--body` is
+  refused, and clearing a brief takes `--clear`. The server refuses an empty brief from any client that does not ask
+  to clear it.
+
+## [0.11.0] - 2026-10-27
+
+### Added
+
+- **Every room has its own folder.** A room is now a real folder on the HUD's machine, `rooms/SLUG/` in its data
+  folder, holding `files/` (everything shared in the room), `shelf.json` (the shelf) and `brief.md` (the brief).
+  `hud room path SLUG` prints it, `hud room create` prints it too, and every message you send a lane from a room
+  tells it where the folder is.
+- **Lanes can drop files straight in.** A file a lane saves into an open room's `files/` appears on the shelf once it
+  is fully written, marked as added by "folder"; a file deleted from `files/` drops off the shelf. Nothing polls: the
+  HUD only looks when the folder changes.
+- **Add to the shelf from the page.** The shelf has **+ ADD**: pick files, or paste a link with a title. You can also
+  drop files anywhere on a room, or paste an image into it. It works on a phone in the SHELF tab.
+
+- **Ranks you can see in ARENA.** Every worker wears a mask whose shape is its rank: ★ star (the top level, ours
+  above the show's three), ■ square, ▲ triangle, ● circle; deeper than that, a numbered player. The shape is on the
+  mask from the front and on the back of the hood, and the same symbol sits in front of the name label, so a rank
+  reads even from behind at a desk. A lane straight under HQ is the top level from the start, so a flat team is a
+  team of PMs, not of players. HQ keeps its crown and you stay the game master.
+- **A lane's level, set by hand.** `hud lane NAME --level L` gives a lane one of your level names over the one the
+  tree gives (`--level auto` gives it back); the card and `hud tree` show it. A level list in SETTINGS that starts
+  with HQ now names HQ's own level, so "HQ, PM, Senior Engineer, Engineer" works as typed.
+
+### Changed
+
+- Files on the shelf keep their own names (`report.html`, not a timestamped name); a second file with the same name
+  becomes `report-2.html`.
+- Images you attach to a message in a room are saved in that room's folder and appear on its shelf. Remove one from
+  the send box before sending and it comes off the shelf again.
+- Shelf files are served from `/rooms/SLUG/files/NAME`, always sandboxed: images show inline, text files as plain
+  text, and HTML, SVG and other files download instead of opening in the HUD.
+- Existing shelf files move into their room's folder the first time the HUD starts with this version. Links to the
+  old `/room-files/...` addresses in earlier messages still work.
+
+### Fixed
+
+- **Updating from 0.10.0 keeps your secrets too.** A server from before the handover cannot export its secrets, so
+  the restart that installs this version reads each one the way `hud secret get` does, over loopback into memory,
+  and gives it to the new server with its original deadline. From here on every planned restart keeps them.
+- **HQ keeps its name.** herdr can drop HQ's agent name while HQ is still running in its pane (for example when a
+  background job started from HQ's pane compacts its context). The HUD now remembers HQ's pane and gives the name back
+  on its own, within a second if a message finds it gone, so notes and answers arrive without anyone noticing. It
+  only does this while the same agent has stayed in that pane; if the pane emptied or another agent took it, the red
+  strip and its NAME button ask you instead. `HUD_HQ_RENAME=0` turns it off.
+- A test run that hangs stops itself: every child process a test waits on has a timeout, and a whole `bun test` run
+  stops after 15 minutes (`HUD_TEST_LIMIT_MIN`), with what it started.
+
 ## [0.10.1] - 2026-10-26
 
 ### Fixed

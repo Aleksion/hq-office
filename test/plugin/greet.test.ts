@@ -71,7 +71,7 @@ function plugin(cmd: string, where: { config: string; state: string }, extra: Re
     HERDR_BIN_PATH: herdr, // so a missing HERDR_BIN can never reach the real herdr
     ...extra,
   };
-  const p = Bun.spawnSync([process.execPath, "bin/hud-plugin.ts", cmd], { cwd: ROOT, env, stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawnSync([process.execPath, "bin/hud-plugin.ts", cmd], { cwd: ROOT, env, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
   return { code: p.exitCode, out: p.stdout.toString() + p.stderr.toString() };
 }
 const greet = (pane: string, where = main, extra: Record<string, string> = {}) => plugin("greet", where, { HERDR_PANE_ID: pane, ...extra });
