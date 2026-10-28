@@ -2,8 +2,12 @@
 // The browser keeps one instance of a module per URL, so a floor loaded from its own prefix gets its own canvas,
 // workers and frame loop from unchanged code (src/client/room/here.js reads the floor from the URL).
 import { json } from "../json.ts";
+import { liveFloors } from "../floors.ts";
+import { addStatePart } from "../state.ts";
 import { clientFile } from "../page.ts";
 import type { Route } from "../router.ts";
+
+addStatePart("floors", liveFloors);
 
 const routes: Route[] = [
   { method: "GET", pattern: /^\/floor\/[^/]+(\/src\/client\/.*)$/, handle: async ({ req, m }) => (await clientFile(m[1], req)) ?? json({ error: "not found" }, 404) },

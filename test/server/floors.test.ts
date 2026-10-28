@@ -100,3 +100,117 @@ describe("floor and heads in /api/state", () => {
     expect(lanes.map((l) => l.name.trim().toLowerCase()).filter((n) => ["owner", "hq"].includes(n))).toEqual([]);
   });
 });
+
+// The floors table. src/server/floors.ts opens the database on import, so each scenario runs in a child process on a
+// throwaway data dir and prints what it saw as JSON.
+describe("floors table", () => {
+  async function scenario(body: string) {
+    const data = mkdtempSync(join(tmpdir(), "hq-floors-table-"));
+    try {
+      const code = `import { addFloor, liveFloors, stopFloor, syncTreeFloors } from "./src/server/floors.ts";
+import { floorsOf } from "./src/lane-tree.ts";
+const L = (name, parent = null) => ({ name, parent });
+const slots = () => Object.fromEntries(liveFloors().map((f) => [f.id, f.color]));
+const out = {};
+${body}
+console.log("RESULT" + JSON.stringify(out));`;
+      const proc = Bun.spawn(["bun", "-e", code], { cwd: ROOT, env: { ...process.env, HUD_DATA_DIR: data }, stdout: "pipe", stderr: "pipe" });
+      const [text, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+      await proc.exited;
+      const line = text.split("\n").find((l) => l.startsWith("RESULT"));
+      if (!line) throw new Error(`scenario failed: ${err || text}`);
+      return JSON.parse(line.slice("RESULT".length));
+    } finally {
+      rmSync(data, { recursive: true, force: true });
+    }
+  }
+  const rec = (id: string) => `addFloor({ id: "${id}", name: "${id} floor", head: "${id}", origin: "recruited", machine: "local", dir: "/x/${id}" })`;
+
+  test("the lowest free slot is taken, and a stop frees it", async () => {
+    const r = await scenario(`${rec("a")}; ${rec("b")}; ${rec("c")}; out.three = slots(); stopFloor("b"); ${rec("d")}; out.after = slots();`);
+    expect(r.three).toEqual({ a: 1, b: 2, c: 3 });
+    expect(r.after).toEqual({ a: 1, d: 2, c: 3 });
+  });
+
+  test("a recruited row with no lanes under it is a floor head", async () => {
+    const r = await scenario(`${rec("new")}; out.floors = [...floorsOf([L("new"), L("other")], liveFloors())]; out.stopped = (stopFloor("new"), [...floorsOf([L("new")], liveFloors())]);`);
+    expect(r.floors).toEqual([["new", { floor: "new", heads: true }], ["other", { floor: "hq", heads: false }]]);
+    expect(r.stopped).toEqual([["new", { floor: "hq", heads: false }]]);
+  });
+
+  test("a tree floor keeps its slot when a floor is added before it by name", async () => {
+    const r = await scenario(`
+      const tree = [L("m"), L("l", "m"), L("e", "l")];
+      syncTreeFloors(tree); out.first = slots();
+      ${rec("a")}; syncTreeFloors(tree); out.later = slots();`);
+    expect(r.first).toEqual({ m: 1 });
+    expect(r.later).toEqual({ m: 1, a: 2 });
+  });
+
+  test("a tree floor that stops being one is stopped, and takes its old row and slot back when it returns", async () => {
+    const r = await scenario(`
+      const tree = [L("m"), L("l", "m"), L("e", "l")];
+      syncTreeFloors(tree); syncTreeFloors(tree); out.rows = liveFloors().length;
+      syncTreeFloors([L("m")]); out.gone = slots();
+      syncTreeFloors(tree); out.back = slots();
+      syncTreeFloors([L("m")]); ${rec("x")}; syncTreeFloors(tree); out.slotTaken = slots();`);
+    expect(r.rows).toBe(1);
+    expect(r.gone).toEqual({});
+    expect(r.back).toEqual({ m: 1 });
+    expect(r.slotTaken).toEqual({ x: 1, m: 2 });
+  });
+
+  test("syncTreeFloors leaves a recruited floor alone", async () => {
+    const r = await scenario(`${rec("r")}; syncTreeFloors([L("r")]); syncTreeFloors([]); out.live = slots();`);
+    expect(r.live).toEqual({ r: 1 });
+  });
+
+  test("a duplicate id or head is refused", async () => {
+    const r = await scenario(`
+      ${rec("a")};
+      const tryAdd = (f) => { try { addFloor({ origin: "recruited", ...f }); return "added"; } catch (e) { return e.message; } };
+      out.id = tryAdd({ id: "a", name: "A2", head: "other" });
+      out.head = tryAdd({ id: "b", name: "B", head: "a" });
+      stopFloor("a");
+      out.afterStop = tryAdd({ id: "a", name: "A again", head: "a" });
+      out.slots = slots();`);
+    expect(r.id).toContain("already has");
+    expect(r.head).toContain("already has");
+    expect(r.afterStop).toBe("added");
+    expect(r.slots).toEqual({ a: 1 });
+  });
+
+  test("a returning tree floor keeps its old slot, not the lowest free one", async () => {
+    const r = await scenario(`
+      const tree = [L("m"), L("l", "m"), L("e", "l")];
+      ${rec("a")}; syncTreeFloors(tree); out.before = slots();
+      syncTreeFloors([L("m")]); stopFloor("a"); syncTreeFloors(tree); out.back = slots();`);
+    expect(r.before).toEqual({ a: 1, m: 2 });
+    expect(r.back).toEqual({ m: 2 });
+  });
+
+  test("with no rows the depth rule is unchanged", async () => {
+    const r = await scenario(`
+      const lanes = [L("g"), L("pm", "g"), L("b", "pm"), L("solo")];
+      out.same = JSON.stringify([...floorsOf(lanes)]) === JSON.stringify([...floorsOf(lanes, [])]);
+      `);
+    expect(r.same).toBe(true);
+  });
+
+  test("S.floors carries the live rows, and a lane write makes the tree floor's row", async () => {
+    const data = mkdtempSync(join(tmpdir(), "hq-floors-state-"));
+    const server = await spawnServer({ cwd: ROOT, env: { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: join(data, "no-such-herdr"), HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local" } });
+    try {
+      const lane = (name: string, parent?: string) => fetch(`${server.base}/api/lanes`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify({ name, parent }) });
+      const floorsNow = async () => ((await (await fetch(`${server.base}/api/state`)).json()) as any).floors as any[];
+      expect(await floorsNow()).toEqual([]);
+      await lane("gen"); await lane("mid", "gen");
+      expect(await floorsNow()).toEqual([]);
+      await lane("eng", "mid");
+      expect((await floorsNow()).map((f) => [f.id, f.origin, f.color])).toEqual([["gen", "tree", 1]]);
+    } finally {
+      await server.stop();
+      rmSync(data, { recursive: true, force: true });
+    }
+  });
+});

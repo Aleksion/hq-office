@@ -2,6 +2,7 @@
 import { db } from "./db.ts";
 import { event } from "./events.ts";
 import { floorsOf, HQ_FLOOR } from "../lane-tree.ts";
+import { liveFloors } from "./floors.ts";
 
 // Updates are information from HQ: no reply is asked for, and reading one sends nothing back to HQ.
 export function postUpdate(body: any) {
@@ -28,7 +29,7 @@ export function markRead(scope: { floor?: string; lane?: string } = {}) {
     db.query("UPDATE updates SET read_at = ? WHERE read_at IS NULL").run(now);
     return;
   }
-  const floorOf = floorsOf(db.query("SELECT name, parent FROM lanes").all() as { name: string; parent: string | null }[]);
+  const floorOf = floorsOf(db.query("SELECT name, parent FROM lanes").all() as { name: string; parent: string | null }[], liveFloors());
   const rows = db.query("SELECT id, lane FROM updates WHERE read_at IS NULL").all() as { id: number; lane: string | null }[];
   const mark = db.query("UPDATE updates SET read_at = ? WHERE id = ?");
   for (const u of rows) {

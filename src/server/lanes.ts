@@ -3,6 +3,7 @@ import { STALE_MS } from "./config.ts";
 import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { event } from "./events.ts";
+import { liveFloors, syncTreeFloors } from "./floors.ts";
 import { floorsOf, laneTree, levelName, levelNames, rankOf, underHq } from "../lane-tree.ts";
 
 // An agent at work: herdr says working, or an idle agent still has shells, a monitor or subagents running (bg).
@@ -59,6 +60,12 @@ export function upsertLane(body: any) {
     event("hq", level ? `level ${level}` : "level from the tree", body.name);
   }
   if (body.note || body.phase) event("hq", [body.phase && `phase ${body.phase}`, body.note].filter(Boolean).join(": "), body.name);
+  syncFloors();
+}
+
+// Lanes were written: the floors table follows the tree.
+function syncFloors() {
+  syncTreeFloors(db.query("SELECT name, parent FROM lanes").all() as { name: string; parent: string | null }[]);
 }
 
 // A lane reports to a lane that exists, never to itself, and never to one of its own reports (a loop).
@@ -83,6 +90,7 @@ export function removeLane(name: string) {
     db.query("UPDATE lanes SET parent = ? WHERE parent = ?").run(up, name);
     db.query("DELETE FROM lanes WHERE name = ?").run(name);
     for (const k of kids) event("hq", `reports to ${up ?? "HQ"} (${name} was removed)`, k);
+    syncFloors();
   })();
 }
 
@@ -98,7 +106,7 @@ function currentLevelNames() {
 export function withTree<T extends Lane>(lanes: T[]) {
   const names = currentLevelNames();
   const tree = laneTree(lanes);
-  const floors = floorsOf(lanes);
+  const floors = floorsOf(lanes, liveFloors());
   return lanes.map((l) => {
     const t = tree.get(l.name)!;
     const set = rankOf(l.level, names);
