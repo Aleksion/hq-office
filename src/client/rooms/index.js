@@ -304,12 +304,15 @@ async function addLinkFrom(form) {
   } catch (err) { toast(err.message); }
 }
 
-// A room's send box puts its images in the room's folder, so they land on the shelf too, by you. One removed from
-// the box before sending comes off the shelf again.
+// A room's send box puts its images and files in the room's folder, so they land on the shelf too, by you. One
+// removed from the box before sending comes off the shelf again.
 uploadTarget("room:", {
-  url: (k, name) => `/api/rooms/${encodeURIComponent(k.slice(5))}/files?name=${encodeURIComponent(name)}&as=owner`,
+  url: (k, name) => `/api/rooms/${encodeURIComponent(k.slice(5))}/files?name=${encodeURIComponent(name)}&as=owner&attach=1`,
   remove: (k, a) => post(`/api/rooms/${encodeURIComponent(k.slice(5))}/artifacts/${a.ref}/remove`, {}).catch(() => {}),
 });
+
+// The send box's panel is a drop zone for the message (images.js).
+part("rsend").setAttribute("data-drop", "");
 
 // ---- the thread ----
 
@@ -628,11 +631,11 @@ new ResizeObserver(toEnd).observe(thread);
 // The strip follows its own width (the rail folding, the window) and redraws only when that changes what it shows.
 new ResizeObserver(() => { if (openSlug) renderStrip(roomOf(openSlug)); }).observe(pix);
 document.fonts?.addEventListener?.("loadingdone", () => { if (openSlug) renderStrip(roomOf(openSlug)); });
-// Files dropped anywhere on the room go on the shelf. Images dropped on the send box are attached to the message
-// instead (images.js; they reach the shelf that way too). Listening first (capture) keeps a drop on the room from
-// joining Tell HQ's tray, and a file that is not an image from opening in place of the page.
+// Files dropped anywhere on the room go on the shelf. Images and files dropped on the send box, or around it (its TO
+// row), are attached to the message instead (images.js; they reach the shelf that way too). Listening first
+// (capture) keeps a drop on the room from joining Tell HQ's tray, and a file from opening in place of the page.
 const fileItems = (dt) => [...(dt?.items ?? [])].filter((i) => i.kind === "file");
-const forMessage = (e, list) => !!e.target.closest?.(".rsend [data-composer]") && list.length > 0 && list.every((f) => (f.type || "").startsWith("image/"));
+const forMessage = (e, list) => !!e.target.closest?.(".rsend")?.querySelector("[data-composer]") && list.length > 0;
 const clearDrop = () => view.classList.remove("dropping");
 document.addEventListener("dragover", (e) => {
   if (!openSlug || !view.contains(e.target) || !fileItems(e.dataTransfer).length) return;

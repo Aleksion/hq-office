@@ -36,9 +36,11 @@ afterAll(async () => {
 });
 
 test.skipIf(!chromeFound)("COPY puts the value on the clipboard, says so, and the page never holds it", async () => {
+  // Toasts last 2.4 s: record each one as it appears, so a busy machine cannot miss it.
+  await page.evaluate(`(() => { window.__toasts = []; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList?.contains("toast")) window.__toasts.push(n.textContent); }).observe(document.body, { childList: true }); return true; })()`);
   const box = await page.evaluate(`(() => { const r = document.querySelector('#secretList [data-secret-copy="REVIEW_LOGIN"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
   for (const type of ["mousePressed", "mouseReleased"]) await page.s("Input.dispatchMouseEvent", { type, x: box.x, y: box.y, button: "left", clickCount: 1 });
-  await until(`[...document.querySelectorAll(".toast")].some((t) => t.textContent === "COPIED REVIEW_LOGIN.")`);
+  await until(`window.__toasts.includes("COPIED REVIEW_LOGIN.")`, 15_000);
   expect(await page.evaluate(`navigator.clipboard.readText()`)).toBe(VALUE);
   expect(await page.evaluate(`document.documentElement.outerHTML.includes(${JSON.stringify(VALUE)})`)).toBe(false);
   expect(await page.evaluate(`JSON.stringify({ ...localStorage, ...sessionStorage }).includes(${JSON.stringify(VALUE)})`)).toBe(false);

@@ -27,7 +27,7 @@ herdr plugin install NicolaiHerforth/hq-office
    herdr plugin action invoke hq-office.reload
    ```
 
-The database and uploaded images live in the plugin's state directory, so they survive reinstalls.
+The database and uploaded images and files live in the plugin's state directory, so they survive reinstalls.
 
 To keep HQ Office running across crashes and restarts, install it as a service (below). To give HQ the `hud` command, run `herdr plugin action invoke hq-office.install-hud`.
 
@@ -186,13 +186,17 @@ Your typed answer stays on the card through an edit; a picked option the edit re
 
 SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND next to it turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
 
-## Images
+## Images and files
 
-Every send box (Tell HQ, each question's answer, a reply in MESSAGES) is one composer: attached images on top, the text field, then the photo button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone it opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker, and dropping or pasting an image into a text box works too.
+Every send box (Tell HQ, each question's answer, a reply in MESSAGES, a room's send box) is one composer: attachments on top, the text field, then the attach button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone the attach button opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker. Dropping images or files on a box, or anywhere on its panel or card (the TELL HQ panel, a question's card, the reply under a message, the TO row of a room's send box), attaches them to that box, which lights up while they are over it; pasting into a box works too. A drop anywhere else on the page does nothing (in a room, a drop outside the send box goes on the shelf).
 
-Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the data directory (10 MB at most).
+Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. 10 MB at most.
 
-Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. The text you type stays clean. An image is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and an image that is too big or that the browser cannot read says why in one line. When you send, each image's path is added to the end of your text as `[image: /path]`, which is how HQ opens it. Images are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never the pictures), and are cleared once the message is sent.
+Other files go as they are, 25 MB at most each, and only these kinds: pdf, txt, md, csv, tsv, json, log, yaml, yml, xml, zip, gz, tar, docx, xlsx, pptx, mp4, mov, webm, mp3, wav, m4a. The kind is checked by the extension and the browser's file type on the page, and by the extension on the server; anything else (html, svg, scripts, programs, installers) is refused. A message carries 10 attachments at most.
+
+Attached images show as thumbnails in the box and files as chips with their name and size, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen, a file chip to open the file. The text you type stays clean. An attachment is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and one that is refused says why in one line. When you send, each one's full path on the HUD's machine is added to the end of your text, `[image: /path]` for an image and `[file: /path]` for any other file, which is how HQ or a lane opens it; sent messages show a thumbnail or a link named after the file. Attachments are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never their bytes), and are cleared once the message is sent.
+
+Everything stays on this machine. Outside a room it is saved in the data directory's `uploads/`; in a room, in the room's `files/`, so it shows on the shelf. Each file keeps its own name (`name-2.ext` when the name is taken). Files are served sandboxed and never sniffed: images and video show in the browser, everything else downloads.
 
 ## Configuration
 

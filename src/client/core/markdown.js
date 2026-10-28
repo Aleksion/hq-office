@@ -5,7 +5,7 @@
 // Blocks: paragraphs (a line break shows), headings, bullet, numbered and task lists (nested by indent), quotes,
 // rules, tables and ``` fences (a code box with COPY, verbatim). Inline: `code`, **bold**, *italic*, ~~struck~~,
 // [text](url), bare and <angle> URLs (long ones shortened), #1234 as a PR when a GitHub repo is set, and
-// [image: PATH] as a thumbnail of an attached image.
+// [image: PATH] as a thumbnail of an attached image, [file: PATH] as a link named after an attached file.
 import { esc } from "./format.js";
 import { CONFIG } from "./state.js";
 
@@ -17,6 +17,16 @@ function imageUrl(escaped) {
   const room = p.match(/\/rooms\/([a-z0-9][a-z0-9-]{0,47})\/files\/([^/]+)$/);
   if (room) return `/rooms/${room[1]}/files/${encodeURIComponent(room[2])}`;
   return `/${/\/room-files\/[^/]+$/.test(p) ? "room-files" : "uploads"}/${encodeURIComponent(f)}`;
+}
+// An attached file's address on this HUD and its name, or null: only a file straight inside the general uploads/ or
+// a room's files/, named by an absolute path on this machine that never climbs (anything else stays text).
+function fileRef(escaped) {
+  const p = unesc(escaped);
+  if (!p.startsWith("/") || /(^|\/)\.\.(\/|$)|\\|\u0000/.test(p)) return null;
+  const room = p.match(/\/rooms\/([a-z0-9][a-z0-9-]{0,47})\/files\/([^/]+)$/), up = p.match(/\/uploads\/([^/]+)$/);
+  const name = room?.[2] ?? up?.[1];
+  if (!name || name.startsWith(".")) return null;
+  return { name, url: room ? `/rooms/${room[1]}/files/${encodeURIComponent(name)}` : `/uploads/${encodeURIComponent(name)}` };
 }
 // A link's target, as escaped text: http(s), mailto, or a path on this HUD that does not climb out of it.
 const safeUrl = (u) => /^(?:https?:\/\/[^\s/]|mailto:[^\s/])/i.test(u) || (/^\/(?:uploads|room-files|rooms)\//.test(u) && !/\.\.|\\/.test(u));
@@ -42,6 +52,11 @@ function inline(raw, o = {}) {
   t = t.replace(/\[image: ([^\]\n]+?)\]/g, (m, p) => {
     const u = esc(imageUrl(p));
     return keep(!links ? "[image]" : o.thumbs === false ? anchor(u, "[image]") : anchor(u, `<img class="thumb" src="${u}" alt="">`));
+  });
+  t = t.replace(/\[file: ([^\]\n]+?)\]/g, (m, p) => {
+    const f = fileRef(p);
+    if (!f) return keep(m); // stays text, as it is: not linked by any rule below
+    return keep(links ? `<a class="file" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>` : `[file: ${esc(f.name)}]`);
   });
   t = t.replace(LINK, (m, label, url) => (safeUrl(url) ? keep(links ? anchor(url, emphasis(label)) : emphasis(label)) : m));
   t = t.replace(/&lt;((?:https?:\/\/|mailto:)[^\s&]+)&gt;/gi, (m, u) => (safeUrl(u) ? keep(links ? anchor(u, shorten(u)) : u) : m));
@@ -211,11 +226,15 @@ function cutAt(text, limit) {
   if (link >= 0) back = Math.min(back, link);
   return back > 0 || lineStart > 0 ? lineStart + back : cut;
 }
+// Attachment tokens at the end of a message ([image: ...], [file: ...]) never count toward the limit and always show,
+// after the cut.
+const ATTACHED = /(?:\s*\[(?:image|file): [^\]\n]+\])+\s*$/;
 export function mdClip(text, key, limit = 280) {
-  const t = String(text ?? "");
-  if (t.length <= limit) return md(t);
+  const all = String(text ?? "");
+  const tail = all.match(ATTACHED)?.[0] ?? "", t = tail ? all.slice(0, -tail.length) : all;
+  if (t.length <= limit) return md(all);
   const cut = cutAt(t, limit);
-  if (cut >= t.trimEnd().length) return md(t);
+  if (cut >= t.trimEnd().length) return md(all);
   const open = expanded.has(key);
   let shown = t;
   if (!open) {
@@ -223,7 +242,7 @@ export function mdClip(text, key, limit = 280) {
     // After a closing fence the ellipsis goes on a line of its own, or it would undo the fence.
     shown += /(^|\n)\s*(`{3,}|~{3,})$/.test(shown) ? "\n\n…" : "…";
   }
-  return `${md(shown)}<button class="more" type="button" data-more="${esc(key)}">${open ? "LESS" : "MORE"}</button>`;
+  return `${md(shown + (tail ? ` ${tail.trim()}` : ""))}<button class="more" type="button" data-more="${esc(key)}">${open ? "LESS" : "MORE"}</button>`;
 }
 
 export function copyCode(btn) {
