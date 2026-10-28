@@ -27,6 +27,25 @@ describe("floors", () => {
     expect(canvasId("g")).toBe("room-g");
   });
 
+  test("a floor keeps its colour slot when another is added before it by name, and shows its recruited name", () => {
+    const heads = (...names: string[]) => names.map((n) => lane(n, n, { heads: true }));
+    const before: any = { lanes: heads("m"), floors: [{ head: "m", name: "m", color: 1 }] };
+    const after: any = { lanes: heads("a", "m"), floors: [{ head: "m", name: "m", color: 1 }, { head: "a", name: "Sales", color: 2 }] };
+    const color = (S: any, id: string) => floorList(S).find((f: any) => f.id === id).color;
+    expect(color(after, "m")).toBe(color(before, "m"));
+    expect(color(after, "a")).not.toBe(color(after, "m"));
+    expect(floorList(after).find((f: any) => f.id === "a").label).toBe("SALES");
+    expect(color(after, "hq")).toBe("#3c6fd6");
+  });
+
+  test("without rows, colours go by name as before; a floor with no row takes the slots after the rows'", () => {
+    const heads = (...names: string[]) => names.map((n) => lane(n, n, { heads: true }));
+    expect(floorList({ lanes: heads("b", "a") } as any).map((f: any) => f.color)).toEqual(["#3c6fd6", "#2f9e57", "#c07a12"]);
+    const mixed: any = { lanes: heads("a", "z"), floors: [{ head: "z", name: "z", color: 1 }] };
+    expect(floorList(mixed).map((f: any) => [f.id, f.color])).toEqual([["hq", "#3c6fd6"], ["a", "#c07a12"], ["z", "#2f9e57"]]);
+    expect(floorList({ lanes: heads("f"), floors: [{ head: "f", name: "f", color: 5 }] } as any)[1].color).toBe("#1f8f99");
+  });
+
   test("HQ's floor comes first, the others by name; lanes of a floor leave out its head", () => {
     expect(floorList(two).map((f: any) => f.id)).toEqual(["hq", "g"]);
     expect(floorList(one).map((f: any) => f.id)).toEqual(["hq"]);

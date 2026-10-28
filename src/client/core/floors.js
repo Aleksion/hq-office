@@ -3,8 +3,8 @@
 // A floor is a lane that directs leads (src/lane-tree.ts decides which; the state's lanes carry `floor` and `heads`).
 
 export const HQ = "hq";
-// In order, from HQ's floor on; they repeat after five. The colours belong to the page, not the server.
-export const FLOOR_COLORS = ["#3c6fd6", "#2f9e57", "#c07a12", "#b8327a", "#7a4fc9"];
+// One per colour slot, HQ's floor first; they repeat after six. The colours belong to the page, the slots to the server.
+export const FLOOR_COLORS = ["#3c6fd6", "#2f9e57", "#c07a12", "#b8327a", "#7a4fc9", "#1f8f99"];
 
 const lanesOf = (S) => S?.lanes ?? [];
 const floorOf = (l) => l.floor ?? HQ;
@@ -21,9 +21,17 @@ export function floorFromPath(url) {
 export const canvasId = (floor) => (!floor || floor === HQ ? "room" : `room-${floor}`);
 
 // HQ's floor first, then the others by name.
+// A floor keeps its colour: its row in S.floors (src/server/floors.ts) holds a slot, so adding a floor never recolours
+// another, and a recruited floor shows its own name. HQ is slot 0. A floor with no row takes the slots after the rows', by name.
 export function floorList(S) {
+  const rows = new Map((S?.floors ?? []).map((r) => [r.head, r]));
   const heads = lanesOf(S).filter((l) => l.heads).map((l) => l.name).sort((a, b) => a.localeCompare(b));
-  return [HQ, ...heads].map((id, i) => ({ id, label: id === HQ ? "HQ" : id.toUpperCase(), color: FLOOR_COLORS[i % FLOOR_COLORS.length] }));
+  let next = Math.max(0, ...[...rows.values()].map((r) => r.color)) + 1;
+  const floors = heads.map((id) => {
+    const row = rows.get(id);
+    return { id, label: (row?.name ?? id).toUpperCase(), slot: row ? row.color : next++ };
+  });
+  return [{ id: HQ, label: "HQ", slot: 0 }, ...floors].map(({ slot, ...f }) => ({ ...f, color: FLOOR_COLORS[slot % FLOOR_COLORS.length] }));
 }
 export const hasLane = (S, name) => !!name && lanesOf(S).some((l) => l.name === name);
 // A lane that is gone, or none, is on HQ's floor.
