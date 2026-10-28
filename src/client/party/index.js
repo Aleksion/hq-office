@@ -9,6 +9,7 @@ import { view } from "../core/scope.js";
 import { floorTagShown, party } from "../core/floors.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { esc, setHTML } from "../core/format.js";
+import { mdInline } from "../core/markdown.js";
 
 const room = document.querySelector(".room");
 const panel = document.createElement("section");
@@ -27,7 +28,7 @@ let open = false;
 
 const row = (l) => {
   const [label, color] = STATUS_TEXT[l.status] ?? [l.status ?? "Not registered", "#6a6a82"];
-  return `<button class="lrow" type="button" data-select="${esc(l.name)}"><i class="dot" style="background:${color}"></i><b>${esc(l.name)}</b>${l.head ? `<span class="tag in">GENERAL</span>` : ""}<span class="d">${esc(l.title)}</span><span class="tag">${esc(label.toUpperCase())}</span></button>`;
+  return `<button class="lrow" type="button" data-select="${esc(l.name)}"><i class="dot" style="background:${color}"></i><b>${esc(l.name)}</b>${l.head ? `<span class="tag in">GENERAL</span>` : ""}<span class="d">${mdInline(l.title, { links: false })}</span><span class="tag">${esc(label.toUpperCase())}</span></button>`;
 };
 
 function render() {

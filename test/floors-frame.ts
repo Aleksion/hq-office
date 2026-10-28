@@ -199,8 +199,9 @@ export async function seedFrame(post: Post, data: string, base: string) {
   // The note the prototype sent to HQ, read.
   for (const [, to, text] of [...SENT].reverse().filter(([, to]) => to === "HQ")) {
     await must("/api/notes", { text });
-    const { notes } = await (await fetch(`${base}/api/state`)).json();
-    await must(`/api/notes/${notes[0].id}/ack`, {});
+    // A Tell is a queue item for HQ (q<N>), no longer a note: HQ closing it is what reads it.
+    const queued = await (await fetch(`${base}/api/requests`)).json();
+    await must(`/api/requests/${queued.find((r: any) => r.text === text).id}/close`, { reason: "read" });
   }
   await must("/api/sync", {});
   // Only this fixture's own throwaway database: the rooms were opened a minute apart in wall order (created together, they
